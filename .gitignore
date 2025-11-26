@@ -1,0 +1,6 @@
+/target
+/.sqlx
+
+.env.docker
+.env.local
+.env.*.local
