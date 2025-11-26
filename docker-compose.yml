@@ -1,0 +1,212 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: chat-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d user && pg_isready -U postgres -d chat" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chat-network
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: chat-cassandra
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=ChatCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    healthcheck:
+      test: [ "CMD-SHELL", "cqlsh -e 'describe cluster'" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - chat-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: chat-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=*"
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - chat-network
+    healthcheck:
+      test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: chat-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    restart: always
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - chat-network
+    command:
+      - bash
+      - -c
+      - |
+        echo "Waiting for Zookeeper to be ready..."
+        # Give Zookeeper extra time to fully initialize
+        timeout=30
+        while [ $$timeout -gt 0 ]; do
+          if echo ruok | nc zookeeper 2181 | grep -q imok; then
+            echo "Zookeeper is ready!"
+            break
+          fi
+          echo "Waiting for Zookeeper... ($$timeout seconds remaining)"
+          sleep 1
+          timeout=$$((timeout - 1))
+        done
+
+        if [ $$timeout -eq 0 ]; then
+          echo "ERROR: Zookeeper failed to become ready in time"
+          exit 1
+        fi
+
+        # Additional delay to ensure Zookeeper is fully ready
+        echo "Waiting additional 5 seconds for Zookeeper stability..."
+        sleep 5
+
+        # Start Kafka in background
+        echo "Starting Kafka..."
+        /etc/confluent/docker/run &
+
+        # Wait for Kafka to be ready
+        echo "Waiting for Kafka to be ready..."
+        while ! kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; do
+          sleep 2
+        done
+
+        # Create user events topic
+        echo "Creating user events topic..."
+        kafka-topics --bootstrap-server localhost:9092 \
+          --create \
+          --if-not-exists \
+          --topic user-events \
+          --partitions 3 \
+          --replication-factor 1
+        echo "Created topic: user-events"
+
+        # Create chat message topic shards
+        echo "Creating chat message topic shards..."
+        for i in $$(seq 0 15); do
+          kafka-topics --bootstrap-server localhost:9092 \
+            --create \
+            --if-not-exists \
+            --topic chat.messages.$$i \
+            --partitions 3 \
+            --replication-factor 1
+          echo "Created topic: chat.messages.$$i"
+        done
+
+        echo "All topics created successfully!"
+
+        # Keep container running
+        wait
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: chat-user-service
+    ports:
+      - "3001:3001"  # HTTP REST API
+      - "50051:50051"  # gRPC
+    environment:
+      - RUN_MODE=docker
+      - RUST_LOG=user_service=info,tower_http=info
+      - SQLX_OFFLINE=true
+      - JWT__SECRET=${JWT_SECRET:-change-this-secret-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: chat-service/Dockerfile
+    container_name: chat-chat-service
+    ports:
+      - "3002:3002"
+    environment:
+      - RUN_MODE=docker
+      - RUST_LOG=chat_service=info,tower_http=info
+      - SQLX_OFFLINE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+networks:
+  chat-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  cassandra_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:

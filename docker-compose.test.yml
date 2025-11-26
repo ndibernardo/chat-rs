@@ -1,0 +1,184 @@
+services:
+  user-service-test:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: user-service-test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      kafka-test:
+        condition: service_started
+    environment:
+      RUN_MODE: test
+    ports:
+      - "3001:3000"
+      - "50052:50051"
+    networks:
+      - test-network
+
+  postgres-test:
+    image: postgres:16
+    container_name: postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d user && pg_isready -U postgres -d chat" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  cassandra-test:
+    image: cassandra:4.1
+    container_name: cassandra-test
+    ports:
+      - "9043:9042"
+    volumes:
+      - cassandra_test_data:/var/lib/cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    healthcheck:
+      test: [ "CMD-SHELL", "cqlsh -e 'describe cluster'" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - test-network
+
+  zookeeper-test:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper-test
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=*"
+    ports:
+      - "2182:2181"
+    volumes:
+      - zookeeper_test_data:/var/lib/zookeeper/data
+      - zookeeper_test_logs:/var/lib/zookeeper/log
+    networks:
+      - test-network
+    healthcheck:
+      test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  kafka-test:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-test
+    depends_on:
+      zookeeper-test:
+        condition: service_healthy
+    ports:
+      - "9093:9092"
+      - "29093:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-test:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-test:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka_test_data:/var/lib/kafka/data
+    networks:
+      - test-network
+    command:
+      - bash
+      - -c
+      - |
+        echo "Waiting for Zookeeper to be ready..."
+        # Give Zookeeper extra time to fully initialize
+        timeout=30
+        while [ $$timeout -gt 0 ]; do
+          if echo ruok | nc zookeeper-test 2181 | grep -q imok; then
+            echo "Zookeeper is ready!"
+            break
+          fi
+          echo "Waiting for Zookeeper... ($$timeout seconds remaining)"
+          sleep 1
+          timeout=$$((timeout - 1))
+        done
+
+        if [ $$timeout -eq 0 ]; then
+          echo "ERROR: Zookeeper failed to become ready in time"
+          exit 1
+        fi
+
+        # Additional delay to ensure Zookeeper is fully ready
+        echo "Waiting additional 5 seconds for Zookeeper stability..."
+        sleep 5
+
+        # Start Kafka in background
+        echo "Starting Kafka..."
+        /etc/confluent/docker/run &
+
+        # Wait for Kafka to be ready (using internal port 9092)
+        echo "Waiting for Kafka to be ready..."
+        while ! kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; do
+          sleep 2
+        done
+
+        # Create user events topic
+        echo "Creating user events topic..."
+        kafka-topics --bootstrap-server localhost:9092 \
+          --create \
+          --if-not-exists \
+          --topic user-events-test \
+          --partitions 3 \
+          --replication-factor 1
+        echo "Created topic: user-events-test"
+
+        # Create chat message topic shards
+        echo "Creating chat message topic shards..."
+        for i in $$(seq 0 15); do
+          kafka-topics --bootstrap-server localhost:9092 \
+            --create \
+            --if-not-exists \
+            --topic chat.messages.$$i \
+            --partitions 3 \
+            --replication-factor 1
+          echo "Created topic: chat.messages.$$i"
+        done
+
+        echo "All topics created successfully!"
+
+        # Keep container running
+        wait
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  postgres_test_data:
+  cassandra_test_data:
+  zookeeper_test_data:
+  zookeeper_test_logs:
+  kafka_test_data:
