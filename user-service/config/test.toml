@@ -1,0 +1,16 @@
+# Test environment configuration for docker-compose.test.yml
+
+[database]
+url = "postgresql://postgres:postgres@postgres-test:5432/user"
+
+[server]
+http_port = 3000
+grpc_port = 50051
+
+[jwt]
+secret = "test-secret-key-for-jwt-signing-at-least-32-bytes"
+expiration_hours = 24
+
+[kafka]
+brokers = "kafka-test:29092"
+topic = "user-events-test"

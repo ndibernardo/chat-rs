@@ -1,0 +1,69 @@
+[package]
+name = "user-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "user_service"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "user-service"
+path = "src/bin/server/main.rs"
+
+[dependencies]
+# gRPC
+tonic = { workspace = true }
+prost = { workspace = true }
+
+# Web framework (for REST API)
+axum = { workspace = true }
+http = "1.0"
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Kafka
+rdkafka = { workspace = true }
+
+# Types
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Configuration
+config = { workspace = true }
+
+# Authentication utilities
+auth = { path = "../auth" }
+
+# JWT
+jsonwebtoken = { workspace = true }
+
+# Email
+email_address = { workspace = true }
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+
+# Mocking for tests
+mockall = "0.13"
+
+[build-dependencies]
+tonic-build = { workspace = true }

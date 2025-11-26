@@ -1,0 +1,17 @@
+# Docker environment configuration
+# Uses Docker service names for inter-container communication
+
+[database]
+url = "postgresql://postgres:postgres@postgres:5432/user"
+
+[server]
+http_port = 3001
+grpc_port = 50051
+
+[jwt]
+secret = "dev-secret-key-not-for-production"
+expiration_hours = 24
+
+[kafka]
+brokers = "kafka:29092"
+topic = "user-events"
