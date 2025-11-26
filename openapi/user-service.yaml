@@ -1,0 +1,333 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  description: |
+    User management and authentication service for chat-rs.
+
+    Handles user registration, authentication, and profile management.
+    Issues JWT tokens for authenticated sessions.
+  version: 0.1.0
+  contact:
+    name: chat-rs
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+tags:
+  - name: users
+    description: User management operations
+  - name: auth
+    description: Authentication operations
+
+paths:
+  /api/users:
+    post:
+      tags:
+        - users
+      summary: Register a new user
+      description: Creates a new user account with username, email, and password
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User successfully created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '409':
+          description: Conflict - Username or email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Entity - Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags:
+        - auth
+      summary: Authenticate user
+      description: Authenticates a user and returns a JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Unauthorized - Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{id}:
+    get:
+      tags:
+        - users
+      summary: Get user by ID
+      description: Retrieves user profile information
+      operationId: getUserById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - users
+      summary: Update user
+      description: Updates user profile information
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Entity - Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - users
+      summary: Delete user
+      description: Deletes a user account
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: User deleted successfully
+        '401':
+          description: Unauthorized - Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/auth/login
+
+  schemas:
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - email_address
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: Alphanumeric username with underscores
+          example: john_doe
+        email_address:
+          type: string
+          format: email
+          description: Valid email address
+          example: john@example.com
+        password:
+          type: string
+          minLength: 8
+          description: Password (minimum 8 characters)
+          example: SecurePass123!
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Username
+          example: john_doe
+        password:
+          type: string
+          description: Password
+          example: SecurePass123!
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        email_address:
+          type: string
+          format: email
+          description: New email address
+          example: newemail@example.com
+        password:
+          type: string
+          minLength: 8
+          description: New password (minimum 8 characters)
+
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        username:
+          type: string
+          description: User's username
+          example: john_doe
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: john@example.com
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: '2024-01-15T10:30:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: '2024-01-20T14:45:00Z'
+
+    AuthResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: JWT token for authentication
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/User'
+
+    ErrorResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - message
+          properties:
+            message:
+              type: string
+              description: Error message
+              example: Username already exists

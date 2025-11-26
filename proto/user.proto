@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package user;
+
+// Internal User service RPC for inter-service communication
+service UserService {
+  // Get user by ID (used by chat-service for internal user data)
+  // Returns error in response if user not found - use this to verify single user existence
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+// Messages
+
+message User {
+  string id = 1;           // UUID as string
+  string username = 2;
+  string email = 3;
+  string created_at = 4;   // RFC3339 timestamp
+}
+
+message GetUserRequest {
+  string user_id = 1;      // UUID as string
+}
+
+message GetUserResponse {
+  oneof result {
+    User user = 1;
+    string error = 2;
+  }
+}
