@@ -1,0 +1,79 @@
+@startuml Message Broadcast Flow
+!include theme.puml
+
+participant "Client" as Client
+participant "chat-service\n(HTTP)" as ChatHTTP
+participant "chat-service\n(Domain)" as Domain
+database "Cassandra" as Cassandra
+queue "Event Stream\n(chat.messages.N)" as Kafka
+participant "chat-service\n(Consumer)" as Consumer
+participant "chat-service\n(Connections)" as Connections
+participant "Real-time\nConnection" as WebSocket
+
+== Message Send ==
+Client -> ChatHTTP: POST /channels/{id}/messages
+activate ChatHTTP
+
+ChatHTTP -> ChatHTTP: Authenticate user
+ChatHTTP -> Domain: Process message
+activate Domain
+
+Domain -> Domain: Verify channel access
+Domain -> Domain: Create message
+Domain -> Cassandra: Store message for channel
+activate Cassandra
+Cassandra --> Domain: Confirmed
+deactivate Cassandra
+
+Domain -> Cassandra: Store message for user history
+activate Cassandra
+Cassandra --> Domain: Confirmed
+deactivate Cassandra
+
+Domain -> Kafka: Publish to chat.messages.N
+activate Kafka
+note right
+  Event distributed to ensure
+  all instances can deliver
+  to their connected clients
+  (N = shard based on channel_id)
+end note
+Kafka --> Domain: Acknowledged
+deactivate Kafka
+
+Domain --> ChatHTTP: Success
+deactivate Domain
+ChatHTTP --> Client: Message accepted
+deactivate ChatHTTP
+
+== Event Consumption & Broadcast ==
+Kafka -> Consumer: MessageSent from chat.messages.N
+activate Consumer
+
+Consumer -> Consumer: Determine routing
+Consumer -> Connections: Find active users in channel
+activate Connections
+
+alt Users connected to this instance
+  Connections --> Consumer: Active connections found
+
+  loop For each connected user
+    Consumer -> WebSocket: Deliver message
+    activate WebSocket
+    note right
+      Message delivered in real-time
+      to all participants currently
+      connected to this server
+    end note
+    WebSocket --> Client: Message appears instantly
+    deactivate WebSocket
+  end
+else No users on this instance
+  Connections --> Consumer: No connections here
+  Consumer -> Consumer: Nothing to deliver
+end
+
+deactivate Connections
+deactivate Consumer
+
+@enduml

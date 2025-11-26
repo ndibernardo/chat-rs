@@ -1,0 +1,78 @@
+@startuml Channel Creation Flow
+!include theme.puml
+
+participant "Client" as Client
+participant "chat-service\n(HTTP)" as ChatHTTP
+participant "chat-service\n(Domain)" as Domain
+database "PostgreSQL\n(chat DB)" as DB
+queue "Event Stream\n(chat.messages.N)" as Kafka
+
+== Channel Creation ==
+Client -> ChatHTTP: POST /api/channels
+activate ChatHTTP
+
+ChatHTTP -> ChatHTTP: Authenticate user
+ChatHTTP -> ChatHTTP: Validate request
+ChatHTTP -> Domain: Process channel creation
+activate Domain
+
+alt Public or Private Channel
+  Domain -> Domain: Validate channel name
+  Domain -> Domain: Validate description
+
+  Domain -> DB: Check name is available
+  activate DB
+  DB --> Domain: Available
+  deactivate DB
+
+  Domain -> Domain: Create channel
+  Domain -> DB: Save channel
+  activate DB
+  DB --> Domain: Created
+  deactivate DB
+
+  opt Private Channel
+    Domain -> DB: Add creator as member
+    activate DB
+    note right: Creator automatically joins
+    DB --> Domain: Membership established
+    deactivate DB
+  end
+
+else Direct Channel
+  Domain -> Domain: Verify participants are different
+  Domain -> Domain: Create direct conversation
+
+  Domain -> DB: Check if conversation exists
+  activate DB
+  DB --> Domain: New conversation
+  deactivate DB
+
+  Domain -> DB: Create channel
+  activate DB
+  DB --> Domain: Created
+  deactivate DB
+
+  Domain -> DB: Add both participants
+  activate DB
+  note right: Both users can now message each other
+  DB --> Domain: Ready for messaging
+  deactivate DB
+end
+
+Domain -> Kafka: Publish ChannelCreated to chat.messages.N
+activate Kafka
+note right
+  Other services are notified
+  about the new channel
+end note
+Kafka --> Domain: Acknowledged
+deactivate Kafka
+
+Domain --> ChatHTTP: Channel ready
+deactivate Domain
+
+ChatHTTP --> Client: Channel created successfully
+deactivate ChatHTTP
+
+@enduml

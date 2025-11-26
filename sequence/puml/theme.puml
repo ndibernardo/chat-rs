@@ -1,0 +1,41 @@
+@startuml
+' Shared theme for chat-rs sequence diagrams
+' Include this in other diagrams with: !include theme.puml
+
+!theme plain
+
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontName Berkeley Mono
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+skinparam participant {
+  BackgroundColor #E8E8E8
+  BorderColor #333333
+  FontColor #000000
+  FontSize 11
+}
+
+skinparam database {
+  BackgroundColor #D0D0D0
+  BorderColor #333333
+}
+
+skinparam queue {
+  BackgroundColor #C8C8D8
+  BorderColor #333333
+}
+
+skinparam note {
+  BackgroundColor #F5F5DC
+  BorderColor #999999
+  FontSize 10
+}
+
+skinparam sequence {
+  ArrowColor #333333
+  LifeLineBorderColor #555555
+  LifeLineBackgroundColor #EEEEEE
+}
+
+@enduml

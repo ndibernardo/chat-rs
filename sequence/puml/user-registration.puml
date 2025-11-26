@@ -1,0 +1,90 @@
+@startuml User Registration and Authentication Flow
+!include theme.puml
+
+participant "Client" as Client
+participant "user-service\n(HTTP)" as UserHTTP
+participant "user-service\n(Domain)" as Domain
+participant "Password\nHasher" as Hasher
+database "PostgreSQL\n(user DB)" as DB
+queue "Event Stream\n(user-events)" as Kafka
+
+== User Registration ==
+Client -> UserHTTP: POST /users
+activate UserHTTP
+
+UserHTTP -> UserHTTP: Validate request
+UserHTTP -> Domain: Create new user
+activate Domain
+
+Domain -> Domain: Check username is valid
+Domain -> Domain: Check email is valid
+Domain -> Domain: Check password meets requirements
+
+Domain -> DB: Verify username is available
+activate DB
+DB --> Domain: Available
+deactivate DB
+
+Domain -> DB: Verify email is available
+activate DB
+DB --> Domain: Available
+deactivate DB
+
+Domain -> Hasher: Secure the password
+activate Hasher
+note right: Password is hashed for security
+Hasher --> Domain: Secured
+deactivate Hasher
+
+Domain -> DB: Save new user
+activate DB
+DB --> Domain: User created
+deactivate DB
+
+Domain -> Kafka: Publish UserCreated to user-events
+activate Kafka
+note right
+  New user event allows other
+  services to prepare for
+  the new account
+end note
+Kafka --> Domain: Announced
+deactivate Kafka
+
+Domain --> UserHTTP: Registration complete
+deactivate Domain
+
+UserHTTP --> Client: Account created successfully
+deactivate UserHTTP
+
+== User Authentication ==
+Client -> UserHTTP: POST /auth/login
+activate UserHTTP
+
+UserHTTP -> UserHTTP: Receive credentials
+UserHTTP -> Domain: Authenticate user
+activate Domain
+
+Domain -> DB: Find user account
+activate DB
+DB --> Domain: Account found
+deactivate DB
+
+Domain -> Hasher: Verify password
+activate Hasher
+Hasher --> Domain: Password correct
+deactivate Hasher
+
+Domain -> Domain: Create authentication token
+note right
+  Token allows access to
+  protected resources
+end note
+
+Domain --> UserHTTP: Authentication successful
+deactivate Domain
+
+UserHTTP --> Client: Login successful
+deactivate UserHTTP
+
+@enduml

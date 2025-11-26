@@ -1,0 +1,83 @@
+@startuml User Event Synchronization Flow
+!include theme.puml
+
+participant "Client" as Client
+participant "user-service\n(HTTP)" as UserHTTP
+participant "user-service\n(Domain)" as UserDomain
+database "PostgreSQL\n(user DB)" as UserDB
+queue "Event Stream\n(user-events)" as Kafka
+participant "chat-service\n(Consumer)" as ChatConsumer
+database "PostgreSQL\n(chat DB)" as ChatDB
+database "Cassandra" as Cassandra
+
+== User Operation (Create/Update/Delete) ==
+Client -> UserHTTP: POST /users | PATCH /users/{id} | DELETE /users/{id}
+activate UserHTTP
+
+UserHTTP -> UserDomain: Handle user change
+activate UserDomain
+
+UserDomain -> UserDB: Update user record
+activate UserDB
+UserDB --> UserDomain: Confirmed
+deactivate UserDB
+
+UserDomain -> Kafka: Publish to user-events
+activate Kafka
+note right
+  User changes are propagated
+  to chat service so it can
+  update its local copy
+end note
+Kafka --> UserDomain: Acknowledged
+deactivate Kafka
+
+UserDomain --> UserHTTP: Complete
+deactivate UserDomain
+UserHTTP --> Client: Success
+deactivate UserHTTP
+
+== Event Consumption & Replica Update ==
+Kafka -> ChatConsumer: UserCreated/Updated/Deleted from user-events
+activate ChatConsumer
+
+alt User created or updated
+  ChatConsumer -> ChatDB: Update user information
+  activate ChatDB
+  note right
+    Chat service maintains
+    a copy of user data for
+    performance reasons
+  end note
+  ChatDB --> ChatConsumer: Updated
+  deactivate ChatDB
+
+else User deleted
+  ChatConsumer -> ChatDB: Remove user record
+  activate ChatDB
+  ChatDB --> ChatConsumer: Removed
+  deactivate ChatDB
+
+  ChatConsumer -> ChatDB: Clean up owned channels
+  activate ChatDB
+  note right: Channels created by user are removed
+  ChatDB --> ChatConsumer: Cleaned
+  deactivate ChatDB
+
+  ChatConsumer -> ChatDB: Remove channel memberships
+  activate ChatDB
+  note right: User removed from all channels
+  ChatDB --> ChatConsumer: Cleaned
+  deactivate ChatDB
+
+  ChatConsumer -> Cassandra: Archive user messages
+  activate Cassandra
+  note right: Message history cleaned up
+  Cassandra --> ChatConsumer: Cleaned
+  deactivate Cassandra
+end
+
+ChatConsumer -> ChatConsumer: Sync complete
+deactivate ChatConsumer
+
+@enduml
