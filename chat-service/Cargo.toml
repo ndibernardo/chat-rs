@@ -1,0 +1,67 @@
+[package]
+name = "chat-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "chat_service"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "chat-service"
+path = "src/bin/server/main.rs"
+
+[dependencies]
+# gRPC
+tonic = { workspace = true }
+prost = { workspace = true }
+
+# Web framework (for REST API and WebSocket)
+axum = { workspace = true }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Databases
+sqlx = { workspace = true }
+scylla = { workspace = true }
+
+# Types
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Configuration
+config = { workspace = true }
+
+# JWT
+jsonwebtoken = { workspace = true }
+
+# Kafka
+rdkafka = { workspace = true }
+
+# Authentication utilities
+auth = { path = "../auth" }
+
+[dev-dependencies]
+http-body-util = "0.1"
+mockall = "0.13"
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+
+[build-dependencies]
+tonic-build = { workspace = true }

@@ -1,0 +1,27 @@
+# Development environment configuration
+
+[database]
+url = "postgresql://postgres:postgres@localhost:5432/chat"
+
+[jwt]
+secret = "dev-secret-key-not-for-production"
+expiration_hours = 24
+
+[cassandra]
+nodes = ["localhost:9042"]
+keyspace = "chat"
+
+[server]
+http_port = 3002
+
+[user_service]
+grpc_url = "http://localhost:50051"
+
+[kafka]
+brokers = "localhost:9092"
+group_id = "chat-service-group"
+num_shards = 16
+
+[kafka.user_events]
+topic = "user-events"
+group_id = "chat-service-user-events"
