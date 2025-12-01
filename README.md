@@ -1,11 +1,13 @@
 # chat-rs
-A Rust playground for exploring type-safe microservices, built as a scalable event-driven chat platform featuring real-time messaging and distributed event streaming. Currently studying and analyzing the trade-offs of Rust's memory management and type system, particularly the advantages of newtypes and the friction they introduce in projects involving multiple layers of indirection, such as services built using hexagonal architecture.
+A Rust playground for exploring type-safe microservices, built as a scalable event-driven chat platform featuring real-time messaging and distributed event streaming.
+
+Currently studying and evaluating the trade-offs of Rust's memory management and type system, particularly the advantages of newtypes and sum types in domain-driven development, and the friction they introduce in projects involving multiple layers of indirection for abstraction and composability, such as services built using hexagonal architecture.
 
 ## Quick Start
 
 ### Development Environment
 
-This project uses Nix flakes with direnv for automatic environment setup:
+The project uses Nix flakes with direnv for automatic environment setup:
 
 ```bash
 # Install Nix with flakes enabled
@@ -48,65 +50,50 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/user cargo run
 - **chat-service** manages channel and message aggregates with Cassandra-backed time-series storage, publishing message events for WebSocket broadcast, and coordinating real-time delivery through persistent connections.
 
 #### Project Structure
-```
-chat-rs/
-├── auth/                      # Shared authentication infrastructure
-├── user-service/              # User management + JWT
-│   ├── src/
-│   │   ├── bin/server/        # Entry point
-│   │   └── lib/
-│   │       ├── domain/        # Business logic
-│   │       ├── inbound/       # HTTP and gRPC handlers
-│   │       └── outbound/      # Database and Kafka publishers
-│   └── migrations/            # Postgres migrations
-├── chat-service/              # Chat and channel management
-│   ├── src/
-│   │   ├── bin/server/        # Entry point
-│   │   └── lib/
-│   │       ├── domain/        # Business logic
-│   │       ├── inbound/       # HTTP and WebSocket handlers
-│   │       └── outbound/      # Postgres and Cassandra adapters
-│   └── migrations/            # Postgres migrations
-├── proto/                     # gRPC contracts
-├── scripts/                   # Testing utilities
-└── docker-compose.yml
-```
+
+- [auth](./auth) — Shared authentication infrastructure
+- [user-service](./user-service) — User management + JWT
+  - [src/bin/server](./user-service/src/bin/server) — Entry point
+  - [src/lib/domain](./user-service/src/lib/domain) — Business logic
+  - [src/lib/inbound](./user-service/src/lib/inbound) — HTTP and gRPC handlers
+  - [src/lib/outbound](./user-service/src/lib/outbound) — Database and Kafka publishers
+  - [migrations](./user-service/migrations) — Postgres migrations
+- [chat-service](./chat-service) — Chat and channel management
+  - [src/bin/server](./chat-service/src/bin/server) — Entry point
+  - [src/lib/domain](./chat-service/src/lib/domain) — Business logic
+  - [src/lib/inbound](./chat-service/src/lib/inbound) — HTTP and WebSocket handlers
+  - [src/lib/outbound](./chat-service/src/lib/outbound) — Postgres and Cassandra adapters
+  - [migrations](./chat-service/migrations) — Postgres migrations
+- [proto](./proto) — gRPC contracts
+- [scripts](./scripts) — Testing utilities
 
 #### Hexagonal Architecture
-```
-service/
-├── src/
-│   ├── bin/server/main.rs         # Entry point
-│   └── lib/
-│       ├── domain/                # Business logic
-│       │   ├── {aggregate}/
-│       │   │   ├── models.rs      # Entities, value objects, commands
-│       │   │   ├── errors.rs      # All error types
-│       │   │   ├── events.rs      # Domain events
-│       │   │   ├── ports.rs       # Trait definitions
-│       │   │   └── service.rs     # Service implementation
-│       ├── inbound/               # Drivers
-│       └── outbound/              # Adapters
-├── migrations/                    # Database migrations
-└── Cargo.toml                     # [lib] + [[bin]]
-```
+
+Each service follows hexagonal architecture:
+- `src/bin/server/main.rs` — Entry point
+- `src/lib/domain/{aggregate}/` — Business logic without serialization or I/O dependencies
+  - `models.rs` — Entities, value objects, commands
+  - `errors.rs` — Domain error types
+  - `events.rs` — Domain events
+  - `ports.rs` — Trait definitions
+  - `service.rs` — Service implementation
+- `src/lib/inbound/` — Drivers (HTTP, gRPC, WebSocket handlers)
+- `src/lib/outbound/` — Adapters (database, Kafka, external services)
+- `migrations/` — Database migrations
 
 ### System Design
 
 **Data Storage:**
-```
-PostgreSQL (port 5432)
-├── user database → Users table (user-service)
-├── chat database → Channels table (chat-service)
-└── chat database → User Replica table (chat-service read model)
 
-Cassandra (port 9042)
-└── chat keyspace → Messages table (time-series, partitioned by channel_id)
-
-Kafka (16 shards)
-├── user-events → User lifecycle events
-└── chat.messages.{0-15} → Message events (sharded by channel_id % 16)
-```
+- **PostgreSQL** (port 5432)
+  - user database — Users table (user-service)
+  - chat database — Channels table (chat-service)
+  - chat database — User Replica table (chat-service read model)
+- **Cassandra** (port 9042)
+  - chat keyspace — Messages table (time-series, partitioned by channel_id)
+- **Kafka** (16 shards)
+  - user-events — User lifecycle events
+  - chat.messages.{0-15} — Message events (sharded by channel_id % 16)
 
 **Event Topics:**
 
@@ -187,23 +174,17 @@ cargo test --all
 ### Caching Layer
 - **Redis Integration** - Distributed cache for frequently accessed data
 - **Cache Invalidation** - Event-driven cache updates via Kafka
-- **TTL Strategies** - Time-based expiration for user data, channel metadata
-- **Cache Warming** - Proactive population of hot data on service startup
 
 ### Presence Service
 - **User Online Status** - Track active/away/offline states
 - **Typing Indicators** - Real-time typing notifications per channel
 - **Last Seen Tracking** - Timestamp of last user activity
-- **Heartbeat Protocol** - WebSocket ping/pong for connection health
 
 ### Infrastructure Improvements
-- **Service Mesh** - Istio/Linkerd for observability and traffic management
 - **API Gateway** - Centralized routing, authentication, rate limiting
 
-### Type Safety & Contract-First Development
-- **OpenAPI Contract Generation** - Explore tools like `utoipa` or `aide` to generate OpenAPI specs from Rust code
-- **Contract-to-Code Generation** - Research tooling to generate type-safe API clients from OpenAPI contracts, ensuring compile-time guarantees for API integrations
-- **Contract Testing** - Automated validation that implementations match OpenAPI specifications
+### Contract-to-Code Generation
+- Research tooling to generate type-safe API clients from OpenAPI contracts, ensuring compile-time guarantees for API integrations
 
 ## License
-Apache 2.0
+[Apache 2.0](./LICENSE)
