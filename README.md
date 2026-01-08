@@ -41,11 +41,13 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/user cargo run
 Independent services communicate via contracts (proto, REST, events). Each owns its data without shared domain logic.
 
 **Services:**
+
 - **auth** crate provides reusable cryptographic infrastructure for password hashing and JWT validation, shared across services without domain coupling.
 - **user-service** owns the user aggregate and authentication domain
 - **chat-service** manages channel and message aggregates with Cassandra-backed time-series storage, publishing message events for WebSocket broadcast, and coordinating real-time delivery through persistent connections.
 
 **Hexagonal Architecture**: 
+
 Each service follows hexagonal architecture:
 - `src/bin/server/main.rs` — Entry point
 - `src/lib/domain/{aggregate}/` — Business logic without serialization or I/O dependencies
@@ -59,11 +61,13 @@ Each service follows hexagonal architecture:
 - `migrations/` — Database migrations
 
 **Storage:**
+
 - PostgreSQL — Users, channels, user replicas (read model)
 - Cassandra — Messages (time-series, partitioned by channel_id)
 - Kafka — `user-events`, `chat.messages.{0-15}` (16 shards)
 
 **Event Topics:**
+
 *user-events (published by user-service)*
 - `UserCreated` → {event_id, user_id, username, email, created_at}
 - `UserUpdated` → {event_id, user_id, username, email, updated_at}
@@ -74,6 +78,7 @@ Each service follows hexagonal architecture:
 - `MessageDeleted` → {event_id, message_id, channel_id, deleted_at}
 
 **Eventual Consistency Model:**
+
 chat-service maintains a denormalized `user_replica` table for fast username lookups:
 - Populated via Kafka consumer from `user-events` topic
 - Upserted on UserCreated/UserUpdated events
@@ -84,6 +89,7 @@ chat-service maintains a denormalized `user_replica` table for fast username loo
 For detailed interaction flows, see the [sequence diagrams](./sequence).
 
 **Practices:** 
+
 - Use type system and newtypes
 - Use `thiserror` for domain errors
 - Use `anyhow` for application errors
