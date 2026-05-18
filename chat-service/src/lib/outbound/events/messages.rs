@@ -24,6 +24,7 @@ use crate::domain::user::events::UserUpdatedEvent;
 pub enum ChatEventMessage {
     MessageSent(MessageSentMessage),
     ChannelCreated(ChannelCreatedMessage),
+    ChannelDeleted(ChannelDeletedMessage),
     UserJoinedChannel(UserJoinedChannelMessage),
     UserLeftChannel(UserLeftChannelMessage),
 }
@@ -33,6 +34,7 @@ impl ChatEventMessage {
         match self {
             ChatEventMessage::MessageSent(e) => &e.event_id,
             ChatEventMessage::ChannelCreated(e) => &e.event_id,
+            ChatEventMessage::ChannelDeleted(e) => &e.event_id,
             ChatEventMessage::UserJoinedChannel(e) => &e.event_id,
             ChatEventMessage::UserLeftChannel(e) => &e.event_id,
         }
@@ -42,6 +44,7 @@ impl ChatEventMessage {
         match self {
             ChatEventMessage::MessageSent(_) => "message_sent",
             ChatEventMessage::ChannelCreated(_) => "channel_created",
+            ChatEventMessage::ChannelDeleted(_) => "channel_deleted",
             ChatEventMessage::UserJoinedChannel(_) => "user_joined_channel",
             ChatEventMessage::UserLeftChannel(_) => "user_left_channel",
         }

@@ -1,3 +1,4 @@
+pub mod channel_publisher;
 pub mod consumer;
 pub mod message_publisher;
 pub mod messages;
