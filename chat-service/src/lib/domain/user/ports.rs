@@ -6,6 +6,24 @@ use super::events::UserUpdatedEvent;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 
+/// Resolves user information, using the local replica first and falling back to user-service.
+///
+/// Implementations should check the local read-model before making a remote call.
+#[async_trait]
+pub trait UserResolver: Send + Sync + 'static {
+    /// Look up a user by ID, checking the local replica before calling user-service.
+    ///
+    /// # Arguments
+    /// * `user_id` - User ID to resolve
+    ///
+    /// # Returns
+    /// User if found in either source, `None` if not found anywhere
+    ///
+    /// # Errors
+    /// Returns error string if both sources fail
+    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String>;
+}
+
 /// Port for user-service communication (via gRPC).
 #[async_trait]
 pub trait UserServicePort: Send + Sync + 'static {
