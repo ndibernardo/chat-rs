@@ -55,15 +55,21 @@ where
             CreateChannelCommand::Private {
                 name,
                 description,
-                members,
-            } => Channel::Private(PrivateChannel {
-                id: ChannelId::new(),
-                name,
-                description,
-                created_by,
-                created_at: Utc::now(),
-                members,
-            }),
+                mut members,
+            } => {
+                // creator is always a member of their own private channel
+                if !members.contains(&created_by) {
+                    members.push(created_by);
+                }
+                Channel::Private(PrivateChannel {
+                    id: ChannelId::new(),
+                    name,
+                    description,
+                    created_by,
+                    created_at: Utc::now(),
+                    members,
+                })
+            }
             CreateChannelCommand::Direct { participant_id } => Channel::Direct(DirectChannel {
                 id: ChannelId::new(),
                 created_by,
@@ -156,9 +162,12 @@ mod tests {
         channel_repository
             .expect_create()
             .withf(move |channel| {
-                matches!(channel, Channel::Private(_))
-                    && channel.name().unwrap().as_str() == "private-team"
-                    && channel.created_by() == creator_id
+                let Channel::Private(c) = channel else { return false };
+                c.name.as_str() == "private-team"
+                    && c.created_by == creator_id
+                    && c.members.contains(&creator_id)
+                    && c.members.contains(&member1_id)
+                    && c.members.contains(&member2_id)
             })
             .times(1)
             .returning(|channel| Ok(channel));
@@ -175,8 +184,42 @@ mod tests {
         assert!(result.is_ok());
 
         let channel = result.unwrap();
-        assert!(matches!(channel, Channel::Private(_)));
-        assert_eq!(channel.name().unwrap().as_str(), "private-team");
+        let Channel::Private(c) = channel else { panic!("expected Private channel") };
+        assert_eq!(c.name.as_str(), "private-team");
+        assert!(c.members.contains(&creator_id), "creator must be a member");
+        assert!(c.members.contains(&member1_id));
+        assert!(c.members.contains(&member2_id));
+    }
+
+    #[tokio::test]
+    async fn test_create_private_channel_deduplicates_creator_in_members() {
+        let mut channel_repository = MockTestChannelRepository::new();
+
+        let creator_id = UserId::new();
+
+        channel_repository
+            .expect_create()
+            .withf(move |channel| {
+                let Channel::Private(c) = channel else { return false };
+                // creator passed explicitly in members — should not be duplicated
+                c.members.iter().filter(|&&m| m == creator_id).count() == 1
+            })
+            .times(1)
+            .returning(|channel| Ok(channel));
+
+        let service = ChannelService::new(Arc::new(channel_repository));
+
+        let req = CreateChannelCommand::Private {
+            name: ChannelName::new("engineering".to_string()).unwrap(),
+            description: None,
+            members: vec![creator_id], // creator already included
+        };
+
+        let result = service.create_channel(req, creator_id).await;
+        assert!(result.is_ok());
+
+        let Channel::Private(c) = result.unwrap() else { panic!("expected Private") };
+        assert_eq!(c.members.iter().filter(|&&m| m == creator_id).count(), 1);
     }
 
     #[tokio::test]
