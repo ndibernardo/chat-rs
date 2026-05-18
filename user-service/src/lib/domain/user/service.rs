@@ -11,6 +11,7 @@ use crate::domain::user::models::UpdateUserCommand;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
+use crate::user::errors::PasswordError;
 use crate::user::errors::UserError;
 use crate::user::ports::EventPublisher;
 use crate::user::ports::UserRepository;
@@ -62,7 +63,7 @@ where
         let password_hash = self
             .password_hasher
             .hash(&command.password)
-            .map_err(|e| UserError::Unknown(format!("Password hashing failed: {}", e)))?;
+            .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))?;
 
         let user = User {
             id: UserId::new(),
@@ -127,7 +128,7 @@ where
             user.password_hash = self
                 .password_hasher
                 .hash(&new_password)
-                .map_err(|e| UserError::Unknown(format!("Password hashing failed: {}", e)))?;
+                .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))?;
         }
 
         let updated_user = self.repository.update(user).await?;
