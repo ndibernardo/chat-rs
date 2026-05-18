@@ -14,6 +14,7 @@ use tower_http::trace::TraceLayer;
 use tracing::Span;
 
 use super::handlers::create_channel;
+use super::handlers::health;
 use super::handlers::get_channel;
 use super::handlers::get_channel_messages;
 use super::handlers::list_public_channels;
@@ -65,6 +66,9 @@ pub fn create_router(
         authenticator,
     };
 
+    let health_route = Router::new()
+        .route("/health", get(health));
+
     let api_routes = Router::new()
         .route("/api/channels", post(create_channel))
         .route("/api/channels/public", get(list_public_channels))
@@ -108,6 +112,7 @@ pub fn create_router(
         );
 
     Router::new()
+        .merge(health_route)
         .merge(api_routes)
         .merge(ws_routes)
         .layer(trace_layer)

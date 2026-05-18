@@ -10,6 +10,7 @@ pub mod authenticate;
 pub mod create_user;
 pub mod delete_user;
 pub mod get_user;
+pub mod health;
 pub mod update_user;
 
 #[derive(Debug, Clone)]

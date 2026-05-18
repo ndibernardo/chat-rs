@@ -17,6 +17,7 @@ use tracing::Span;
 
 use super::handlers::authenticate::authenticate;
 use super::handlers::create_user::create_user;
+use super::handlers::health::health;
 use super::handlers::delete_user::delete_user;
 use super::handlers::get_user::get_user;
 use super::handlers::update_user::update_user;
@@ -44,6 +45,7 @@ pub fn create_router(
     };
 
     let public_routes = Router::new()
+        .route("/health", get(health))
         .route("/api/auth/login", post(authenticate))
         .route("/api/users", post(create_user));
 
