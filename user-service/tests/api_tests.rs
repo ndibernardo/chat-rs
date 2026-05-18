@@ -12,7 +12,7 @@ async fn test_create_user_success() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -36,7 +36,7 @@ async fn test_create_user_duplicate_username() {
     app.post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -48,7 +48,7 @@ async fn test_create_user_duplicate_username() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -72,7 +72,7 @@ async fn test_create_user_duplicate_email() {
     app.post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -84,7 +84,7 @@ async fn test_create_user_duplicate_email() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola2",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!2"
         }))
         .send()
@@ -108,7 +108,7 @@ async fn test_create_user_invalid_username() {
         .post("/api/users")
         .json(&json!({
             "username": "n",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word"
         }))
         .send()
@@ -132,7 +132,7 @@ async fn test_create_user_invalid_email() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "not-an-email",
+            "email": "not-an-email",
             "password": "pass_word!"
         }))
         .send()
@@ -157,7 +157,7 @@ async fn test_authenticate_success() {
     app.post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -192,7 +192,7 @@ async fn test_authenticate_wrong_password() {
     app.post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "Correct_Password!"
         }))
         .send()
@@ -245,7 +245,7 @@ async fn test_get_user_by_id() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -298,7 +298,7 @@ async fn test_get_user_not_found() {
     app.post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -344,7 +344,7 @@ async fn test_full_user_workflow() {
         .post("/api/users")
         .json(&json!({
             "username": "nicola",
-            "email_address": "nicola@example.com",
+            "email": "nicola@example.com",
             "password": "pass_word!"
         }))
         .send()
@@ -397,13 +397,19 @@ async fn test_full_user_workflow() {
     let update_response = app
         .patch_authenticated(&format!("/api/users/{}", user_id), &token)
         .json(&json!({
-            "email_address": "updated@example.com"
+            "email": "updated@example.com"
         }))
         .send()
         .await
         .expect("Failed to execute request");
 
     assert_eq!(update_response.status(), StatusCode::OK);
+
+    let update_body: serde_json::Value = update_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    assert_eq!(update_body["data"]["email"], "updated@example.com");
 
     // 5. Try to access with invalid token - should fail
     let invalid_response = app

@@ -34,7 +34,7 @@ pub async fn create_user(
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CreateUserRequest {
     username: String,
-    email_address: String,
+    email: String,
     password: String,
 }
 
@@ -50,7 +50,7 @@ enum ParseCreateUserRequestError {
 impl CreateUserRequest {
     fn try_into_command(self) -> Result<CreateUserCommand, ParseCreateUserRequestError> {
         let username = Username::new(self.username)?;
-        let email_address = EmailAddress::new(self.email_address)?;
+        let email_address = EmailAddress::new(self.email)?;
         let password = self.password;
         Ok(CreateUserCommand::new(username, email_address, password))
     }
