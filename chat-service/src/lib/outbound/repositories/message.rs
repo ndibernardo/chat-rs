@@ -168,9 +168,9 @@ impl MessageRepository for CassandraMessageRepository {
                     .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
                 messages.push(Message {
-                    id: MessageId(message_id_timeuuid.into()),
-                    channel_id: ChannelId(channel_id),
-                    user_id: UserId(user_id),
+                    id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
+                    channel_id: ChannelId::from(channel_id),
+                    user_id: UserId::from(user_id),
                     content: MessageContent::new(content)?,
                     timestamp,
                 });
@@ -211,9 +211,9 @@ impl MessageRepository for CassandraMessageRepository {
                     .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
                 messages.push(Message {
-                    id: MessageId(message_id_timeuuid.into()),
-                    channel_id: ChannelId(channel_id),
-                    user_id: UserId(user_id),
+                    id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
+                    channel_id: ChannelId::from(channel_id),
+                    user_id: UserId::from(user_id),
                     content: MessageContent::new(content)?,
                     timestamp,
                 });

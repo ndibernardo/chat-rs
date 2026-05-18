@@ -42,14 +42,12 @@ impl UserServicePort for GrpcUserServiceClient {
                 let username = Username::new(user.username)
                     .map_err(|e| format!("Invalid username from gRPC: {}", e))?;
 
-                //@TODO remove created_at, updated_at
-
-                Ok(Some(User {
-                    id: user_id,
+                Ok(Some(User::new(
+                    user_id,
                     username,
-                    created_at: Default::default(),
-                    updated_at: Default::default(),
-                }))
+                    Default::default(),
+                    Default::default(),
+                )))
             }
             Some(crate::proto::get_user_response::Result::Error(err)) => Err(err),
             None => Ok(None),

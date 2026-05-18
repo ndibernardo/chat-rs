@@ -91,7 +91,7 @@ impl UserReplicaRepository for PostgresUserReplicaRepository {
             let username = Username::new(r.username)
                 .expect("Invalid username in database - should never happen");
             User {
-                id: UserId(r.id),
+                id: UserId::from(r.id),
                 username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
@@ -120,7 +120,7 @@ impl UserReplicaRepository for PostgresUserReplicaRepository {
                 let username = Username::new(r.username)
                     .expect("Invalid username in database - should never happen");
                 User {
-                    id: UserId(r.id),
+                    id: UserId::from(r.id),
                     username,
                     created_at: r.created_at,
                     updated_at: r.updated_at,

@@ -30,7 +30,10 @@ impl PostgresChannelRepository {
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| UserId(r.get("user_id"))).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| UserId::from(r.get::<uuid::Uuid, _>("user_id")))
+            .collect())
     }
 
     async fn load_participants(
@@ -45,7 +48,10 @@ impl PostgresChannelRepository {
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        let ids: Vec<UserId> = rows.into_iter().map(|r| UserId(r.get("user_id"))).collect();
+        let ids: Vec<UserId> = rows
+            .into_iter()
+            .map(|r| UserId::from(r.get::<uuid::Uuid, _>("user_id")))
+            .collect();
 
         match ids.as_slice() {
             [a, b] => Ok([*a, *b]),
@@ -66,8 +72,8 @@ impl PostgresChannelRepository {
         created_at: chrono::DateTime<chrono::Utc>,
         channel_type: String,
     ) -> Result<Channel, ChannelError> {
-        let channel_id = ChannelId(id);
-        let user_id = UserId(created_by);
+        let channel_id = ChannelId::from(id);
+        let user_id = UserId::from(created_by);
 
         match channel_type.as_str() {
             "public" => {
@@ -113,19 +119,16 @@ impl ChannelRepository for PostgresChannelRepository {
     async fn create(&self, channel: Channel) -> Result<Channel, ChannelError> {
         let name = channel.name().map(|n| n.as_str().to_owned());
         let description = channel.description().map(str::to_owned);
-        let id = channel.id().0;
-        let created_by = channel.created_by().0;
+        let id = channel.id().into_uuid();
+        let created_by = channel.created_by().into_uuid();
         let created_at = channel.created_at();
         let channel_type = channel.channel_type();
 
-        let member_ids: Vec<uuid::Uuid> = match &channel {
-            Channel::Private(c) => c.members.iter().map(|m| m.0).collect(),
-            _ => vec![],
-        };
-        let participant_ids: Vec<uuid::Uuid> = match &channel {
-            Channel::Direct(c) => c.participants.iter().map(|p| p.0).collect(),
-            _ => vec![],
-        };
+        let member_ids: Vec<uuid::Uuid> = channel.members().iter().map(|&m| m.into_uuid()).collect();
+        let participant_ids: Vec<uuid::Uuid> = channel
+            .participants()
+            .map(|ps| ps.iter().map(|&p| p.into_uuid()).collect())
+            .unwrap_or_default();
 
         let mut tx = self
             .pool

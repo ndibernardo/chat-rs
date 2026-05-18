@@ -161,6 +161,10 @@ impl KafkaEventConsumer {
                 );
                 Ok(())
             }
+            ChatEventMessage::ChannelDeleted(channel_event) => {
+                tracing::debug!("Channel deleted: {}", channel_event.channel_id);
+                Ok(())
+            }
         }
     }
 
