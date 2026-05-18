@@ -14,7 +14,7 @@ async fn test_get_channel_messages_empty() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "test-channel"
+            "name": "incident-response"
         }))
         .send()
         .await
@@ -94,7 +94,7 @@ async fn test_get_messages_with_limit_parameter() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "test-limit"
+            "name": "backend-alerts"
         }))
         .send()
         .await
@@ -132,7 +132,7 @@ async fn test_get_messages_with_before_parameter() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "test-before"
+            "name": "devops-standups"
         }))
         .send()
         .await
@@ -174,7 +174,7 @@ async fn test_get_messages_with_limit_and_before() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "test-pagination"
+            "name": "sprint-planning"
         }))
         .send()
         .await
@@ -220,7 +220,7 @@ async fn test_message_retrieval_workflow() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "message-test"
+            "name": "release-notes"
         }))
         .send()
         .await

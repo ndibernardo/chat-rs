@@ -190,8 +190,8 @@ async fn test_get_channel_by_id() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "test-channel",
-            "description": "Test channel"
+            "name": "platform-releases",
+            "description": "Platform release announcements"
         }))
         .send()
         .await
@@ -214,8 +214,8 @@ async fn test_get_channel_by_id() {
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["id"], channel_id);
-    assert_eq!(body["name"], "test-channel");
-    assert_eq!(body["description"], "Test channel");
+    assert_eq!(body["name"], "platform-releases");
+    assert_eq!(body["description"], "Platform release announcements");
 }
 
 #[tokio::test]
@@ -262,7 +262,7 @@ async fn test_list_public_channels() {
     app.post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "public-1"
+            "name": "platform-infra"
         }))
         .send()
         .await
@@ -271,7 +271,7 @@ async fn test_list_public_channels() {
     app.post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "public-2"
+            "name": "data-science"
         }))
         .send()
         .await
@@ -281,7 +281,7 @@ async fn test_list_public_channels() {
     app.post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "private",
-            "name": "private-1",
+            "name": "infra-alerts",
             "members": [uuid::Uuid::new_v4().to_string()]
         }))
         .send()
@@ -314,9 +314,9 @@ async fn test_list_public_channels() {
         .iter()
         .map(|c| c["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"public-1"));
-    assert!(names.contains(&"public-2"));
-    assert!(!names.contains(&"private-1"));
+    assert!(names.contains(&"platform-infra"));
+    assert!(names.contains(&"data-science"));
+    assert!(!names.contains(&"infra-alerts"));
 }
 
 #[tokio::test]
@@ -347,8 +347,8 @@ async fn test_full_channel_workflow() {
         .post_authenticated("/api/channels", &token)
         .json(&json!({
             "channel_type": "public",
-            "name": "workflow-test",
-            "description": "Testing full workflow"
+            "name": "product-updates",
+            "description": "Product roadmap and release updates"
         }))
         .send()
         .await
@@ -373,7 +373,7 @@ async fn test_full_channel_workflow() {
 
     let get_body: serde_json::Value = get_response.json().await.expect("Failed to parse response");
     assert_eq!(get_body["id"], channel_id);
-    assert_eq!(get_body["name"], "workflow-test");
+    assert_eq!(get_body["name"], "product-updates");
 
     // 3. List public channels and verify it's there
     let (list_token, _list_user_id) = app.create_test_token();

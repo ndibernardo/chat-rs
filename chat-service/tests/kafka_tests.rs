@@ -14,11 +14,9 @@ use chat_service::domain::channel::events::ChannelCreatedEvent;
 use chat_service::domain::channel::models::Channel;
 use chat_service::domain::channel::models::ChannelId;
 use chat_service::domain::channel::models::ChannelName;
-use chat_service::domain::channel::models::PublicChannel;
 use chat_service::domain::message::events::MessageSentEvent;
 use chat_service::domain::message::models::Message;
 use chat_service::domain::message::models::MessageContent;
-use chat_service::domain::message::models::MessageId;
 use chat_service::domain::user::models::UserId;
 use chat_service::outbound::events::messages::ChannelCreatedMessage;
 use chat_service::outbound::events::messages::ChatEventMessage;
@@ -74,13 +72,11 @@ async fn test_kafka_publish_message_event() {
 
     // Create a test message and event
     let channel_id = ChannelId::new();
-    let message = Message {
-        id: MessageId::new_time_based(),
+    let message = Message::new(
         channel_id,
-        user_id: UserId(uuid::Uuid::new_v4()),
-        content: MessageContent::new("Test message content".to_string()).unwrap(),
-        timestamp: chrono::Utc::now(),
-    };
+        UserId::new(),
+        MessageContent::new("Test message content".to_string()).unwrap(),
+    );
 
     let event = MessageSentEvent::new(&message);
     let key = event.message_id.to_string();
@@ -112,14 +108,12 @@ async fn test_kafka_publish_channel_event() {
 
     // Create a test channel and event
     let channel_id = ChannelId::new();
-    let public_channel = PublicChannel {
-        id: channel_id,
-        name: ChannelName::new("test-channel".to_string()).unwrap(),
-        description: Some("Test channel".to_string()),
-        created_by: UserId(uuid::Uuid::new_v4()),
-        created_at: chrono::Utc::now(),
-    };
-    let channel = Channel::Public(public_channel);
+    let channel = Channel::new_public(
+        channel_id,
+        ChannelName::new("test-channel").unwrap(),
+        Some("Test channel".to_string()),
+        UserId::new(),
+    );
 
     let event = ChannelCreatedEvent::new(&channel);
     let key = event.channel_id.to_string();
@@ -151,13 +145,11 @@ async fn test_kafka_publish_and_consume() {
 
     // Create and publish a test message and event
     let channel_id = ChannelId::new();
-    let message = Message {
-        id: MessageId::new_time_based(),
+    let message = Message::new(
         channel_id,
-        user_id: UserId(uuid::Uuid::new_v4()),
-        content: MessageContent::new("Test consume message".to_string()).unwrap(),
-        timestamp: chrono::Utc::now(),
-    };
+        UserId::new(),
+        MessageContent::new("Test consume message".to_string()).unwrap(),
+    );
 
     let event = MessageSentEvent::new(&message);
     let key = event.message_id.to_string();
@@ -244,13 +236,11 @@ async fn test_kafka_publish_multiple_events() {
 
     // Publish multiple events
     for i in 0..5 {
-        let message = Message {
-            id: MessageId::new_time_based(),
+        let message = Message::new(
             channel_id,
-            user_id: UserId(uuid::Uuid::new_v4()),
-            content: MessageContent::new(format!("Test message {}", i)).unwrap(),
-            timestamp: chrono::Utc::now(),
-        };
+            UserId::new(),
+            MessageContent::new(format!("Test message {}", i)).unwrap(),
+        );
 
         let event = MessageSentEvent::new(&message);
         let key = event.message_id.to_string();
@@ -283,13 +273,11 @@ async fn test_kafka_error_handling() {
     let kafka_producer = create_kafka_producer(kafka_brokers);
 
     let channel_id = ChannelId::new();
-    let message = Message {
-        id: MessageId::new_time_based(),
+    let message = Message::new(
         channel_id,
-        user_id: UserId(uuid::Uuid::new_v4()),
-        content: MessageContent::new("Test message".to_string()).unwrap(),
-        timestamp: chrono::Utc::now(),
-    };
+        UserId::new(),
+        MessageContent::new("Test message".to_string()).unwrap(),
+    );
 
     let event = MessageSentEvent::new(&message);
     let key = event.message_id.to_string();

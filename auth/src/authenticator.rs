@@ -140,13 +140,13 @@ mod tests {
         let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
 
         // Hash a password
-        let password = "my_password";
+        let password = "K1nd-0f-Blue_1959!";
         let hash = authenticator
             .hash_password(password)
             .expect("Failed to hash password");
 
         // Authenticate with correct password
-        let claims = Claims::new().with_subject("user123");
+        let claims = Claims::new().with_subject("miles-davis");
         let result = authenticator
             .authenticate(password, &hash, &claims)
             .expect("Authentication failed");
@@ -157,22 +157,22 @@ mod tests {
         let decoded: Claims = authenticator
             .validate_token(&result.access_token)
             .expect("Token validation failed");
-        assert_eq!(decoded.sub, Some("user123".to_string()));
+        assert_eq!(decoded.sub, Some("miles-davis".to_string()));
     }
 
     #[test]
     fn test_authenticate_invalid_password() {
         let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
 
-        let password = "my_password";
+        let password = "K1nd-0f-Blue_1959!";
         let hash = authenticator
             .hash_password(password)
             .expect("Failed to hash password");
 
-        let claims = Claims::new().with_subject("user123");
+        let claims = Claims::new().with_subject("miles-davis");
 
         // Try with wrong password
-        let result = authenticator.authenticate("wrong_password", &hash, &claims);
+        let result = authenticator.authenticate("Giant-Steps-Error!", &hash, &claims);
         assert!(matches!(
             result,
             Err(AuthenticationError::InvalidCredentials)
@@ -184,8 +184,8 @@ mod tests {
         let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
 
         let claims = Claims::new()
-            .with_subject("user123")
-            .with_issuer("test".to_string());
+            .with_subject("miles-davis")
+            .with_issuer("chat-rs".to_string());
 
         // Generate token
         let token = authenticator
@@ -197,8 +197,8 @@ mod tests {
             .validate_token(&token)
             .expect("Failed to validate token");
 
-        assert_eq!(decoded.sub, Some("user123".to_string()));
-        assert_eq!(decoded.iss, Some("test".to_string()));
+        assert_eq!(decoded.sub, Some("miles-davis".to_string()));
+        assert_eq!(decoded.iss, Some("chat-rs".to_string()));
     }
 
     #[test]

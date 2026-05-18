@@ -15,11 +15,14 @@ use chat_service::domain::channel::service::ChannelService;
 use chat_service::domain::message::service::MessageService;
 use chat_service::inbound::http::router::create_router;
 use chat_service::inbound::websocket::registry::ConnectionRegistry;
+use chat_service::outbound::events::channel_publisher::KafkaChannelEventPublisher;
 use chat_service::outbound::events::message_publisher::KafkaMessageEventPublisher;
 use chat_service::outbound::events::producer::KafkaEventProducer;
 use chat_service::outbound::grpc::user::GrpcUserServiceClient;
 use chat_service::outbound::repositories::channel::PostgresChannelRepository;
 use chat_service::outbound::repositories::message::CassandraMessageRepository;
+use chat_service::outbound::repositories::user_replica::PostgresUserReplicaRepository;
+use chat_service::outbound::user::resolver::ReplicaWithFallback;
 use scylla::Session;
 use scylla::SessionBuilder;
 use sqlx::postgres::PgConnectOptions;
@@ -71,9 +74,6 @@ impl TestApp {
         let kafka_brokers =
             std::env::var("KAFKA__BROKERS").unwrap_or_else(|_| "localhost:9093".to_string());
 
-        let user_service_url = std::env::var("USER_SERVICE_GRPC_URL")
-            .unwrap_or_else(|_| "http://localhost:50052".to_string());
-
         let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
             format!(
                 "postgresql://postgres:postgres@localhost:5433/{}",
@@ -89,7 +89,8 @@ impl TestApp {
             },
             server: ServerConfig { http_port: port },
             user_service: UserServiceConfig {
-                grpc_url: user_service_url.clone(),
+                grpc_url: std::env::var("USER_SERVICE_GRPC_URL")
+                    .unwrap_or_else(|_| "http://localhost:50052".to_string()),
             },
             jwt: JwtConfig {
                 secret: "test-secret-key-for-jwt-signing-at-least-32-bytes".to_string(),
@@ -113,22 +114,29 @@ impl TestApp {
                 .expect("Failed to create message repository"),
         );
 
-        let user_client = Arc::new(
-            GrpcUserServiceClient::new(&user_service_url)
-                .await
-                .expect("Failed to create gRPC user service client"),
-        );
-
         let kafka_producer =
             Arc::new(KafkaEventProducer::new(&config).expect("Failed to create Kafka producer"));
+        let channel_event_publisher =
+            Arc::new(KafkaChannelEventPublisher::new(Arc::clone(&kafka_producer)));
         let event_publisher = Arc::new(KafkaMessageEventPublisher::new(kafka_producer));
 
         // Create services
-        let channel_service = Arc::new(ChannelService::new(channel_repo.clone()));
+        let channel_service = Arc::new(ChannelService::new(channel_repo.clone(), channel_event_publisher));
+
+        let user_replica_repo = Arc::new(PostgresUserReplicaRepository::new(db.pg_pool.clone()));
+        let user_service_grpc_url = std::env::var("USER_SERVICE_GRPC_URL")
+            .unwrap_or_else(|_| "http://localhost:50052".to_string());
+        let grpc_user_client = Arc::new(
+            GrpcUserServiceClient::new(&user_service_grpc_url)
+                .await
+                .expect("Failed to connect to user-service gRPC"),
+        );
+        let user_resolver = Arc::new(ReplicaWithFallback::new(user_replica_repo, grpc_user_client));
+
         let message_service = Arc::new(MessageService::new(
             message_repo,
             channel_repo,
-            user_client,
+            user_resolver,
             event_publisher,
         ));
 

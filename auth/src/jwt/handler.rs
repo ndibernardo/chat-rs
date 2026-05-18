@@ -132,8 +132,8 @@ mod tests {
         let handler = JwtHandler::new(b"my_secret_key_at_least_32_bytes_long!");
 
         let claims = TestClaims {
-            sub: "user123".to_string(),
-            role: "admin".to_string(),
+            sub: "miles-davis".to_string(),
+            role: "platform-engineer".to_string(),
         };
 
         // Encode
@@ -159,8 +159,8 @@ mod tests {
         let handler2 = JwtHandler::new(b"secret2_at_least_32_bytes_long_key!");
 
         let claims = TestClaims {
-            sub: "user123".to_string(),
-            role: "admin".to_string(),
+            sub: "miles-davis".to_string(),
+            role: "platform-engineer".to_string(),
         };
 
         let token = handler1.encode(&claims).expect("Failed to encode token");
@@ -176,8 +176,8 @@ mod tests {
         let handler2 = JwtHandler::new(b"secret2_at_least_32_bytes_long_key!");
 
         let claims = TestClaims {
-            sub: "user123".to_string(),
-            role: "admin".to_string(),
+            sub: "miles-davis".to_string(),
+            role: "platform-engineer".to_string(),
         };
 
         let token = handler1.encode(&claims).expect("Failed to encode token");
@@ -186,7 +186,7 @@ mod tests {
         let decoded: TestClaims = handler2
             .decode_unverified(&token)
             .expect("Failed to decode unverified");
-        assert_eq!(decoded.sub, "user123");
-        assert_eq!(decoded.role, "admin");
+        assert_eq!(decoded.sub, "miles-davis");
+        assert_eq!(decoded.role, "platform-engineer");
     }
 }
