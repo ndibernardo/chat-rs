@@ -56,8 +56,3 @@ pub enum ChannelError {
     Unknown(String),
 }
 
-impl From<anyhow::Error> for ChannelError {
-    fn from(err: anyhow::Error) -> Self {
-        ChannelError::Unknown(err.to_string())
-    }
-}
