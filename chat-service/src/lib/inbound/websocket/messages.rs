@@ -25,7 +25,7 @@ impl From<MessageId> for WsMessageId {
 
 impl From<WsMessageId> for MessageId {
     fn from(id: WsMessageId) -> Self {
-        Self(id.0)
+        MessageId::from(id.0)
     }
 }
 
@@ -42,7 +42,7 @@ impl From<UserId> for WsUserId {
 
 impl From<WsUserId> for UserId {
     fn from(id: WsUserId) -> Self {
-        Self(id.0)
+        UserId::from(id.0)
     }
 }
 
@@ -59,7 +59,7 @@ impl From<ChannelId> for WsChannelId {
 
 impl From<WsChannelId> for ChannelId {
     fn from(id: WsChannelId) -> Self {
-        Self(id.0)
+        ChannelId::from(id.0)
     }
 }
 

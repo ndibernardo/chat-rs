@@ -23,22 +23,25 @@ use crate::domain::message::service::MessageService;
 use crate::inbound::middleware as auth_middleware;
 use crate::inbound::websocket::handler::websocket_handler;
 use crate::inbound::websocket::registry::ConnectionRegistry;
+use crate::outbound::events::channel_publisher::KafkaChannelEventPublisher;
 use crate::outbound::events::message_publisher::KafkaMessageEventPublisher;
 use crate::outbound::grpc::user::GrpcUserServiceClient;
 use crate::outbound::repositories::channel::PostgresChannelRepository;
 use crate::outbound::repositories::message::CassandraMessageRepository;
+use crate::outbound::repositories::user_replica::PostgresUserReplicaRepository;
+use crate::outbound::user::resolver::ReplicaWithFallback;
 
 /// Unified application state for both HTTP and WebSocket handlers.
 ///
 /// Contains all service dependencies needed across the application.
 #[derive(Clone)]
 pub struct AppState {
-    pub channel_service: Arc<ChannelService<PostgresChannelRepository>>,
+    pub channel_service: Arc<ChannelService<PostgresChannelRepository, KafkaChannelEventPublisher>>,
     pub message_service: Arc<
         MessageService<
             CassandraMessageRepository,
             PostgresChannelRepository,
-            GrpcUserServiceClient,
+            ReplicaWithFallback<PostgresUserReplicaRepository, GrpcUserServiceClient>,
             KafkaMessageEventPublisher,
         >,
     >,
@@ -47,12 +50,12 @@ pub struct AppState {
 }
 
 pub fn create_router(
-    channel_service: Arc<ChannelService<PostgresChannelRepository>>,
+    channel_service: Arc<ChannelService<PostgresChannelRepository, KafkaChannelEventPublisher>>,
     message_service: Arc<
         MessageService<
             CassandraMessageRepository,
             PostgresChannelRepository,
-            GrpcUserServiceClient,
+            ReplicaWithFallback<PostgresUserReplicaRepository, GrpcUserServiceClient>,
             KafkaMessageEventPublisher,
         >,
     >,
