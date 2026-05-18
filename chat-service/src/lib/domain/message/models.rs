@@ -15,18 +15,46 @@ use crate::domain::user::models::UserId;
 /// Represents a single message in a channel with content and metadata.
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub id: MessageId,
-    pub channel_id: ChannelId,
-    pub user_id: UserId,
-    pub content: MessageContent,
-    pub timestamp: DateTime<Utc>,
+    pub(crate) id: MessageId,
+    pub(crate) channel_id: ChannelId,
+    pub(crate) user_id: UserId,
+    pub(crate) content: MessageContent,
+    pub(crate) timestamp: DateTime<Utc>,
+}
+
+impl Message {
+    /// Create a new message with a generated ID and current timestamp.
+    pub fn new(channel_id: ChannelId, user_id: UserId, content: MessageContent) -> Self {
+        Self {
+            id: MessageId::new_time_based(),
+            channel_id,
+            user_id,
+            content,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Get the message ID.
+    pub fn id(&self) -> MessageId { self.id }
+
+    /// Get the channel this message belongs to.
+    pub fn channel_id(&self) -> ChannelId { self.channel_id }
+
+    /// Get the author user ID.
+    pub fn user_id(&self) -> UserId { self.user_id }
+
+    /// Get the message content.
+    pub fn content(&self) -> &MessageContent { &self.content }
+
+    /// Get the message send timestamp.
+    pub fn timestamp(&self) -> DateTime<Utc> { self.timestamp }
 }
 
 /// Message unique identifier value object.
 ///
 /// Uses UUID v1 (TimeUUID) for Cassandra compatibility and time-based ordering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MessageId(pub Uuid);
+pub struct MessageId(Uuid);
 
 impl MessageId {
     /// Generate a new time-based message ID.
@@ -72,6 +100,12 @@ impl MessageId {
     /// The inner UUID value
     pub fn into_uuid(self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for MessageId {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
     }
 }
 

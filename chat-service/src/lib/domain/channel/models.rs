@@ -10,7 +10,7 @@ use crate::domain::user::models::UserId;
 
 /// Channel unique identifier value object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChannelId(pub Uuid);
+pub struct ChannelId(Uuid);
 
 impl ChannelId {
     /// Generate a new random channel ID.
@@ -51,6 +51,12 @@ impl ChannelId {
     /// The inner UUID value
     pub fn into_uuid(self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for ChannelId {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
     }
 }
 
@@ -96,7 +102,7 @@ impl Channel {
     /// Get the channel name if applicable.
     ///
     /// # Returns
-    /// Channel name (None for direct channels)
+    /// Channel name, or `None` for direct channels
     pub fn name(&self) -> Option<&ChannelName> {
         match self {
             Channel::Public(c) => Some(&c.name),
@@ -132,7 +138,7 @@ impl Channel {
     /// Get the channel description if applicable.
     ///
     /// # Returns
-    /// Channel description (None for direct channels or if not set)
+    /// Channel description, or `None` for direct channels or if not set
     pub fn description(&self) -> Option<&str> {
         match self {
             Channel::Public(c) => c.description.as_deref(),
@@ -140,47 +146,74 @@ impl Channel {
             Channel::Direct(_) => None,
         }
     }
+
+    /// Get the member list for private channels.
+    ///
+    /// # Returns
+    /// Members slice; empty for public and direct channels
+    pub fn members(&self) -> &[UserId] {
+        match self {
+            Channel::Private(c) => &c.members,
+            Channel::Public(_) | Channel::Direct(_) => &[],
+        }
+    }
+
+    /// Get the two participants for direct channels.
+    ///
+    /// # Returns
+    /// `Some(&[UserId; 2])` for direct channels, `None` otherwise
+    pub fn participants(&self) -> Option<&[UserId; 2]> {
+        match self {
+            Channel::Direct(c) => Some(&c.participants),
+            Channel::Public(_) | Channel::Private(_) => None,
+        }
+    }
+
+    /// Create a public channel with the given ID and metadata.
+    pub fn new_public(id: ChannelId, name: ChannelName, description: Option<String>, created_by: UserId) -> Self {
+        Channel::Public(PublicChannel {
+            id,
+            name,
+            description,
+            created_by,
+            created_at: Utc::now(),
+        })
+    }
 }
 
 /// Public channel accessible to all users.
-///
-/// Anyone can join and send messages.
 #[derive(Debug, Clone)]
 pub struct PublicChannel {
-    pub id: ChannelId,
-    pub name: ChannelName,
-    pub description: Option<String>,
-    pub created_by: UserId,
-    pub created_at: DateTime<Utc>,
+    pub(crate) id: ChannelId,
+    pub(crate) name: ChannelName,
+    pub(crate) description: Option<String>,
+    pub(crate) created_by: UserId,
+    pub(crate) created_at: DateTime<Utc>,
 }
 
 /// Private channel with restricted membership.
-///
-/// Only invited members can access and send messages.
 #[derive(Debug, Clone)]
 pub struct PrivateChannel {
-    pub id: ChannelId,
-    pub name: ChannelName,
-    pub description: Option<String>,
-    pub created_by: UserId,
-    pub created_at: DateTime<Utc>,
-    pub members: Vec<UserId>,
+    pub(crate) id: ChannelId,
+    pub(crate) name: ChannelName,
+    pub(crate) description: Option<String>,
+    pub(crate) created_by: UserId,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) members: Vec<UserId>,
 }
 
 /// Direct message channel between exactly two users.
-///
-/// One-to-one conversation without a name.
 #[derive(Debug, Clone)]
 pub struct DirectChannel {
-    pub id: ChannelId,
-    pub created_by: UserId,
-    pub created_at: DateTime<Utc>,
-    pub participants: [UserId; 2],
+    pub(crate) id: ChannelId,
+    pub(crate) created_by: UserId,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) participants: [UserId; 2],
 }
 
-/// Channel name value object with validation.
+/// Channel name value object.
 ///
-/// Ensures name is non-empty and within 100 character limit.
+/// Non-empty, trimmed, max 100 characters.
 #[derive(Debug, Clone)]
 pub struct ChannelName(String);
 
@@ -190,26 +223,26 @@ impl ChannelName {
     /// Create a new validated channel name.
     ///
     /// # Arguments
-    /// * `name` - Raw channel name string
+    /// * `name` - Raw channel name string; leading/trailing whitespace is trimmed
     ///
     /// # Returns
     /// Validated ChannelName value object
     ///
     /// # Errors
-    /// * `Empty` - Name is empty string
-    /// * `TooLong` - Name exceeds 100 characters
-    pub fn new(name: String) -> Result<Self, ChannelNameError> {
-        let length = name.len();
-        if length == 0 {
-            Err(ChannelNameError::Empty)
-        } else if length > Self::MAX_LENGTH {
-            Err(ChannelNameError::TooLong {
-                max: Self::MAX_LENGTH,
-                actual: length,
-            })
-        } else {
-            Ok(Self(name))
+    /// * `Empty` - Name is empty or whitespace-only
+    /// * `TooLong` - Name exceeds 100 characters after trimming
+    pub fn new(name: impl Into<String>) -> Result<Self, ChannelNameError> {
+        let trimmed = name.into().trim().to_owned();
+        if trimmed.is_empty() {
+            return Err(ChannelNameError::Empty);
         }
+        if trimmed.len() > Self::MAX_LENGTH {
+            return Err(ChannelNameError::TooLong {
+                max: Self::MAX_LENGTH,
+                actual: trimmed.len(),
+            });
+        }
+        Ok(Self(trimmed))
     }
 
     /// Get name as string slice.
@@ -218,6 +251,12 @@ impl ChannelName {
     /// Name string slice
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for ChannelName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 

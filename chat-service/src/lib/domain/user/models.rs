@@ -13,17 +13,36 @@ use crate::domain::user::errors::UsernameError;
 /// Used for read-path enrichment (displaying usernames in messages, channels, etc.).
 #[derive(Debug, Clone)]
 pub struct User {
-    pub id: UserId,
-    pub username: Username,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub(crate) id: UserId,
+    pub(crate) username: Username,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
+}
+
+impl User {
+    /// Create a new user read-model entry.
+    pub fn new(id: UserId, username: Username, created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
+        Self { id, username, created_at, updated_at }
+    }
+
+    /// Get the user ID.
+    pub fn id(&self) -> UserId { self.id }
+
+    /// Get the username.
+    pub fn username(&self) -> &Username { &self.username }
+
+    /// Get the creation timestamp.
+    pub fn created_at(&self) -> DateTime<Utc> { self.created_at }
+
+    /// Get the last update timestamp.
+    pub fn updated_at(&self) -> DateTime<Utc> { self.updated_at }
 }
 
 /// User unique identifier value object.
 ///
 /// Wraps UUID v4 with type safety to prevent mixing with other IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UserId(pub Uuid);
+pub struct UserId(Uuid);
 
 impl UserId {
     /// Generate a new random user ID.
@@ -64,6 +83,12 @@ impl UserId {
     /// The inner UUID value
     pub fn into_uuid(self) -> Uuid {
         self.0
+    }
+}
+
+impl From<Uuid> for UserId {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
     }
 }
 
