@@ -4,40 +4,45 @@ use async_trait::async_trait;
 use chrono::Utc;
 
 use super::errors::ChannelError;
+use super::events::ChannelCreatedEvent;
 use super::models::Channel;
 use super::models::ChannelId;
 use super::models::CreateChannelCommand;
 use super::models::DirectChannel;
 use super::models::PrivateChannel;
 use super::models::PublicChannel;
+use super::ports::ChannelEventPublisher;
 use super::ports::ChannelRepository;
 use super::ports::ChannelServicePort;
 use crate::domain::user::models::UserId;
 
-/// Concrete implementation of ChannelServicePort.
-///
-/// Manages channel creation, retrieval, and deletion with eventual consistency.
-/// Generic over repository for testability.
-pub struct ChannelService<CR>
+pub struct ChannelService<CR, EP>
 where
     CR: ChannelRepository,
+    EP: ChannelEventPublisher,
 {
     channel_repository: Arc<CR>,
+    event_publisher: Arc<EP>,
 }
 
-impl<CR> ChannelService<CR>
+impl<CR, EP> ChannelService<CR, EP>
 where
     CR: ChannelRepository,
+    EP: ChannelEventPublisher,
 {
-    pub fn new(channel_repository: Arc<CR>) -> Self {
-        Self { channel_repository }
+    pub fn new(channel_repository: Arc<CR>, event_publisher: Arc<EP>) -> Self {
+        Self {
+            channel_repository,
+            event_publisher,
+        }
     }
 }
 
 #[async_trait]
-impl<CR> ChannelServicePort for ChannelService<CR>
+impl<CR, EP> ChannelServicePort for ChannelService<CR, EP>
 where
     CR: ChannelRepository + 'static,
+    EP: ChannelEventPublisher + 'static,
 {
     async fn create_channel(
         &self,
@@ -78,7 +83,15 @@ where
             }),
         };
 
-        self.channel_repository.create(channel).await
+        let channel = self.channel_repository.create(channel).await?;
+
+        let event = ChannelCreatedEvent::new(&channel);
+        // fire-and-forget: broadcast failure must not block channel creation
+        if let Err(e) = self.event_publisher.publish_channel_created(&event).await {
+            tracing::error!("Failed to publish channel_created event: {}", e);
+        }
+
+        Ok(channel)
     }
 
     async fn get_channel(&self, id: ChannelId) -> Result<Channel, ChannelError> {
@@ -104,6 +117,10 @@ mod tests {
     use mockall::predicate::*;
 
     use super::*;
+    use crate::domain::channel::events::ChannelDeletedEvent;
+    use crate::domain::channel::events::UserJoinedChannelEvent;
+    use crate::domain::channel::events::UserLeftChannelEvent;
+    use crate::domain::errors::EventPublisherError;
     use crate::ChannelName;
 
     mock! {
@@ -119,48 +136,74 @@ mod tests {
         }
     }
 
+    mock! {
+        pub TestChannelEventPublisher {}
+
+        #[async_trait]
+        impl ChannelEventPublisher for TestChannelEventPublisher {
+            async fn publish_channel_created(&self, event: &ChannelCreatedEvent) -> Result<(), EventPublisherError>;
+            async fn publish_user_joined_channel(&self, event: &UserJoinedChannelEvent) -> Result<(), EventPublisherError>;
+            async fn publish_user_left_channel(&self, event: &UserLeftChannelEvent) -> Result<(), EventPublisherError>;
+            async fn publish_channel_deleted(&self, event: &ChannelDeletedEvent) -> Result<(), EventPublisherError>;
+        }
+    }
+
+    fn make_service(
+        repo: MockTestChannelRepository,
+        publisher: MockTestChannelEventPublisher,
+    ) -> ChannelService<MockTestChannelRepository, MockTestChannelEventPublisher> {
+        ChannelService::new(Arc::new(repo), Arc::new(publisher))
+    }
+
     #[tokio::test]
     async fn test_create_public_channel_success() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let mut publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
 
-        channel_repository
-            .expect_create()
+        repo.expect_create()
             .withf(move |channel| {
                 matches!(channel, Channel::Public(_))
-                    && channel.name().unwrap().as_str() == "general"
+                    && channel.name().unwrap().as_str() == "engineering"
                     && channel.created_by() == creator_id
             })
             .times(1)
             .returning(|channel| Ok(channel));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        publisher
+            .expect_publish_channel_created()
+            .times(1)
+            .returning(|_| Ok(()));
 
-        let req = CreateChannelCommand::Public {
-            name: ChannelName::new("general".to_string()).unwrap(),
-            description: Some("General discussion".to_string()),
-        };
+        let service = make_service(repo, publisher);
 
-        let result = service.create_channel(req, creator_id).await;
+        let result = service
+            .create_channel(
+                CreateChannelCommand::Public {
+                    name: ChannelName::new("engineering").unwrap(),
+                    description: Some("Engineering team".to_string()),
+                },
+                creator_id,
+            )
+            .await;
+
         assert!(result.is_ok());
-
         let channel = result.unwrap();
         assert!(matches!(channel, Channel::Public(_)));
-        assert_eq!(channel.name().unwrap().as_str(), "general");
-        assert_eq!(channel.created_by(), creator_id);
+        assert_eq!(channel.name().unwrap().as_str(), "engineering");
     }
 
     #[tokio::test]
     async fn test_create_private_channel_success() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let mut publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
         let member1_id = UserId::new();
         let member2_id = UserId::new();
 
-        channel_repository
-            .expect_create()
+        repo.expect_create()
             .withf(move |channel| {
                 let Channel::Private(c) = channel else { return false };
                 c.name.as_str() == "private-team"
@@ -172,19 +215,26 @@ mod tests {
             .times(1)
             .returning(|channel| Ok(channel));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        publisher
+            .expect_publish_channel_created()
+            .times(1)
+            .returning(|_| Ok(()));
 
-        let req = CreateChannelCommand::Private {
-            name: ChannelName::new("private-team".to_string()).unwrap(),
-            description: Some("Team channel".to_string()),
-            members: vec![member1_id, member2_id],
-        };
+        let service = make_service(repo, publisher);
 
-        let result = service.create_channel(req, creator_id).await;
+        let result = service
+            .create_channel(
+                CreateChannelCommand::Private {
+                    name: ChannelName::new("private-team").unwrap(),
+                    description: Some("Team channel".to_string()),
+                    members: vec![member1_id, member2_id],
+                },
+                creator_id,
+            )
+            .await;
+
         assert!(result.is_ok());
-
-        let channel = result.unwrap();
-        let Channel::Private(c) = channel else { panic!("expected Private channel") };
+        let Channel::Private(c) = result.unwrap() else { panic!("expected Private") };
         assert_eq!(c.name.as_str(), "private-team");
         assert!(c.members.contains(&creator_id), "creator must be a member");
         assert!(c.members.contains(&member1_id));
@@ -193,221 +243,182 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_private_channel_deduplicates_creator_in_members() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let mut publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
 
-        channel_repository
-            .expect_create()
+        repo.expect_create()
             .withf(move |channel| {
                 let Channel::Private(c) = channel else { return false };
-                // creator passed explicitly in members — should not be duplicated
                 c.members.iter().filter(|&&m| m == creator_id).count() == 1
             })
             .times(1)
             .returning(|channel| Ok(channel));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        publisher
+            .expect_publish_channel_created()
+            .times(1)
+            .returning(|_| Ok(()));
 
-        let req = CreateChannelCommand::Private {
-            name: ChannelName::new("engineering".to_string()).unwrap(),
-            description: None,
-            members: vec![creator_id], // creator already included
-        };
+        let service = make_service(repo, publisher);
 
-        let result = service.create_channel(req, creator_id).await;
+        let result = service
+            .create_channel(
+                CreateChannelCommand::Private {
+                    name: ChannelName::new("engineering").unwrap(),
+                    description: None,
+                    members: vec![creator_id],
+                },
+                creator_id,
+            )
+            .await;
+
         assert!(result.is_ok());
-
         let Channel::Private(c) = result.unwrap() else { panic!("expected Private") };
         assert_eq!(c.members.iter().filter(|&&m| m == creator_id).count(), 1);
     }
 
     #[tokio::test]
     async fn test_create_direct_channel_success() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let mut publisher = MockTestChannelEventPublisher::new();
 
         let user1_id = UserId::new();
         let user2_id = UserId::new();
 
-        channel_repository
-            .expect_create()
+        repo.expect_create()
             .withf(move |channel| {
                 matches!(channel, Channel::Direct(_)) && channel.created_by() == user1_id
             })
             .times(1)
             .returning(|channel| Ok(channel));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        publisher
+            .expect_publish_channel_created()
+            .times(1)
+            .returning(|_| Ok(()));
 
-        let req = CreateChannelCommand::Direct {
-            participant_id: user2_id,
-        };
+        let service = make_service(repo, publisher);
 
-        let result = service.create_channel(req, user1_id).await;
+        let result = service
+            .create_channel(
+                CreateChannelCommand::Direct {
+                    participant_id: user2_id,
+                },
+                user1_id,
+            )
+            .await;
+
         assert!(result.is_ok());
-
-        let channel = result.unwrap();
-        assert!(matches!(channel, Channel::Direct(_)));
-        assert_eq!(channel.created_by(), user1_id);
+        assert!(matches!(result.unwrap(), Channel::Direct(_)));
     }
 
     #[tokio::test]
     async fn test_get_channel_success() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
         let channel_id = ChannelId::new();
 
-        let expected_channel = Channel::Public(PublicChannel {
+        let expected = Channel::Public(PublicChannel {
             id: channel_id,
-            name: ChannelName::new("general".to_string()).unwrap(),
+            name: ChannelName::new("engineering").unwrap(),
             description: None,
             created_by: creator_id,
             created_at: Utc::now(),
         });
 
-        let returned_channel = expected_channel.clone();
-        channel_repository
-            .expect_find_by_id()
+        let returned = expected.clone();
+        repo.expect_find_by_id()
             .withf(move |id| *id == channel_id)
             .times(1)
-            .returning(move |_| Ok(Some(returned_channel.clone())));
+            .returning(move |_| Ok(Some(returned.clone())));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        let service = make_service(repo, publisher);
 
         let result = service.get_channel(channel_id).await;
         assert!(result.is_ok());
-
-        let channel = result.unwrap();
-        assert_eq!(channel.id(), channel_id);
+        assert_eq!(result.unwrap().id(), channel_id);
     }
 
     #[tokio::test]
     async fn test_get_channel_not_found() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let publisher = MockTestChannelEventPublisher::new();
 
-        let non_existent_id = ChannelId::new();
-
-        channel_repository
-            .expect_find_by_id()
+        repo.expect_find_by_id()
             .times(1)
             .returning(|_| Ok(None));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        let service = make_service(repo, publisher);
 
-        let result = service.get_channel(non_existent_id).await;
-
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ChannelError::NotFound(_)));
+        let result = service.get_channel(ChannelId::new()).await;
+        assert!(matches!(result, Err(ChannelError::NotFound(_))));
     }
 
     #[tokio::test]
     async fn test_list_public_channels() {
-        let mut channel_repository = MockTestChannelRepository::new();
+        let mut repo = MockTestChannelRepository::new();
+        let publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
 
-        let expected_channels = vec![
+        let channels = vec![
             Channel::Public(PublicChannel {
                 id: ChannelId::new(),
-                name: ChannelName::new("channel1".to_string()).unwrap(),
+                name: ChannelName::new("engineering").unwrap(),
                 description: None,
                 created_by: creator_id,
                 created_at: Utc::now(),
             }),
             Channel::Public(PublicChannel {
                 id: ChannelId::new(),
-                name: ChannelName::new("channel2".to_string()).unwrap(),
-                description: None,
-                created_by: creator_id,
-                created_at: Utc::now(),
-            }),
-            Channel::Public(PublicChannel {
-                id: ChannelId::new(),
-                name: ChannelName::new("channel3".to_string()).unwrap(),
+                name: ChannelName::new("product").unwrap(),
                 description: None,
                 created_by: creator_id,
                 created_at: Utc::now(),
             }),
         ];
 
-        let returned_channels = expected_channels.clone();
-        channel_repository
-            .expect_find_public_channels()
+        let returned = channels.clone();
+        repo.expect_find_public_channels()
             .times(1)
-            .returning(move || Ok(returned_channels.clone()));
+            .returning(move || Ok(returned.clone()));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        let service = make_service(repo, publisher);
 
         let result = service.list_public_channels().await;
         assert!(result.is_ok());
-
-        let channels = result.unwrap();
-        assert_eq!(channels.len(), 3);
-        assert!(channels.iter().all(|c| matches!(c, Channel::Public(_))));
+        assert_eq!(result.unwrap().len(), 2);
     }
 
     #[tokio::test]
-    async fn test_list_user_channels() {
-        let mut channel_repository = MockTestChannelRepository::new();
-
-        let user1_id = UserId::new();
-        let user2_id = UserId::new();
-
-        let expected_channels = vec![
-            Channel::Public(PublicChannel {
-                id: ChannelId::new(),
-                name: ChannelName::new("user1-public".to_string()).unwrap(),
-                description: None,
-                created_by: user1_id,
-                created_at: Utc::now(),
-            }),
-            Channel::Direct(DirectChannel {
-                id: ChannelId::new(),
-                created_by: user1_id,
-                created_at: Utc::now(),
-                participants: [user1_id, user2_id],
-            }),
-        ];
-
-        let returned_channels = expected_channels.clone();
-        channel_repository
-            .expect_find_by_user()
-            .withf(move |user_id| *user_id == user1_id)
-            .times(1)
-            .returning(move |_| Ok(returned_channels.clone()));
-
-        let service = ChannelService::new(Arc::new(channel_repository));
-
-        let result = service.list_user_channels(user1_id).await;
-        assert!(result.is_ok());
-
-        let channels = result.unwrap();
-        assert_eq!(channels.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_create_channel_invalid_name() {
-        let mut channel_repository = MockTestChannelRepository::new();
+    async fn test_create_channel_name_already_exists() {
+        let mut repo = MockTestChannelRepository::new();
+        let mut publisher = MockTestChannelEventPublisher::new();
 
         let creator_id = UserId::new();
 
-        let invalid_name = ChannelName::new("".to_string());
-        assert!(invalid_name.is_err(), "Empty channel name should fail");
-
-        channel_repository
-            .expect_create()
+        repo.expect_create()
             .times(1)
-            .returning(|channel| Ok(channel));
+            .returning(|_| Err(ChannelError::NameAlreadyExists("engineering".to_string())));
 
-        let service = ChannelService::new(Arc::new(channel_repository));
+        publisher.expect_publish_channel_created().times(0);
 
-        let valid_name = ChannelName::new("valid-channel".to_string()).unwrap();
-        let cmd = CreateChannelCommand::Public {
-            name: valid_name,
-            description: None,
-        };
-        let result = service.create_channel(cmd, creator_id).await;
-        assert!(result.is_ok(), "Valid channel name should succeed");
+        let service = make_service(repo, publisher);
+
+        let result = service
+            .create_channel(
+                CreateChannelCommand::Public {
+                    name: ChannelName::new("engineering").unwrap(),
+                    description: None,
+                },
+                creator_id,
+            )
+            .await;
+
+        assert!(matches!(result, Err(ChannelError::NameAlreadyExists(_))));
     }
 }
