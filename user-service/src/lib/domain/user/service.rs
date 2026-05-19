@@ -17,9 +17,7 @@ use crate::user::ports::EventPublisher;
 use crate::user::ports::UserRepository;
 use crate::user::ports::UserServicePort;
 
-/// Domain service implementation for user operations.
-///
-/// Concrete implementation of UserServicePort with dependency injection.
+/// Domain service for user operations.
 pub struct UserService<UR, EP>
 where
     UR: UserRepository,
@@ -36,13 +34,6 @@ where
     EP: EventPublisher,
 {
     /// Create a new user service with injected dependencies.
-    ///
-    /// # Arguments
-    /// * `repository` - User persistence implementation
-    /// * `event_publisher` - Domain event publishing implementation
-    ///
-    /// # Returns
-    /// Configured user service instance
     pub fn new(repository: Arc<UR>, event_publisher: Arc<EP>) -> Self {
         Self {
             repository,
@@ -59,27 +50,26 @@ where
     EP: EventPublisher,
 {
     async fn create_user(&self, command: CreateUserCommand) -> Result<User, UserError> {
-        // Hash password using auth library
         let password_hash = self
             .password_hasher
             .hash(&command.password)
             .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))?;
 
-        let user = User {
-            id: UserId::new(),
-            username: command.username,
-            email: command.email,
+        let user = User::new(
+            UserId::new(),
+            command.username,
+            command.email,
             password_hash,
-            created_at: Utc::now(),
-        };
+            Utc::now(),
+        );
 
         let created_user = self.repository.create(user).await?;
 
         let event = UserCreatedEvent::new(&created_user);
-        if let Err(e) = &self.event_publisher.publish_user_created(&event).await {
+        if let Err(e) = self.event_publisher.publish_user_created(&event).await {
             tracing::error!(
                 "Failed to publish UserCreated event for user {}: {}",
-                created_user.id,
+                created_user.id(),
                 e
             );
         }
@@ -91,14 +81,14 @@ where
         self.repository
             .find_by_id(id)
             .await?
-            .ok_or(UserError::NotFound(id.to_string()))
+            .ok_or(UserError::NotFound(*id))
     }
 
     async fn get_user_by_username(&self, username: &Username) -> Result<User, UserError> {
         self.repository
             .find_by_username(username)
             .await?
-            .ok_or(UserError::NotFoundByUsername(username.to_string()))
+            .ok_or_else(|| UserError::NotFoundByUsername(username.clone()))
     }
 
     async fn get_users_by_ids(&self, user_ids: &[UserId]) -> Result<Vec<User>, UserError> {
@@ -114,30 +104,26 @@ where
             .repository
             .find_by_id(id)
             .await?
-            .ok_or(UserError::NotFound(id.to_string()))?;
+            .ok_or(UserError::NotFound(*id))?;
 
-        if let Some(new_username) = command.username {
-            user.username = new_username;
-        }
+        let new_password_hash = command
+            .password
+            .map(|p| {
+                self.password_hasher
+                    .hash(&p)
+                    .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))
+            })
+            .transpose()?;
 
-        if let Some(new_email) = command.email {
-            user.email = new_email;
-        }
-
-        if let Some(new_password) = command.password {
-            user.password_hash = self
-                .password_hasher
-                .hash(&new_password)
-                .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))?;
-        }
+        user.apply_update(command.username, command.email, new_password_hash);
 
         let updated_user = self.repository.update(user).await?;
 
         let event = UserUpdatedEvent::new(&updated_user);
-        if let Err(e) = &self.event_publisher.publish_user_updated(&event).await {
+        if let Err(e) = self.event_publisher.publish_user_updated(&event).await {
             tracing::error!(
                 "Failed to publish UserUpdated event for user {}: {}",
-                updated_user.id,
+                updated_user.id(),
                 e
             );
         }
@@ -148,8 +134,8 @@ where
     async fn delete_user(&self, id: &UserId) -> Result<(), UserError> {
         self.repository.delete(id).await?;
 
-        let event = UserDeletedEvent::new(id.to_string());
-        if let Err(e) = &self.event_publisher.publish_user_deleted(&event).await {
+        let event = UserDeletedEvent::new(id);
+        if let Err(e) = self.event_publisher.publish_user_deleted(&event).await {
             tracing::error!("Failed to publish UserDeleted event for user {}: {}", id, e);
         }
 
@@ -167,7 +153,6 @@ mod tests {
     use crate::domain::user::models::Username;
     use crate::user::errors::EventPublisherError;
 
-    // Define mocks in the test module using mockall
     mock! {
         pub TestUserRepository {}
 
@@ -195,6 +180,16 @@ mod tests {
         }
     }
 
+    fn miles_davis() -> User {
+        User::new(
+            UserId::new(),
+            Username::new("miles-davis").unwrap(),
+            EmailAddress::new("miles.davis@example.com").unwrap(),
+            "$argon2id$test_hash".to_string(),
+            Utc::now(),
+        )
+    }
+
     #[tokio::test]
     async fn test_create_user_success() {
         let mut repository = MockTestUserRepository::new();
@@ -203,9 +198,9 @@ mod tests {
         repository
             .expect_create()
             .withf(|user| {
-                user.username.as_str() == "miles-davis"
-                    && user.email.as_str() == "miles.davis@example.com"
-                    && user.password_hash.starts_with("$argon2")
+                user.username().as_str() == "miles-davis"
+                    && user.email().as_str() == "miles.davis@example.com"
+                    && user.password_hash().starts_with("$argon2")
             })
             .times(1)
             .returning(|user| Ok(user));
@@ -218,8 +213,8 @@ mod tests {
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
-            username: Username::new("miles-davis".to_string()).unwrap(),
-            email: EmailAddress::new("miles.davis@example.com".to_string()).unwrap(),
+            username: Username::new("miles-davis").unwrap(),
+            email: EmailAddress::new("miles.davis@example.com").unwrap(),
             password: "K1nd-0f-Blue_1959!".to_string(),
         };
 
@@ -227,9 +222,9 @@ mod tests {
         assert!(result.is_ok());
 
         let user = result.unwrap();
-        assert_eq!(user.username.as_str(), "miles-davis");
-        assert_eq!(user.email.as_str(), "miles.davis@example.com");
-        assert!(user.password_hash.starts_with("$argon2"));
+        assert_eq!(user.username().as_str(), "miles-davis");
+        assert_eq!(user.email().as_str(), "miles.davis@example.com");
+        assert!(user.password_hash().starts_with("$argon2"));
     }
 
     #[tokio::test]
@@ -238,9 +233,7 @@ mod tests {
         let mut event_publisher = MockTestEventPublisher::new();
 
         repository.expect_create().times(1).returning(|user| {
-            Err(UserError::UsernameAlreadyExists(
-                user.username.as_str().to_string(),
-            ))
+            Err(UserError::UsernameAlreadyExists(user.username().as_str().to_string()))
         });
 
         event_publisher.expect_publish_user_created().times(0);
@@ -248,17 +241,14 @@ mod tests {
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
-            username: Username::new("miles-davis".to_string()).unwrap(),
-            email: EmailAddress::new("john.coltrane@example.com".to_string()).unwrap(),
+            username: Username::new("miles-davis").unwrap(),
+            email: EmailAddress::new("john.coltrane@example.com").unwrap(),
             password: "G1ant-St3ps_1960!".to_string(),
         };
 
         let result = service.create_user(command).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            UserError::UsernameAlreadyExists(_)
-        ));
+        assert!(matches!(result.unwrap_err(), UserError::UsernameAlreadyExists(_)));
     }
 
     #[tokio::test]
@@ -267,9 +257,7 @@ mod tests {
         let mut event_publisher = MockTestEventPublisher::new();
 
         repository.expect_create().times(1).returning(|user| {
-            Err(UserError::EmailAlreadyExists(
-                user.email.as_str().to_string(),
-            ))
+            Err(UserError::EmailAlreadyExists(user.email().as_str().to_string()))
         });
 
         event_publisher.expect_publish_user_created().times(0);
@@ -277,17 +265,14 @@ mod tests {
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
-            username: Username::new("john-coltrane".to_string()).unwrap(),
-            email: EmailAddress::new("miles.davis@example.com".to_string()).unwrap(),
+            username: Username::new("john-coltrane").unwrap(),
+            email: EmailAddress::new("miles.davis@example.com").unwrap(),
             password: "G1ant-St3ps_1960!".to_string(),
         };
 
         let result = service.create_user(command).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            UserError::EmailAlreadyExists(_)
-        ));
+        assert!(matches!(result.unwrap_err(), UserError::EmailAlreadyExists(_)));
     }
 
     #[tokio::test]
@@ -295,16 +280,10 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        let user_id = UserId::new();
-        let expected_user = User {
-            id: user_id,
-            username: Username::new("miles-davis".to_string()).unwrap(),
-            email: EmailAddress::new("miles.davis@example.com".to_string()).unwrap(),
-            password_hash: "$argon2id$test_hash".to_string(),
-            created_at: Utc::now(),
-        };
+        let user = miles_davis();
+        let user_id = user.id();
 
-        let returned_user = expected_user.clone();
+        let returned_user = user.clone();
         repository
             .expect_find_by_id()
             .withf(move |id| *id == user_id)
@@ -316,9 +295,9 @@ mod tests {
         let result = service.get_user(&user_id).await;
         assert!(result.is_ok());
 
-        let user = result.unwrap();
-        assert_eq!(user.id, user_id);
-        assert_eq!(user.username.as_str(), "miles-davis");
+        let found = result.unwrap();
+        assert_eq!(found.id(), user_id);
+        assert_eq!(found.username().as_str(), "miles-davis");
     }
 
     #[tokio::test]
@@ -326,15 +305,11 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(|_| Ok(None));
+        repository.expect_find_by_id().times(1).returning(|_| Ok(None));
 
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
-        let non_existent_id = UserId::new();
-        let result = service.get_user(&non_existent_id).await;
+        let result = service.get_user(&UserId::new()).await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UserError::NotFound(_)));
@@ -345,16 +320,10 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        let username = Username::new("miles-davis".to_string()).unwrap();
-        let expected_user = User {
-            id: UserId::new(),
-            username: username.clone(),
-            email: EmailAddress::new("miles.davis@example.com".to_string()).unwrap(),
-            password_hash: "$argon2id$test_hash".to_string(),
-            created_at: Utc::now(),
-        };
+        let username = Username::new("miles-davis").unwrap();
+        let user = miles_davis();
 
-        let returned_user = expected_user.clone();
+        let returned_user = user.clone();
         let username_clone = username.clone();
         repository
             .expect_find_by_username()
@@ -366,9 +335,7 @@ mod tests {
 
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_ok());
-
-        let user = result.unwrap();
-        assert_eq!(user.username.as_str(), "miles-davis");
+        assert_eq!(result.unwrap().username().as_str(), "miles-davis");
     }
 
     #[tokio::test]
@@ -376,20 +343,14 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository
-            .expect_find_by_username()
-            .times(1)
-            .returning(|_| Ok(None));
+        repository.expect_find_by_username().times(1).returning(|_| Ok(None));
 
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
-        let username = Username::new("ravi-shankar".to_string()).unwrap();
+        let username = Username::new("ravi-shankar").unwrap();
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            UserError::NotFoundByUsername(_)
-        ));
+        assert!(matches!(result.unwrap_err(), UserError::NotFoundByUsername(_)));
     }
 
     #[tokio::test]
@@ -404,19 +365,21 @@ mod tests {
             "kim.gordon@example.com",
             "nina.simone@example.com",
         ];
-        let expected_users: Vec<User> = user_ids
+        let users: Vec<User> = user_ids
             .iter()
             .enumerate()
-            .map(|(i, id)| User {
-                id: *id,
-                username: Username::new(names[i].to_string()).unwrap(),
-                email: EmailAddress::new(emails[i].to_string()).unwrap(),
-                password_hash: "$argon2id$test_hash".to_string(),
-                created_at: Utc::now(),
+            .map(|(i, id)| {
+                User::new(
+                    *id,
+                    Username::new(names[i]).unwrap(),
+                    EmailAddress::new(emails[i]).unwrap(),
+                    "$argon2id$test_hash".to_string(),
+                    Utc::now(),
+                )
             })
             .collect();
 
-        let returned_users = expected_users.clone();
+        let returned_users = users.clone();
         repository
             .expect_find_by_ids()
             .times(1)
@@ -426,9 +389,7 @@ mod tests {
 
         let result = service.get_users_by_ids(&user_ids).await;
         assert!(result.is_ok());
-
-        let users = result.unwrap();
-        assert_eq!(users.len(), 3);
+        assert_eq!(result.unwrap().len(), 3);
     }
 
     #[tokio::test]
@@ -436,14 +397,14 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        let existing_user_id = UserId::new();
-        let existing_user = User {
-            id: existing_user_id,
-            username: Username::new("thelonious-monk".to_string()).unwrap(),
-            email: EmailAddress::new("thelonious.monk@example.com".to_string()).unwrap(),
-            password_hash: "$argon2id$test_hash".to_string(),
-            created_at: Utc::now(),
-        };
+        let existing_user = User::new(
+            UserId::new(),
+            Username::new("thelonious-monk").unwrap(),
+            EmailAddress::new("thelonious.monk@example.com").unwrap(),
+            "$argon2id$test_hash".to_string(),
+            Utc::now(),
+        );
+        let existing_id = existing_user.id();
 
         let returned_user = existing_user.clone();
         repository
@@ -452,13 +413,12 @@ mod tests {
             .returning(move |_| Ok(vec![returned_user.clone()]));
 
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
-        let ids = vec![existing_user_id, UserId::new()];
-        let result = service.get_users_by_ids(&ids).await;
+        let result = service.get_users_by_ids(&[existing_id, UserId::new()]).await;
 
         assert!(result.is_ok());
         let users = result.unwrap();
         assert_eq!(users.len(), 1);
-        assert_eq!(users[0].id, existing_user_id);
+        assert_eq!(users[0].id(), existing_id);
     }
 
     #[tokio::test]
@@ -466,30 +426,28 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
-        let user_id = UserId::new();
-        let existing_user = User {
-            id: user_id,
-            username: Username::new("charlie-parker".to_string()).unwrap(),
-            email: EmailAddress::new("charlie.parker@example.com".to_string()).unwrap(),
-            password_hash: "$argon2id$old_hash".to_string(),
-            created_at: Utc::now(),
-        };
+        let existing = User::new(
+            UserId::new(),
+            Username::new("charlie-parker").unwrap(),
+            EmailAddress::new("charlie.parker@example.com").unwrap(),
+            "$argon2id$old_hash".to_string(),
+            Utc::now(),
+        );
+        let user_id = existing.id();
 
-        // Mock find_by_id to return existing user
-        let returned_user = existing_user.clone();
+        let returned = existing.clone();
         repository
             .expect_find_by_id()
             .withf(move |id| *id == user_id)
             .times(1)
-            .returning(move |_| Ok(Some(returned_user.clone())));
+            .returning(move |_| Ok(Some(returned.clone())));
 
-        // Mock update to return updated user
         repository
             .expect_update()
             .withf(|user| {
-                user.username.as_str() == "bird-parker"
-                    && user.email.as_str() == "bird.parker@example.com"
-                    && user.password_hash.starts_with("$argon2")
+                user.username().as_str() == "bird-parker"
+                    && user.email().as_str() == "bird.parker@example.com"
+                    && user.password_hash().starts_with("$argon2")
             })
             .times(1)
             .returning(|user| Ok(user));
@@ -502,17 +460,17 @@ mod tests {
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = UpdateUserCommand {
-            username: Some(Username::new("bird-parker".to_string()).unwrap()),
-            email: Some(EmailAddress::new("bird.parker@example.com".to_string()).unwrap()),
+            username: Some(Username::new("bird-parker").unwrap()),
+            email: Some(EmailAddress::new("bird.parker@example.com").unwrap()),
             password: Some("0mnivore_Jazz_1945!".to_string()),
         };
 
         let result = service.update_user(&user_id, command).await;
         assert!(result.is_ok());
 
-        let updated_user = result.unwrap();
-        assert_eq!(updated_user.username.as_str(), "bird-parker");
-        assert_eq!(updated_user.email.as_str(), "bird.parker@example.com");
+        let updated = result.unwrap();
+        assert_eq!(updated.username().as_str(), "bird-parker");
+        assert_eq!(updated.email().as_str(), "bird.parker@example.com");
     }
 
     #[tokio::test]
@@ -520,21 +478,17 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(|_| Ok(None));
+        repository.expect_find_by_id().times(1).returning(|_| Ok(None));
 
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
-        let user_id = UserId::new();
         let command = UpdateUserCommand {
-            username: Some(Username::new("ella-fitzgerald".to_string()).unwrap()),
+            username: Some(Username::new("ella-fitzgerald").unwrap()),
             email: None,
             password: None,
         };
 
-        let result = service.update_user(&user_id, command).await;
+        let result = service.update_user(&UserId::new(), command).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UserError::NotFound(_)));
     }
@@ -573,7 +527,7 @@ mod tests {
         repository
             .expect_delete()
             .times(1)
-            .returning(move |_| Err(UserError::NotFound(user_id.to_string())));
+            .returning(move |_| Err(UserError::NotFound(user_id)));
 
         let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
 
