@@ -10,37 +10,77 @@ use crate::user::errors::UserIdError;
 use crate::user::errors::UsernameError;
 
 /// User aggregate entity.
-///
-/// Represents a registered user
 #[derive(Debug, Clone)]
 pub struct User {
-    pub id: UserId,
-    pub username: Username,
-    pub email: EmailAddress,
-    pub password_hash: String,
-    pub created_at: DateTime<Utc>,
+    id: UserId,
+    username: Username,
+    email: EmailAddress,
+    password_hash: String,
+    created_at: DateTime<Utc>,
 }
 
-/// User unique identifier type
+impl User {
+    /// Construct a user entity from its components.
+    pub fn new(
+        id: UserId,
+        username: Username,
+        email: EmailAddress,
+        password_hash: String,
+        created_at: DateTime<Utc>,
+    ) -> Self {
+        Self { id, username, email, password_hash, created_at }
+    }
+
+    pub fn id(&self) -> UserId {
+        self.id
+    }
+
+    pub fn username(&self) -> &Username {
+        &self.username
+    }
+
+    pub fn email(&self) -> &EmailAddress {
+        &self.email
+    }
+
+    pub fn password_hash(&self) -> &str {
+        &self.password_hash
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// Apply partial updates, leaving unset fields unchanged.
+    pub fn apply_update(
+        &mut self,
+        username: Option<Username>,
+        email: Option<EmailAddress>,
+        password_hash: Option<String>,
+    ) {
+        if let Some(u) = username {
+            self.username = u;
+        }
+        if let Some(e) = email {
+            self.email = e;
+        }
+        if let Some(h) = password_hash {
+            self.password_hash = h;
+        }
+    }
+}
+
+/// User unique identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UserId(pub Uuid);
+pub struct UserId(Uuid);
 
 impl UserId {
     /// Generate a new random user ID.
-    ///
-    /// # Returns
-    /// UserId with random UUID v4
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
-    /// Parse a user ID from string.
-    ///
-    /// # Arguments
-    /// * `s` - UUID string to parse
-    ///
-    /// # Returns
-    /// Parsed UserId
+    /// Parse a user ID from a UUID string.
     ///
     /// # Errors
     /// * `InvalidFormat` - String is not a valid UUID
@@ -48,6 +88,16 @@ impl UserId {
         Uuid::parse_str(s)
             .map(UserId)
             .map_err(|e| UserIdError::InvalidFormat(e.to_string()))
+    }
+
+    /// Construct from a raw UUID — for use within the crate only (e.g. database mapping).
+    pub(crate) fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+
+    /// Return the underlying UUID value.
+    pub fn value(&self) -> Uuid {
+        self.0
     }
 }
 
@@ -57,9 +107,7 @@ impl fmt::Display for UserId {
     }
 }
 
-/// Username value type
-///
-/// Ensures username is 3-32 characters and contains only alphanumeric, underscore, and hyphen.
+/// Non-empty, 3–32 character username; alphanumeric, underscore, and hyphen only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Username(String);
 
@@ -67,22 +115,14 @@ impl Username {
     const MIN_LENGTH: usize = 3;
     const MAX_LENGTH: usize = 32;
 
-    /// Create a new valid username.
-    ///
-    /// Validates length and character constraints.
-    ///
-    /// # Arguments
-    /// * `username` - Raw username string
-    ///
-    /// # Returns
-    /// Validated Username value object
+    /// Validate and construct a username.
     ///
     /// # Errors
-    /// * `TooShort` - Username shorter than 3 characters
-    /// * `TooLong` - Username longer than 32 characters
-    /// * `InvalidCharacters` - Contains non-alphanumeric characters (except _ and -)
-    pub fn new(username: String) -> Result<Self, UsernameError> {
-        let username = Self::with_valid_length(username)?;
+    /// * `TooShort` - Fewer than 3 characters
+    /// * `TooLong` - More than 32 characters
+    /// * `InvalidCharacters` - Contains characters other than alphanumeric, `_`, or `-`
+    pub fn new(username: impl Into<String>) -> Result<Self, UsernameError> {
+        let username = Self::with_valid_length(username.into())?;
         let username = Self::with_valid_chars(username)?;
         Ok(Self(username))
     }
@@ -90,35 +130,22 @@ impl Username {
     fn with_valid_length(username: String) -> Result<String, UsernameError> {
         let length = username.len();
         if length < Self::MIN_LENGTH {
-            Err(UsernameError::TooShort {
-                min: Self::MIN_LENGTH,
-                actual: length,
-            })
+            Err(UsernameError::TooShort { min: Self::MIN_LENGTH, actual: length })
         } else if length > Self::MAX_LENGTH {
-            Err(UsernameError::TooLong {
-                max: Self::MAX_LENGTH,
-                actual: length,
-            })
+            Err(UsernameError::TooLong { max: Self::MAX_LENGTH, actual: length })
         } else {
             Ok(username)
         }
     }
 
     fn with_valid_chars(username: String) -> Result<String, UsernameError> {
-        if username
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
+        if username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
             Ok(username)
         } else {
             Err(UsernameError::InvalidCharacters)
         }
     }
 
-    /// Get username as string slice.
-    ///
-    /// # Returns
-    /// Username string slice
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -130,39 +157,28 @@ impl fmt::Display for Username {
     }
 }
 
-/// Email address type
-///
-/// Validates email format using RFC 5322 compliant parser.
+/// RFC 5322 validated email address.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmailAddress(String);
 
 impl EmailAddress {
-    /// Create a new validated email address.
-    ///
-    /// # Arguments
-    /// * `email` - Raw email string
-    ///
-    /// # Returns
-    /// Validated EmailAddress value object
+    /// Validate and construct an email address.
     ///
     /// # Errors
-    /// * `InvalidFormat` - Email does not conform to RFC 5322
-    pub fn new(email: String) -> Result<Self, EmailError> {
+    /// * `InvalidFormat` - Does not conform to RFC 5322
+    pub fn new(email: impl Into<String>) -> Result<Self, EmailError> {
+        let email = email.into();
         email_address::EmailAddress::from_str(&email)
             .map(|_| EmailAddress(email))
             .map_err(|e| EmailError::InvalidFormat(e.to_string()))
     }
 
-    /// Get email as string slice.
-    ///
-    /// # Returns
-    /// Email string slice
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-/// Command to create a new user with domain types
+/// Command to create a new user.
 #[derive(Debug)]
 pub struct CreateUserCommand {
     pub username: Username,
@@ -171,28 +187,12 @@ pub struct CreateUserCommand {
 }
 
 impl CreateUserCommand {
-    /// Construct a new create user command.
-    ///
-    /// # Arguments
-    /// * `username` - Validated username
-    /// * `email` - Validated email address
-    /// * `password` - Plain text password (will be hashed by service)
-    ///
-    /// # Returns
-    /// CreateUserCommand with validated fields
     pub fn new(username: Username, email: EmailAddress, password: String) -> Self {
-        Self {
-            username,
-            email,
-            password,
-        }
+        Self { username, email, password }
     }
 }
 
-/// Command to update an existing user with optional validated fields.
-///
-/// All fields are optional to support partial updates.
-/// Only provided fields will be updated.
+/// Command to update an existing user; unset fields are left unchanged.
 #[derive(Debug)]
 pub struct UpdateUserCommand {
     pub username: Option<Username>,

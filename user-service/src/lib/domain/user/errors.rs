@@ -1,13 +1,16 @@
 use thiserror::Error;
 
-/// Error for UserId parsing failures
+use crate::user::models::UserId;
+use crate::user::models::Username;
+
+/// Error for UserId parsing failures.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum UserIdError {
     #[error("Invalid UUID format: {0}")]
     InvalidFormat(String),
 }
 
-/// Error for Username validation failures
+/// Error for Username validation failures.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum UsernameError {
     #[error("Username too short: minimum {min} characters, got {actual}")]
@@ -22,14 +25,14 @@ pub enum UsernameError {
     InvalidCharacters,
 }
 
-/// Error for EmailAddress validation failures
+/// Error for EmailAddress validation failures.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum EmailError {
     #[error("Invalid email format: {0}")]
     InvalidFormat(String),
 }
 
-/// Error for password operations
+/// Error for password operations.
 #[derive(Debug, Clone, Error)]
 pub enum PasswordError {
     #[error("Password hashing failed: {0}")]
@@ -39,7 +42,7 @@ pub enum PasswordError {
     VerificationFailed(String),
 }
 
-/// Error for event publishing operations
+/// Error for event publishing operations.
 #[derive(Debug, Clone, Error)]
 pub enum EventPublisherError {
     #[error("Failed to serialize event: {0}")]
@@ -55,10 +58,9 @@ pub enum EventPublisherError {
     Timeout(String),
 }
 
-/// Top-level error for all user-related operations
+/// Top-level error for all user-related operations.
 #[derive(Debug, Clone, Error)]
 pub enum UserError {
-    // Value object validation errors (automatically converted via #[from])
     #[error("Invalid user ID: {0}")]
     InvalidUserId(#[from] UserIdError),
 
@@ -71,12 +73,11 @@ pub enum UserError {
     #[error("Password error: {0}")]
     Password(#[from] PasswordError),
 
-    // Domain-level errors
     #[error("User not found: {0}")]
-    NotFound(String),
+    NotFound(UserId),
 
     #[error("User not found with username: {0}")]
-    NotFoundByUsername(String),
+    NotFoundByUsername(Username),
 
     #[error("Username already exists: {0}")]
     UsernameAlreadyExists(String),
@@ -87,16 +88,9 @@ pub enum UserError {
     #[error("Invalid credentials")]
     InvalidCredentials,
 
-    // Infrastructure errors
     #[error("Database error: {0}")]
     DatabaseError(String),
 
     #[error("Unknown error: {0}")]
     Unknown(String),
-}
-
-impl From<anyhow::Error> for UserError {
-    fn from(err: anyhow::Error) -> Self {
-        UserError::Unknown(err.to_string())
-    }
 }
