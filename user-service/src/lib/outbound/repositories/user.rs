@@ -26,11 +26,11 @@ impl UserRepository for PostgresUserRepository {
             INSERT INTO users (id, username, email, password_hash, created_at)
             VALUES ($1, $2, $3, $4, $5)
             "#,
-            user.id.0,
-            user.username.as_str(),
-            user.email.as_str(),
-            user.password_hash,
-            user.created_at
+            user.id().value(),
+            user.username().as_str(),
+            user.email().as_str(),
+            user.password_hash(),
+            user.created_at()
         )
         .execute(&self.pool)
         .await
@@ -39,11 +39,11 @@ impl UserRepository for PostgresUserRepository {
                 if db_err.is_unique_violation() {
                     if db_err.constraint() == Some("users_username_key") {
                         return UserError::UsernameAlreadyExists(
-                            user.username.as_str().to_string(),
+                            user.username().as_str().to_string(),
                         );
                     }
                     if db_err.constraint() == Some("users_email_key") {
-                        return UserError::EmailAlreadyExists(user.email.as_str().to_string());
+                        return UserError::EmailAlreadyExists(user.email().as_str().to_string());
                     }
                 }
             }
@@ -60,20 +60,20 @@ impl UserRepository for PostgresUserRepository {
             FROM users
             WHERE id = $1
             "#,
-            id.0,
+            id.value(),
         )
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         match row {
-            Some(r) => Ok(Some(User {
-                id: UserId(r.id),
-                username: Username::new(r.username)?,
-                email: EmailAddress::new(r.email)?,
-                password_hash: r.password_hash,
-                created_at: r.created_at,
-            })),
+            Some(r) => Ok(Some(User::new(
+                UserId::from_uuid(r.id),
+                Username::new(r.username)?,
+                EmailAddress::new(r.email)?,
+                r.password_hash,
+                r.created_at,
+            ))),
             None => Ok(None),
         }
     }
@@ -92,13 +92,13 @@ impl UserRepository for PostgresUserRepository {
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         match row {
-            Some(r) => Ok(Some(User {
-                id: UserId(r.id),
-                username: Username::new(r.username)?,
-                email: EmailAddress::new(r.email)?,
-                password_hash: r.password_hash,
-                created_at: r.created_at,
-            })),
+            Some(r) => Ok(Some(User::new(
+                UserId::from_uuid(r.id),
+                Username::new(r.username)?,
+                EmailAddress::new(r.email)?,
+                r.password_hash,
+                r.created_at,
+            ))),
             None => Ok(None),
         }
     }
@@ -117,13 +117,13 @@ impl UserRepository for PostgresUserRepository {
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         match row {
-            Some(r) => Ok(Some(User {
-                id: UserId(r.id),
-                username: Username::new(r.username)?,
-                email: EmailAddress::new(r.email)?,
-                password_hash: r.password_hash,
-                created_at: r.created_at,
-            })),
+            Some(r) => Ok(Some(User::new(
+                UserId::from_uuid(r.id),
+                Username::new(r.username)?,
+                EmailAddress::new(r.email)?,
+                r.password_hash,
+                r.created_at,
+            ))),
             None => Ok(None),
         }
     }
@@ -142,19 +142,19 @@ impl UserRepository for PostgresUserRepository {
 
         rows.into_iter()
             .map(|r| {
-                Ok(User {
-                    id: UserId(r.id),
-                    username: Username::new(r.username)?,
-                    email: EmailAddress::new(r.email)?,
-                    password_hash: r.password_hash,
-                    created_at: r.created_at,
-                })
+                Ok(User::new(
+                    UserId::from_uuid(r.id),
+                    Username::new(r.username)?,
+                    EmailAddress::new(r.email)?,
+                    r.password_hash,
+                    r.created_at,
+                ))
             })
             .collect()
     }
 
     async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError> {
-        let uuids: Vec<_> = ids.iter().map(|id| id.0).collect();
+        let uuids: Vec<_> = ids.iter().map(|id| id.value()).collect();
 
         let rows = sqlx::query!(
             r#"
@@ -170,13 +170,13 @@ impl UserRepository for PostgresUserRepository {
 
         rows.into_iter()
             .map(|r| {
-                Ok(User {
-                    id: UserId(r.id),
-                    username: Username::new(r.username)?,
-                    email: EmailAddress::new(r.email)?,
-                    password_hash: r.password_hash,
-                    created_at: r.created_at,
-                })
+                Ok(User::new(
+                    UserId::from_uuid(r.id),
+                    Username::new(r.username)?,
+                    EmailAddress::new(r.email)?,
+                    r.password_hash,
+                    r.created_at,
+                ))
             })
             .collect()
     }
@@ -188,24 +188,23 @@ impl UserRepository for PostgresUserRepository {
             SET username = $2, email = $3, password_hash = $4
             WHERE id = $1
             "#,
-            user.id.0,
-            user.username.as_str(),
-            user.email.as_str(),
-            user.password_hash
+            user.id().value(),
+            user.username().as_str(),
+            user.email().as_str(),
+            user.password_hash()
         )
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            //TODO: check with claude
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
                     if db_err.constraint() == Some("users_username_key") {
                         return UserError::UsernameAlreadyExists(
-                            user.username.as_str().to_string(),
+                            user.username().as_str().to_string(),
                         );
                     }
                     if db_err.constraint() == Some("users_email_key") {
-                        return UserError::EmailAlreadyExists(user.email.as_str().to_string());
+                        return UserError::EmailAlreadyExists(user.email().as_str().to_string());
                     }
                 }
             }
@@ -213,7 +212,7 @@ impl UserRepository for PostgresUserRepository {
         })?;
 
         if result.rows_affected() == 0 {
-            return Err(UserError::NotFound(user.id.to_string()));
+            return Err(UserError::NotFound(user.id()));
         }
 
         Ok(user)
@@ -225,14 +224,14 @@ impl UserRepository for PostgresUserRepository {
             DELETE FROM users
             WHERE id = $1
             "#,
-            id.0,
+            id.value(),
         )
         .execute(&self.pool)
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
-            return Err(UserError::NotFound(id.to_string()));
+            return Err(UserError::NotFound(*id));
         }
 
         Ok(())
