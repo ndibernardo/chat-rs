@@ -24,7 +24,7 @@ use super::handlers::update_user::update_user;
 use super::middleware::authenticate as auth_middleware;
 use crate::domain::user::service::UserService;
 use crate::outbound::events::KafkaEventProducer;
-use crate::outbound::repositories::user::PostgresUserRepository;
+use crate::outbound::repositories::PostgresUserRepository;
 
 #[derive(Clone)]
 pub struct AppState {

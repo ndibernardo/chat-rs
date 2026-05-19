@@ -28,7 +28,8 @@ impl UserServiceProto for UserGrpcService {
         &self,
         request: Request<GetUserRequest>,
     ) -> Result<Response<GetUserResponse>, Status> {
-        let response = get_user::get_user(self.service.clone(), request.into_inner()).await?;
+        let response =
+            get_user::get_user(Arc::clone(&self.service), request.into_inner()).await?;
         Ok(Response::new(response))
     }
 }

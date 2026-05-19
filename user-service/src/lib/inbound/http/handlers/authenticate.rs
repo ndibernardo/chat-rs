@@ -36,15 +36,15 @@ pub async fn authenticate(
 
     // Create JWT claims (from auth library)
     let claims = auth::Claims::for_user(
-        user.id.clone(),
-        user.username.as_str().to_string(),
+        user.id(),
+        user.username().as_str().to_string(),
         state.jwt_expiration_hours,
     );
 
     // Verify password and generate token
     let result = state
         .authenticator
-        .authenticate(&body.password, &user.password_hash, &claims)
+        .authenticate(&body.password, user.password_hash(), &claims)
         .map_err(|e| match e {
             auth::AuthenticationError::InvalidCredentials => {
                 ApiError::Unauthorized("Invalid credentials".to_string())
@@ -89,10 +89,10 @@ pub struct UserData {
 impl From<&User> for UserData {
     fn from(user: &User) -> Self {
         Self {
-            id: user.id.to_string(),
-            username: user.username.as_str().to_string(),
-            email: user.email.as_str().to_string(),
-            created_at: user.created_at,
+            id: user.id().to_string(),
+            username: user.username().as_str().to_string(),
+            email: user.email().as_str().to_string(),
+            created_at: user.created_at(),
         }
     }
 }
