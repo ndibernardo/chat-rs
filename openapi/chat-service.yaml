@@ -6,11 +6,6 @@ info:
 
     Handles channel management, message persistence, and real-time message delivery.
   version: 0.1.0
-  contact:
-    name: chat-rs
-  license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 tags:
   - name: channels
@@ -25,8 +20,7 @@ paths:
     post:
       tags:
         - channels
-      summary: Create a new channel
-      description: Creates a public, private, or direct message channel
+      summary: Create a channel
       operationId: createChannel
       security:
         - bearerAuth: []
@@ -35,36 +29,28 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/CreatePublicChannelRequest'
-                - $ref: '#/components/schemas/CreatePrivateChannelRequest'
-                - $ref: '#/components/schemas/CreateDirectChannelRequest'
-              discriminator:
-                propertyName: channel_type
+              $ref: '#/components/schemas/CreateChannelRequest'
       responses:
         '200':
-          description: Channel created successfully
+          description: Channel created
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/PublicChannel'
-                  - $ref: '#/components/schemas/PrivateChannel'
-                  - $ref: '#/components/schemas/DirectChannel'
+                $ref: '#/components/schemas/ChannelResponse'
         '401':
-          description: Unauthorized - Invalid or missing token
+          description: Invalid or missing token
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Conflict - Channel name already exists
+          description: Channel name already exists
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable Entity - Validation failed
+          description: Validation failed
           content:
             application/json:
               schema:
@@ -73,8 +59,7 @@ paths:
     get:
       tags:
         - channels
-      summary: List public channels
-      description: Retrieves a list of all public channels
+      summary: List all public channels
       operationId: listPublicChannels
       security:
         - bearerAuth: []
@@ -86,28 +71,26 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PublicChannel'
+                  $ref: '#/components/schemas/ChannelResponse'
         '401':
-          description: Unauthorized - Invalid or missing token
+          description: Invalid or missing token
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/channels/{id}:
+  /api/channels/{channel_id}:
     get:
       tags:
         - channels
       summary: Get channel by ID
-      description: Retrieves channel details
       operationId: getChannelById
       security:
         - bearerAuth: []
       parameters:
-        - name: id
+        - name: channel_id
           in: path
           required: true
-          description: Channel UUID
           schema:
             type: string
             format: uuid
@@ -117,12 +100,9 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/PublicChannel'
-                  - $ref: '#/components/schemas/PrivateChannel'
-                  - $ref: '#/components/schemas/DirectChannel'
+                $ref: '#/components/schemas/ChannelResponse'
         '401':
-          description: Unauthorized - Invalid or missing token
+          description: Invalid or missing token
           content:
             application/json:
               schema:
@@ -134,26 +114,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/channels/{id}/messages:
+  /api/channels/{channel_id}/messages:
     get:
       tags:
         - messages
-      summary: Get channel messages
-      description: Retrieves messages for a channel with pagination
+      summary: Get messages for a channel
       operationId: getChannelMessages
       security:
         - bearerAuth: []
       parameters:
-        - name: id
+        - name: channel_id
           in: path
           required: true
-          description: Channel UUID
           schema:
             type: string
             format: uuid
         - name: limit
           in: query
-          description: Maximum number of messages to return
           schema:
             type: integer
             minimum: 1
@@ -173,15 +150,21 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Message'
+                  $ref: '#/components/schemas/MessageResponse'
         '400':
-          description: Bad Request - Invalid parameters
+          description: Invalid parameters
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized - Invalid or missing token
+          description: Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Channel not found
           content:
             application/json:
               schema:
@@ -193,46 +176,31 @@ paths:
         - websocket
       summary: WebSocket connection endpoint
       description: |
-        Establishes a persistent WebSocket connection for real-time message delivery.
+        Establishes a WebSocket connection for real-time message delivery.
 
-        **Connection:**
-        - URL: `ws://localhost:3002/ws?token={jwt_token}`
-        - Protocol: WebSocket
+        **Connect:** `ws://localhost:3002/ws?token={jwt_token}`
 
-        **Client → Server Messages:**
+        **Client → Server:**
         ```json
-        {
-          "type": "subscribe",
-          "channel_id": "550e8400-e29b-41d4-a716-446655440000"
-        }
+        { "type": "subscribe", "channel_id": "<uuid>" }
         ```
 
-        **Server → Client Messages:**
+        **Server → Client:**
         ```json
-        {
-          "type": "new_message",
-          "id": "...",
-          "channel_id": "...",
-          "user_id": "...",
-          "username": "john_doe",
-          "content": "Hello world!",
-          "timestamp": "2024-01-15T10:30:00Z"
-        }
+        { "type": "new_message", "id": "<uuid>", "channel_id": "<uuid>",
+          "user_id": "<uuid>", "content": "...", "timestamp": "..." }
         ```
       parameters:
         - name: token
           in: query
           required: true
-          description: JWT token for authentication
           schema:
             type: string
       responses:
         '101':
-          description: Switching Protocols - WebSocket connection established
+          description: WebSocket connection established
         '401':
-          description: Unauthorized - Invalid or missing token
-        '400':
-          description: Bad Request - WebSocket upgrade failed
+          description: Invalid or missing token
 
 components:
   securitySchemes:
@@ -243,73 +211,44 @@ components:
       description: JWT token obtained from user-service /api/auth/login
 
   schemas:
-    CreatePublicChannelRequest:
+    # ── Request bodies ──────────────────────────────────────────────────────────
+
+    CreateChannelRequest:
       type: object
       required:
         - channel_type
-        - name
       properties:
         channel_type:
           type: string
-          enum: [public]
-          description: Channel type
+          enum: [public, private, direct]
+          description: Channel type; determines which other fields are required
         name:
           type: string
           minLength: 3
           maxLength: 50
-          pattern: '^[a-zA-Z0-9-]+$'
-          description: Channel name (alphanumeric with hyphens)
-          example: general-discussion
+          description: Channel name (alphanumeric with hyphens); required for public and private channels
+          example: engineering
         description:
           type: string
           maxLength: 500
           description: Optional channel description
-          example: General discussion channel
-
-    CreatePrivateChannelRequest:
-      type: object
-      required:
-        - channel_type
-        - name
-      properties:
-        channel_type:
-          type: string
-          enum: [private]
-          description: Channel type
-        name:
-          type: string
-          minLength: 3
-          maxLength: 50
-          pattern: '^[a-zA-Z0-9-]+$'
-          description: Channel name (alphanumeric with hyphens)
-          example: team-announcements
-        description:
-          type: string
-          maxLength: 500
-          description: Optional channel description
-
-    CreateDirectChannelRequest:
-      type: object
-      required:
-        - channel_type
-        - participant_id
-      properties:
-        channel_type:
-          type: string
-          enum: [direct]
-          description: Channel type
+          example: Engineering team discussions
+        members:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Additional member user IDs for private channels; creator is always included
         participant_id:
           type: string
           format: uuid
-          description: UUID of the other participant
-          example: 550e8400-e29b-41d4-a716-446655440000
+          description: Other participant's user ID; required for direct channels
 
-    PublicChannel:
+    ChannelResponse:
       type: object
       required:
         - id
-        - type
-        - name
+        - channel_type
         - created_by
         - created_at
       properties:
@@ -318,22 +257,23 @@ components:
           format: uuid
           description: Channel unique identifier
           example: 550e8400-e29b-41d4-a716-446655440000
-        type:
+        channel_type:
           type: string
-          enum: [public]
-          description: Channel type
+          enum: [public, private, direct]
+          description: Channel type discriminator
+          example: public
         name:
           type: string
-          description: Channel name
-          example: general-discussion
+          description: Channel name; present for public and private channels
+          example: engineering
         description:
           type: string
-          description: Channel description
-          example: General discussion channel
+          description: Optional channel description; present for public and private channels
+          example: Engineering team discussions
         created_by:
           type: string
           format: uuid
-          description: User ID of channel creator
+          description: User ID of the channel creator
           example: 660e8400-e29b-41d4-a716-446655440000
         created_at:
           type: string
@@ -341,64 +281,7 @@ components:
           description: Channel creation timestamp
           example: '2024-01-15T10:30:00Z'
 
-    PrivateChannel:
-      type: object
-      required:
-        - id
-        - type
-        - name
-        - created_by
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Channel unique identifier
-        type:
-          type: string
-          enum: [private]
-          description: Channel type
-        name:
-          type: string
-          description: Channel name
-        description:
-          type: string
-          description: Channel description
-        created_by:
-          type: string
-          format: uuid
-          description: User ID of channel creator
-        created_at:
-          type: string
-          format: date-time
-          description: Channel creation timestamp
-
-    DirectChannel:
-      type: object
-      required:
-        - id
-        - type
-        - created_by
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Channel unique identifier
-        type:
-          type: string
-          enum: [direct]
-          description: Channel type
-        created_by:
-          type: string
-          format: uuid
-          description: User ID of channel creator
-        created_at:
-          type: string
-          format: date-time
-          description: Channel creation timestamp
-
-    Message:
+    MessageResponse:
       type: object
       required:
         - id
@@ -410,88 +293,28 @@ components:
         id:
           type: string
           format: uuid
-          description: Message unique identifier (time-based UUID)
+          description: Time-based UUID v1 — sortable by insertion order
           example: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
         channel_id:
           type: string
           format: uuid
-          description: Channel where message was sent
+          description: Channel this message belongs to
           example: 550e8400-e29b-41d4-a716-446655440000
         user_id:
           type: string
           format: uuid
           description: User who sent the message
           example: 660e8400-e29b-41d4-a716-446655440000
-        username:
-          type: string
-          description: Username of sender (enriched from user replica)
-          example: john_doe
         content:
           type: string
           minLength: 1
-          maxLength: 5000
-          description: Message content
-          example: Hello, world!
+          maxLength: 4000
+          description: Message text content
+          example: Has the incident been resolved?
         timestamp:
           type: string
           format: date-time
-          description: Message timestamp
-          example: '2024-01-15T10:30:00Z'
-
-    WebSocketSubscribeMessage:
-      type: object
-      required:
-        - type
-        - channel_id
-      properties:
-        type:
-          type: string
-          enum: [subscribe]
-          description: Message type
-        channel_id:
-          type: string
-          format: uuid
-          description: Channel to subscribe to
-          example: 550e8400-e29b-41d4-a716-446655440000
-
-    WebSocketNewMessage:
-      type: object
-      required:
-        - type
-        - id
-        - channel_id
-        - user_id
-        - content
-        - timestamp
-      properties:
-        type:
-          type: string
-          enum: [new_message]
-          description: Message type
-        id:
-          type: string
-          format: uuid
-          description: Message ID
-        channel_id:
-          type: string
-          format: uuid
-          description: Channel ID
-        user_id:
-          type: string
-          format: uuid
-          description: Sender user ID
-        username:
-          type: string
-          description: Sender username
-          example: john_doe
-        content:
-          type: string
-          description: Message content
-          example: Hello, world!
-        timestamp:
-          type: string
-          format: date-time
-          description: Message timestamp
+          description: Time the message was persisted
           example: '2024-01-15T10:30:00Z'
 
     ErrorResponse:

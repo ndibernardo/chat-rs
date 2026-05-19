@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_success() {
+    async fn create_user_returns_created_user() {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_duplicate_username() {
+    async fn create_user_returns_error_for_duplicate_username() {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_duplicate_email() {
+    async fn create_user_returns_error_for_duplicate_email() {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_user_success() {
+    async fn get_user_returns_user_by_id() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_user_not_found() {
+    async fn get_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_user_by_username_success() {
+    async fn get_user_by_username_returns_user() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_user_by_username_not_found() {
+    async fn get_user_by_username_returns_not_found() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_users_by_ids() {
+    async fn get_users_by_ids_returns_all_matching_users() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -393,7 +393,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_users_by_ids_partial_match() {
+    async fn get_users_by_ids_returns_only_found_users() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_user_success() {
+    async fn update_user_returns_updated_user() {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -474,7 +474,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_user_not_found() {
+    async fn update_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -494,7 +494,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_user_success() {
+    async fn delete_user_succeeds_for_existing_user() {
         let mut repository = MockTestUserRepository::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -518,7 +518,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_user_not_found() {
+    async fn delete_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
@@ -534,5 +534,91 @@ mod tests {
         let result = service.delete_user(&user_id).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UserError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn create_user_still_returns_ok_when_event_publish_fails() {
+        let mut repository = MockTestUserRepository::new();
+        let mut event_publisher = MockTestEventPublisher::new();
+
+        repository
+            .expect_create()
+            .times(1)
+            .returning(|user| Ok(user));
+
+        event_publisher
+            .expect_publish_user_created()
+            .times(1)
+            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+
+        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+
+        let command = CreateUserCommand {
+            username: Username::new("bill-evans").unwrap(),
+            email: EmailAddress::new("bill.evans@example.com").unwrap(),
+            password: "W@ltz-F0r-Debb1y_1961!".to_string(),
+        };
+
+        let result = service.create_user(command).await;
+        assert!(result.is_ok(), "create_user must succeed even when event publish fails");
+    }
+
+    #[tokio::test]
+    async fn update_user_still_returns_ok_when_event_publish_fails() {
+        let mut repository = MockTestUserRepository::new();
+        let mut event_publisher = MockTestEventPublisher::new();
+
+        let existing = miles_davis();
+        let user_id = existing.id();
+
+        let returned = existing.clone();
+        repository
+            .expect_find_by_id()
+            .times(1)
+            .returning(move |_| Ok(Some(returned.clone())));
+
+        repository
+            .expect_update()
+            .times(1)
+            .returning(|user| Ok(user));
+
+        event_publisher
+            .expect_publish_user_updated()
+            .times(1)
+            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+
+        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+
+        let command = UpdateUserCommand {
+            username: Some(Username::new("miles-dewey-davis").unwrap()),
+            email: None,
+            password: None,
+        };
+
+        let result = service.update_user(&user_id, command).await;
+        assert!(result.is_ok(), "update_user must succeed even when event publish fails");
+    }
+
+    #[tokio::test]
+    async fn delete_user_still_returns_ok_when_event_publish_fails() {
+        let mut repository = MockTestUserRepository::new();
+        let mut event_publisher = MockTestEventPublisher::new();
+
+        let user_id = UserId::new();
+
+        repository
+            .expect_delete()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        event_publisher
+            .expect_publish_user_deleted()
+            .times(1)
+            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+
+        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+
+        let result = service.delete_user(&user_id).await;
+        assert!(result.is_ok(), "delete_user must succeed even when event publish fails");
     }
 }

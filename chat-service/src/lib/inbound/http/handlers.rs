@@ -82,7 +82,7 @@ impl IntoResponse for ApiError {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct CreateChannelResponseData {
+pub struct ChannelResponseData {
     pub id: ChannelIdMessage,
     pub channel_type: String,
     pub name: Option<String>,
@@ -91,7 +91,7 @@ pub struct CreateChannelResponseData {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<&Channel> for CreateChannelResponseData {
+impl From<&Channel> for ChannelResponseData {
     fn from(channel: &Channel) -> Self {
         Self {
             id: channel.id().into(),

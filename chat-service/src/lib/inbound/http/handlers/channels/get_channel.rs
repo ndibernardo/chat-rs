@@ -6,13 +6,13 @@ use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::ports::ChannelServicePort;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
-use crate::inbound::http::handlers::CreateChannelResponseData;
+use crate::inbound::http::handlers::ChannelResponseData;
 use crate::inbound::http::router::AppState;
 
 pub async fn get_channel(
     State(state): State<AppState>,
     Path(channel_id): Path<String>,
-) -> Result<ApiSuccess<CreateChannelResponseData>, ApiError> {
+) -> Result<ApiSuccess<ChannelResponseData>, ApiError> {
     let channel_id =
         ChannelId::from_string(&channel_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 

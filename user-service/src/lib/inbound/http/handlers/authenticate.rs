@@ -18,11 +18,9 @@ pub async fn authenticate(
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequestBody>,
 ) -> Result<ApiSuccess<AuthenticateResponseData>, ApiError> {
-    // Parse and validate username
     let username = Username::new(body.username)
         .map_err(|_| ApiError::Unauthorized("Invalid credentials".to_string()))?;
 
-    // Get user from database
     let user = state
         .user_service
         .get_user_by_username(&username)
@@ -34,14 +32,12 @@ pub async fn authenticate(
             _ => ApiError::from(e),
         })?;
 
-    // Create JWT claims (from auth library)
     let claims = auth::Claims::for_user(
         user.id(),
         user.username().as_str().to_string(),
         state.jwt_expiration_hours,
     );
 
-    // Verify password and generate token
     let result = state
         .authenticator
         .authenticate(&body.password, user.password_hash(), &claims)

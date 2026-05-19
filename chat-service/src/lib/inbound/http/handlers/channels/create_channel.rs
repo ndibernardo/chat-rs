@@ -10,7 +10,7 @@ use crate::domain::user::models::UserId;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::handlers::CreateChannelRequest;
-use crate::inbound::http::handlers::CreateChannelResponseData;
+use crate::inbound::http::handlers::ChannelResponseData;
 use crate::inbound::http::router::AppState;
 use crate::inbound::middleware::AuthenticatedUser;
 
@@ -18,7 +18,7 @@ pub async fn create_channel(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthenticatedUser>,
     Json(req): Json<CreateChannelRequest>,
-) -> Result<ApiSuccess<CreateChannelResponseData>, ApiError> {
+) -> Result<ApiSuccess<ChannelResponseData>, ApiError> {
     let command = match req {
         CreateChannelRequest::Public { name, description } => {
             let channel_name =

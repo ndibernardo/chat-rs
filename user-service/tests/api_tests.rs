@@ -5,15 +5,15 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 #[tokio::test]
-async fn test_create_user_success() {
+async fn create_user_returns_created_user() {
     let app = TestApp::spawn().await;
 
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -22,34 +22,32 @@ async fn test_create_user_success() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["data"]["username"], "nicola");
-    assert_eq!(body["data"]["email"], "nicola@example.com");
+    assert_eq!(body["data"]["username"], "miles-davis");
+    assert_eq!(body["data"]["email"], "miles.davis@example.com");
     assert!(body["data"]["id"].is_string());
     assert!(body["data"]["created_at"].is_string());
 }
 
 #[tokio::test]
-async fn test_create_user_duplicate_username() {
+async fn create_user_returns_conflict_for_duplicate_username() {
     let app = TestApp::spawn().await;
 
-    // Create first user
     app.post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
         .expect("Failed to execute request");
 
-    // Try to create user with same username but different email
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "john.coltrane@example.com",
+            "password": "G1ant-St3ps_1960!"
         }))
         .send()
         .await
@@ -65,27 +63,25 @@ async fn test_create_user_duplicate_username() {
 }
 
 #[tokio::test]
-async fn test_create_user_duplicate_email() {
+async fn create_user_returns_conflict_for_duplicate_email() {
     let app = TestApp::spawn().await;
 
-    // Create first user
     app.post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
         .expect("Failed to execute request");
 
-    // Try to create user with different username but same email
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola2",
-            "email": "nicola@example.com",
-            "password": "pass_word!2"
+            "username": "john-coltrane",
+            "email": "miles.davis@example.com",
+            "password": "G1ant-St3ps_1960!"
         }))
         .send()
         .await
@@ -101,15 +97,15 @@ async fn test_create_user_duplicate_email() {
 }
 
 #[tokio::test]
-async fn test_create_user_invalid_username() {
+async fn create_user_returns_unprocessable_for_short_username() {
     let app = TestApp::spawn().await;
 
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "n",
-            "email": "nicola@example.com",
-            "password": "pass_word"
+            "username": "mj",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -125,15 +121,15 @@ async fn test_create_user_invalid_username() {
 }
 
 #[tokio::test]
-async fn test_create_user_invalid_email() {
+async fn create_user_returns_unprocessable_for_invalid_email() {
     let app = TestApp::spawn().await;
 
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola",
+            "username": "miles-davis",
             "email": "not-an-email",
-            "password": "pass_word!"
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -150,26 +146,24 @@ async fn test_create_user_invalid_email() {
 }
 
 #[tokio::test]
-async fn test_authenticate_success() {
+async fn authenticate_returns_token_for_valid_credentials() {
     let app = TestApp::spawn().await;
 
-    // Create user
     app.post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
         .expect("Failed to execute request");
 
-    // Authenticate
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nicola",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -180,31 +174,29 @@ async fn test_authenticate_success() {
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert!(body["data"]["token"].is_string());
     assert!(!body["data"]["token"].as_str().unwrap().is_empty());
-    assert_eq!(body["data"]["user"]["username"], "nicola");
-    assert_eq!(body["data"]["user"]["email"], "nicola@example.com");
+    assert_eq!(body["data"]["user"]["username"], "miles-davis");
+    assert_eq!(body["data"]["user"]["email"], "miles.davis@example.com");
 }
 
 #[tokio::test]
-async fn test_authenticate_wrong_password() {
+async fn authenticate_returns_unauthorized_for_wrong_password() {
     let app = TestApp::spawn().await;
 
-    // Create user
     app.post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "Correct_Password!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
         .expect("Failed to execute request");
 
-    // Try to authenticate with wrong password
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nicola",
-            "password": "Wrong_Password!"
+            "username": "miles-davis",
+            "password": "wr0ng-p4ssw0rd!"
         }))
         .send()
         .await
@@ -217,14 +209,14 @@ async fn test_authenticate_wrong_password() {
 }
 
 #[tokio::test]
-async fn test_authenticate_nonexistent_user() {
+async fn authenticate_returns_unauthorized_for_unknown_username() {
     let app = TestApp::spawn().await;
 
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nonexistent",
-            "password": "pass_word!"
+            "username": "chet-baker",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -237,16 +229,15 @@ async fn test_authenticate_nonexistent_user() {
 }
 
 #[tokio::test]
-async fn test_get_user_by_id() {
+async fn get_user_returns_user_for_authenticated_request() {
     let app = TestApp::spawn().await;
 
-    // Create a user
     let create_response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -258,12 +249,11 @@ async fn test_get_user_by_id() {
         .expect("Failed to parse response");
     let user_id = create_body["data"]["id"].as_str().unwrap();
 
-    // Authenticate to get token
     let auth_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nicola",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -275,7 +265,6 @@ async fn test_get_user_by_id() {
         .expect("Failed to parse response");
     let token = auth_body["data"]["token"].as_str().unwrap();
 
-    // Get user by ID
     let response = app
         .get_authenticated(&format!("/api/users/{}", user_id), token)
         .send()
@@ -286,20 +275,19 @@ async fn test_get_user_by_id() {
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["data"]["id"], user_id);
-    assert_eq!(body["data"]["username"], "nicola");
-    assert_eq!(body["data"]["email"], "nicola@example.com");
+    assert_eq!(body["data"]["username"], "miles-davis");
+    assert_eq!(body["data"]["email"], "miles.davis@example.com");
 }
 
 #[tokio::test]
-async fn test_get_user_not_found() {
+async fn get_user_returns_not_found_for_missing_id() {
     let app = TestApp::spawn().await;
 
-    // Create a user and get token
     app.post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -308,8 +296,8 @@ async fn test_get_user_not_found() {
     let auth_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nicola",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -321,7 +309,6 @@ async fn test_get_user_not_found() {
         .expect("Failed to parse response");
     let token = auth_body["data"]["token"].as_str().unwrap();
 
-    // Try to get non-existent user
     let fake_uuid = uuid::Uuid::new_v4().to_string();
     let response = app
         .get_authenticated(&format!("/api/users/{}", fake_uuid), token)
@@ -336,16 +323,15 @@ async fn test_get_user_not_found() {
 }
 
 #[tokio::test]
-async fn test_full_user_workflow() {
+async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
     let app = TestApp::spawn().await;
 
-    // 1. Create user
     let create_response = app
         .post("/api/users")
         .json(&json!({
-            "username": "nicola",
-            "email": "nicola@example.com",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -359,12 +345,11 @@ async fn test_full_user_workflow() {
         .expect("Failed to parse response");
     let user_id = create_body["data"]["id"].as_str().unwrap().to_string();
 
-    // 2. Login
     let login_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "nicola",
-            "password": "pass_word!"
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
         }))
         .send()
         .await
@@ -378,7 +363,6 @@ async fn test_full_user_workflow() {
         .expect("Failed to parse response");
     let token = login_body["data"]["token"].as_str().unwrap().to_string();
 
-    // 3. Access protected endpoint - get user by ID
     let user_response = app
         .get_authenticated(&format!("/api/users/{}", user_id), &token)
         .send()
@@ -391,13 +375,12 @@ async fn test_full_user_workflow() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(user_body["data"]["username"], "nicola");
+    assert_eq!(user_body["data"]["username"], "miles-davis");
 
-    // 4. Update user
     let update_response = app
         .patch_authenticated(&format!("/api/users/{}", user_id), &token)
         .json(&json!({
-            "email": "updated@example.com"
+            "email": "miles.dewey.davis@example.com"
         }))
         .send()
         .await
@@ -409,11 +392,10 @@ async fn test_full_user_workflow() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(update_body["data"]["email"], "updated@example.com");
+    assert_eq!(update_body["data"]["email"], "miles.dewey.davis@example.com");
 
-    // 5. Try to access with invalid token - should fail
     let invalid_response = app
-        .get_authenticated(&format!("/api/users/{}", user_id), "invalid")
+        .get_authenticated(&format!("/api/users/{}", user_id), "invalid-token")
         .send()
         .await
         .expect("Failed to execute request");

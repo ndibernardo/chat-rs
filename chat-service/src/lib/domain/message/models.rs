@@ -122,7 +122,7 @@ impl fmt::Display for MessageId {
 pub struct MessageContent(String);
 
 impl MessageContent {
-    const MAX_LENGTH: usize = 4000;
+    pub(crate) const MAX_LENGTH: usize = 4000;
 
     /// Create a new validated message content.
     ///
@@ -155,5 +155,40 @@ impl MessageContent {
     /// Content string slice
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_content_new_returns_content_for_valid_input() {
+        let result = MessageContent::new("Has the incident been resolved?".to_string());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_str(), "Has the incident been resolved?");
+    }
+
+    #[test]
+    fn message_content_new_returns_error_for_empty_string() {
+        let result = MessageContent::new(String::new());
+        assert!(matches!(result, Err(MessageContentError::Empty)));
+    }
+
+    #[test]
+    fn message_content_new_returns_error_when_content_exceeds_limit() {
+        let too_long = "x".repeat(MessageContent::MAX_LENGTH + 1);
+        let result = MessageContent::new(too_long);
+        assert!(matches!(
+            result,
+            Err(MessageContentError::TooLong { max: 4000, .. })
+        ));
+    }
+
+    #[test]
+    fn message_content_new_accepts_content_at_exact_limit() {
+        let at_limit = "x".repeat(MessageContent::MAX_LENGTH);
+        let result = MessageContent::new(at_limit);
+        assert!(result.is_ok());
     }
 }

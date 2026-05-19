@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_public_channel_success() {
+    async fn create_channel_returns_public_channel() {
         let mut repo = MockTestChannelRepository::new();
         let mut publisher = MockTestChannelEventPublisher::new();
 
@@ -195,7 +195,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_private_channel_success() {
+    async fn create_channel_returns_private_channel_with_members() {
         let mut repo = MockTestChannelRepository::new();
         let mut publisher = MockTestChannelEventPublisher::new();
 
@@ -242,7 +242,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_private_channel_deduplicates_creator_in_members() {
+    async fn create_private_channel_deduplicates_creator_in_member_list() {
         let mut repo = MockTestChannelRepository::new();
         let mut publisher = MockTestChannelEventPublisher::new();
 
@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_direct_channel_success() {
+    async fn create_channel_returns_direct_channel() {
         let mut repo = MockTestChannelRepository::new();
         let mut publisher = MockTestChannelEventPublisher::new();
 
@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_channel_success() {
+    async fn get_channel_returns_channel_by_id() {
         let mut repo = MockTestChannelRepository::new();
         let publisher = MockTestChannelEventPublisher::new();
 
@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_channel_not_found() {
+    async fn get_channel_returns_not_found_for_missing_id() {
         let mut repo = MockTestChannelRepository::new();
         let publisher = MockTestChannelEventPublisher::new();
 
@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_public_channels() {
+    async fn list_public_channels_returns_all_public_channels() {
         let mut repo = MockTestChannelRepository::new();
         let publisher = MockTestChannelEventPublisher::new();
 
@@ -395,7 +395,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_channel_name_already_exists() {
+    async fn create_channel_returns_name_already_exists_for_duplicate_name() {
         let mut repo = MockTestChannelRepository::new();
         let mut publisher = MockTestChannelEventPublisher::new();
 
