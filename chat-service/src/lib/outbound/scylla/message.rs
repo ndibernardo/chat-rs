@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use scylla::client::session::Session;
+use scylla::client::caching_session::CachingSession;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::value::CqlTimeuuid;
 use uuid::Uuid;
@@ -17,8 +17,11 @@ use crate::domain::message::models::MessageId;
 use crate::domain::message::ports;
 use crate::domain::user::models::UserId;
 
+/// Number of distinct prepared-statement shapes this repository executes.
+const PREPARED_STATEMENT_CACHE_SIZE: usize = 8;
+
 pub struct MessageRepository {
-    session: Arc<Session>,
+    session: Arc<CachingSession>,
 }
 
 impl MessageRepository {
@@ -78,7 +81,7 @@ impl MessageRepository {
             .await?;
 
         Ok(Self {
-            session: Arc::new(session),
+            session: Arc::new(CachingSession::from(session, PREPARED_STATEMENT_CACHE_SIZE)),
         })
     }
 }
@@ -89,36 +92,33 @@ impl ports::MessageRepository for MessageRepository {
         // Convert domain Uuid to CqlTimeuuid for Cassandra
         let message_id_timeuuid = CqlTimeuuid::from(*message.id.as_uuid());
 
-        // Insert into messages_by_channel (denormalized)
-        self.session
-            .query_unpaged(
-                "INSERT INTO messages_by_channel (channel_id, message_id, user_id, content, timestamp)
-                 VALUES (?, ?, ?, ?, ?)",
-                (
-                    message.channel_id.as_uuid(),
-                    message_id_timeuuid,
-                    message.user_id.as_uuid(),
-                    message.content.as_str(),
-                    message.timestamp,
-                ),
-            )
-            .await
-            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+        // The two denormalized inserts are independent (different partitions, different
+        // tables) so they run concurrently rather than paying two round-trips serially.
+        let by_channel = self.session.execute_unpaged(
+            "INSERT INTO messages_by_channel (channel_id, message_id, user_id, content, timestamp)
+             VALUES (?, ?, ?, ?, ?)",
+            (
+                message.channel_id.as_uuid(),
+                message_id_timeuuid,
+                message.user_id.as_uuid(),
+                message.content.as_str(),
+                message.timestamp,
+            ),
+        );
 
-        // Insert into messages_by_user (denormalized)
-        self.session
-            .query_unpaged(
-                "INSERT INTO messages_by_user (user_id, message_id, channel_id, content, timestamp)
-                 VALUES (?, ?, ?, ?, ?)",
-                (
-                    message.user_id.as_uuid(),
-                    message_id_timeuuid,
-                    message.channel_id.as_uuid(),
-                    message.content.as_str(),
-                    message.timestamp,
-                ),
-            )
-            .await
+        let by_user = self.session.execute_unpaged(
+            "INSERT INTO messages_by_user (user_id, message_id, channel_id, content, timestamp)
+             VALUES (?, ?, ?, ?, ?)",
+            (
+                message.user_id.as_uuid(),
+                message_id_timeuuid,
+                message.channel_id.as_uuid(),
+                message.content.as_str(),
+                message.timestamp,
+            ),
+        );
+
+        futures::try_join!(by_channel, by_user)
             .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
         Ok(message)
@@ -132,7 +132,7 @@ impl ports::MessageRepository for MessageRepository {
     ) -> Result<Vec<Message>, MessageError> {
         let query = if let Some(before_time) = before {
             self.session
-                .query_unpaged(
+                .execute_unpaged(
                     "SELECT channel_id, message_id, user_id, content, timestamp
                      FROM messages_by_channel
                      WHERE channel_id = ? AND message_id < maxTimeuuid(?)
@@ -142,7 +142,7 @@ impl ports::MessageRepository for MessageRepository {
                 .await
         } else {
             self.session
-                .query_unpaged(
+                .execute_unpaged(
                     "SELECT channel_id, message_id, user_id, content, timestamp
                      FROM messages_by_channel
                      WHERE channel_id = ?
@@ -184,7 +184,7 @@ impl ports::MessageRepository for MessageRepository {
     ) -> Result<Vec<Message>, MessageError> {
         let rows = self
             .session
-            .query_unpaged(
+            .execute_unpaged(
                 "SELECT user_id, message_id, channel_id, content, timestamp
                  FROM messages_by_user
                  WHERE user_id = ?
