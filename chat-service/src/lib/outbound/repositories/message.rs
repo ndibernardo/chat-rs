@@ -3,9 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use scylla::frame::value::CqlTimeuuid;
-use scylla::Session;
-use scylla::SessionBuilder;
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
+use scylla::value::CqlTimeuuid;
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -30,7 +30,7 @@ impl CassandraMessageRepository {
 
         // Create keyspace if not exists
         session
-            .query(
+            .query_unpaged(
                 format!(
                     "CREATE KEYSPACE IF NOT EXISTS {}
                     WITH REPLICATION = {{
@@ -49,7 +49,7 @@ impl CassandraMessageRepository {
 
         // Create a messages_by_channel table
         session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS messages_by_channel (
                     channel_id uuid,
                     message_id timeuuid,
@@ -64,7 +64,7 @@ impl CassandraMessageRepository {
 
         // Create a messages_by_user table
         session
-            .query(
+            .query_unpaged(
                 "CREATE TABLE IF NOT EXISTS messages_by_user (
                     user_id uuid,
                     message_id timeuuid,
@@ -91,7 +91,7 @@ impl MessageRepository for CassandraMessageRepository {
 
         // Insert into messages_by_channel (denormalized)
         self.session
-            .query(
+            .query_unpaged(
                 "INSERT INTO messages_by_channel (channel_id, message_id, user_id, content, timestamp)
                  VALUES (?, ?, ?, ?, ?)",
                 (
@@ -107,7 +107,7 @@ impl MessageRepository for CassandraMessageRepository {
 
         // Insert into messages_by_user (denormalized)
         self.session
-            .query(
+            .query_unpaged(
                 "INSERT INTO messages_by_user (user_id, message_id, channel_id, content, timestamp)
                  VALUES (?, ?, ?, ?, ?)",
                 (
@@ -132,7 +132,7 @@ impl MessageRepository for CassandraMessageRepository {
     ) -> Result<Vec<Message>, MessageError> {
         let query = if let Some(before_time) = before {
             self.session
-                .query(
+                .query_unpaged(
                     "SELECT channel_id, message_id, user_id, content, timestamp
                      FROM messages_by_channel
                      WHERE channel_id = ? AND message_id < maxTimeuuid(?)
@@ -142,7 +142,7 @@ impl MessageRepository for CassandraMessageRepository {
                 .await
         } else {
             self.session
-                .query(
+                .query_unpaged(
                     "SELECT channel_id, message_id, user_id, content, timestamp
                      FROM messages_by_channel
                      WHERE channel_id = ?
@@ -152,29 +152,26 @@ impl MessageRepository for CassandraMessageRepository {
                 .await
         };
 
-        let rows = query.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+        let rows_result = query
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
+            .into_rows_result()
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
         let mut messages = Vec::new();
-        if let Some(rows) = rows.rows {
-            for row in rows {
-                let (channel_id, message_id_timeuuid, user_id, content, timestamp): (
-                    Uuid,
-                    CqlTimeuuid,
-                    Uuid,
-                    String,
-                    DateTime<Utc>,
-                ) = row
-                    .into_typed::<(Uuid, CqlTimeuuid, Uuid, String, DateTime<Utc>)>()
-                    .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+        for row in rows_result
+            .rows::<(Uuid, CqlTimeuuid, Uuid, String, DateTime<Utc>)>()
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
+        {
+            let (channel_id, message_id_timeuuid, user_id, content, timestamp) =
+                row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-                messages.push(Message {
-                    id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
-                    channel_id: ChannelId::from(channel_id),
-                    user_id: UserId::from(user_id),
-                    content: MessageContent::new(content)?,
-                    timestamp,
-                });
-            }
+            messages.push(Message {
+                id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
+                channel_id: ChannelId::from(channel_id),
+                user_id: UserId::from(user_id),
+                content: MessageContent::new(content)?,
+                timestamp,
+            });
         }
 
         Ok(messages)
@@ -187,7 +184,7 @@ impl MessageRepository for CassandraMessageRepository {
     ) -> Result<Vec<Message>, MessageError> {
         let rows = self
             .session
-            .query(
+            .query_unpaged(
                 "SELECT user_id, message_id, channel_id, content, timestamp
                  FROM messages_by_user
                  WHERE user_id = ?
@@ -197,27 +194,25 @@ impl MessageRepository for CassandraMessageRepository {
             .await
             .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-        let mut messages = Vec::new();
-        if let Some(rows) = rows.rows {
-            for row in rows {
-                let (user_id, message_id_timeuuid, channel_id, content, timestamp): (
-                    Uuid,
-                    CqlTimeuuid,
-                    Uuid,
-                    String,
-                    DateTime<Utc>,
-                ) = row
-                    .into_typed::<(Uuid, CqlTimeuuid, Uuid, String, DateTime<Utc>)>()
-                    .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+        let rows_result = rows
+            .into_rows_result()
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-                messages.push(Message {
-                    id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
-                    channel_id: ChannelId::from(channel_id),
-                    user_id: UserId::from(user_id),
-                    content: MessageContent::new(content)?,
-                    timestamp,
-                });
-            }
+        let mut messages = Vec::new();
+        for row in rows_result
+            .rows::<(Uuid, CqlTimeuuid, Uuid, String, DateTime<Utc>)>()
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
+        {
+            let (user_id, message_id_timeuuid, channel_id, content, timestamp) =
+                row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+
+            messages.push(Message {
+                id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
+                channel_id: ChannelId::from(channel_id),
+                user_id: UserId::from(user_id),
+                content: MessageContent::new(content)?,
+                timestamp,
+            });
         }
 
         Ok(messages)
