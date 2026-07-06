@@ -136,7 +136,6 @@ impl TestApp {
 
         let message_service = Arc::new(MessageService::new(
             message_repo,
-            channel_repo,
             user_resolver,
             event_publisher,
         ));

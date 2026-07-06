@@ -2,14 +2,17 @@ use axum::extract::Path;
 use axum::extract::Query;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::Extension;
 use serde::Deserialize;
 
 use crate::domain::channel::models::ChannelId;
+use crate::domain::channel::ports::ChannelService;
 use crate::domain::message::ports::MessageService;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::handlers::MessageResponseData;
 use crate::inbound::http::router::AppState;
+use crate::inbound::middleware::AuthenticatedUser;
 
 #[derive(Debug, Deserialize)]
 pub struct MessageQuery {
@@ -19,11 +22,20 @@ pub struct MessageQuery {
 
 pub async fn get_channel_messages(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthenticatedUser>,
     Path(channel_id): Path<String>,
     Query(params): Query<MessageQuery>,
 ) -> Result<ApiSuccess<Vec<MessageResponseData>>, ApiError> {
     let channel_id =
         ChannelId::from_string(&channel_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+
+    let channel = state
+        .channel_service
+        .get_channel(channel_id)
+        .await
+        .map_err(ApiError::from)?;
+
+    let membership = channel.membership_of(auth_user.user_id)?;
 
     let limit = params.limit.unwrap_or(50);
     let before = params
@@ -33,7 +45,7 @@ pub async fn get_channel_messages(
 
     state
         .message_service
-        .get_channel_messages(channel_id, limit, before)
+        .get_channel_messages(membership, limit, before)
         .await
         .map_err(ApiError::from)
         .map(|messages| {

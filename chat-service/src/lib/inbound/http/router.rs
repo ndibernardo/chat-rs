@@ -40,7 +40,6 @@ pub struct AppState {
     pub message_service: Arc<
         MessageService<
             MessageRepository,
-            ChannelRepository,
             ReplicaWithFallback<UserReplicaRepository, UserServiceClient>,
             MessageEventPublisher,
         >,
@@ -54,7 +53,6 @@ pub fn create_router(
     message_service: Arc<
         MessageService<
             MessageRepository,
-            ChannelRepository,
             ReplicaWithFallback<UserReplicaRepository, UserServiceClient>,
             MessageEventPublisher,
         >,

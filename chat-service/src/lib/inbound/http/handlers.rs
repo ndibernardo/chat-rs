@@ -53,6 +53,9 @@ pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("Unprocessable entity: {0}")]
     UnprocessableEntity(String),
 
@@ -68,6 +71,7 @@ impl IntoResponse for ApiError {
         let (status, message) = match &self {
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             ApiError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             ApiError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             ApiError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
@@ -125,7 +129,7 @@ impl From<ChannelError> for ApiError {
             ChannelError::NotMember {
                 user_id,
                 channel_id,
-            } => ApiError::UnprocessableEntity(format!(
+            } => ApiError::Forbidden(format!(
                 "User {} is not a member of channel {}",
                 user_id, channel_id
             )),

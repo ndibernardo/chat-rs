@@ -16,6 +16,8 @@ use super::messages::ClientMessage;
 use super::messages::ServerMessage;
 use super::messages::WsChannelId;
 use crate::domain::channel::models::ChannelId;
+use crate::domain::channel::models::Membership;
+use crate::domain::channel::ports::ChannelService;
 use crate::domain::message::models::MessageContent;
 use crate::domain::message::ports::MessageService;
 use crate::domain::user::models::UserId;
@@ -84,12 +86,42 @@ pub async fn websocket_handler(
         }
     };
 
-    ws.on_upgrade(move |socket| handle_socket(socket, channel_id, user_id, state))
+    let channel = match state.channel_service.get_channel(channel_id).await {
+        Ok(channel) => channel,
+        Err(e) => {
+            tracing::warn!("WebSocket upgrade rejected, channel lookup failed: {}", e);
+            return axum::http::Response::builder()
+                .status(axum::http::StatusCode::NOT_FOUND)
+                .body(axum::body::Body::from("Channel not found"))
+                .unwrap()
+                .into_response();
+        }
+    };
+
+    let membership = match channel.membership_of(user_id) {
+        Ok(membership) => membership,
+        Err(_) => {
+            tracing::warn!(
+                "WebSocket upgrade rejected: user {} is not a member of channel {}",
+                user_id,
+                channel_id
+            );
+            return axum::http::Response::builder()
+                .status(axum::http::StatusCode::FORBIDDEN)
+                .body(axum::body::Body::from("Not a member of this channel"))
+                .unwrap()
+                .into_response();
+        }
+    };
+
+    ws.on_upgrade(move |socket| handle_socket(socket, membership, state))
 }
 
 /// Handle an individual WebSocket connection
-async fn handle_socket(socket: WebSocket, channel_id: ChannelId, user_id: UserId, state: AppState) {
+async fn handle_socket(socket: WebSocket, membership: Membership, state: AppState) {
     let connection_id = Uuid::new_v4();
+    let channel_id = membership.channel_id();
+    let user_id = membership.user_id();
 
     // Split the socket into sender and receiver
     let (mut sender, mut receiver) = socket.split();
@@ -126,14 +158,8 @@ async fn handle_socket(socket: WebSocket, channel_id: ChannelId, user_id: UserId
 
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            if let Err(e) = process_client_message(
-                msg,
-                channel_id,
-                user_id,
-                message_service.as_ref(),
-                &tx_clone,
-            )
-            .await
+            if let Err(e) =
+                process_client_message(msg, membership, message_service.as_ref(), &tx_clone).await
             {
                 tracing::error!("Error processing message: {}", e);
                 let error_msg = ServerMessage::Error {
@@ -169,8 +195,7 @@ async fn handle_socket(socket: WebSocket, channel_id: ChannelId, user_id: UserId
 /// Process a message received from a client
 async fn process_client_message(
     msg: WebSocketMessage,
-    channel_id: ChannelId,
-    user_id: UserId,
+    membership: Membership,
     message_service: &dyn MessageService,
     tx: &tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
 ) -> Result<(), String> {
@@ -192,14 +217,14 @@ async fn process_client_message(
                     // 3. KafkaEventConsumer on ALL instances will receive the event
                     // 4. Each instance broadcasts to its local WebSocket connections
                     let message = message_service
-                        .send_message(channel_id, user_id, message_content)
+                        .send_message(membership, message_content)
                         .await
                         .map_err(|e| format!("Failed to send message: {}", e))?;
 
                     tracing::debug!(
                         "Message {} saved and published to Kafka for channel {}",
                         message.id,
-                        channel_id
+                        membership.channel_id()
                     );
 
                     Ok(())

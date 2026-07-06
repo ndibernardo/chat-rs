@@ -81,7 +81,7 @@ async fn main() -> Result<(), Error> {
         Arc::new(MessageEventPublisher::new(Arc::clone(&event_producer)));
 
     let channel_service = Arc::new(ChannelService::new(
-        Arc::clone(&channel_repository),
+        channel_repository,
         channel_event_publisher,
     ));
 
@@ -94,7 +94,6 @@ async fn main() -> Result<(), Error> {
 
     let message_service = Arc::new(MessageService::new(
         message_repository,
-        channel_repository,
         user_resolver,
         message_event_publisher,
     ));
