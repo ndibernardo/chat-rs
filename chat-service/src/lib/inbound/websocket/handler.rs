@@ -108,7 +108,7 @@ async fn handle_socket(socket: WebSocket, channel_id: ChannelId, user_id: UserId
         channel_id: WsChannelId::from(channel_id),
     };
     if let Ok(json) = serde_json::to_string(&connected_msg) {
-        let _ = tx.send(WebSocketMessage::Text(json));
+        let _ = tx.send(WebSocketMessage::Text(json.into()));
     }
 
     // Task to send messages to the WebSocket
@@ -140,7 +140,7 @@ async fn handle_socket(socket: WebSocket, channel_id: ChannelId, user_id: UserId
                     message: e.to_string(),
                 };
                 if let Ok(json) = serde_json::to_string(&error_msg) {
-                    let _ = tx_clone.send(WebSocketMessage::Text(json));
+                    let _ = tx_clone.send(WebSocketMessage::Text(json.into()));
                 }
             }
         }
@@ -208,7 +208,7 @@ async fn process_client_message(
                     // Respond with pong
                     let pong_msg = ServerMessage::Pong;
                     if let Ok(json) = serde_json::to_string(&pong_msg) {
-                        tx.send(WebSocketMessage::Text(json))
+                        tx.send(WebSocketMessage::Text(json.into()))
                             .map_err(|_| "Failed to send pong response".to_string())?;
                     }
                     Ok(())

@@ -50,9 +50,9 @@ pub fn create_router(
         .route("/api/users", post(create_user));
 
     let protected_routes = Router::new()
-        .route("/api/users/:user_id", get(get_user))
-        .route("/api/users/:user_id", patch(update_user))
-        .route("/api/users/:user_id", delete(delete_user))
+        .route("/api/users/{user_id}", get(get_user))
+        .route("/api/users/{user_id}", patch(update_user))
+        .route("/api/users/{user_id}", delete(delete_user))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

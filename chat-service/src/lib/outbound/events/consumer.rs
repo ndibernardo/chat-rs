@@ -232,7 +232,7 @@ impl KafkaEventConsumer {
         };
 
         let ws_message = match serde_json::to_string(&server_message) {
-            Ok(json) => axum::extract::ws::Message::Text(json),
+            Ok(json) => axum::extract::ws::Message::Text(json.into()),
             Err(e) => {
                 tracing::error!("Failed to serialize server message: {}", e);
                 return;
