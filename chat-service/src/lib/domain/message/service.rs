@@ -72,7 +72,7 @@ where
             .user_resolver
             .resolve(membership.user_id())
             .await
-            .map_err(MessageError::DatabaseError)?;
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
         resolved_user.ok_or(MessageError::UserNotFound(membership.user_id()))?;
 
         let message = Message {
@@ -116,6 +116,7 @@ mod tests {
     use super::*;
     use crate::domain::channel::models::ChannelId;
     use crate::domain::message::events::MessageDeletedEvent;
+    use crate::domain::user::errors::UserError;
     use crate::domain::user::models::User;
     use crate::domain::user::models::UserId;
     use crate::domain::user::models::Username;
@@ -145,7 +146,7 @@ mod tests {
 
         #[async_trait]
         impl UserResolver for TestUserResolver {
-            async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String>;
+            async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError>;
         }
     }
 

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use super::events::UserCreatedEvent;
 use super::events::UserDeletedEvent;
 use super::events::UserUpdatedEvent;
+use crate::domain::user::errors::UserError;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 
@@ -20,8 +21,8 @@ pub trait UserResolver: Send + Sync + 'static {
     /// User if found in either source, `None` if not found anywhere
     ///
     /// # Errors
-    /// Returns error string if both sources fail
-    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String>;
+    /// Returns `UserError` if both sources fail
+    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError>;
 }
 
 /// Port for looking up a user from the remote user-service (via gRPC).
@@ -36,8 +37,8 @@ pub trait RemoteUserLookup: Send + Sync + 'static {
     /// User if found, None if not found
     ///
     /// # Errors
-    /// Returns error string if gRPC call fails
-    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, String>;
+    /// Returns `UserError` if the gRPC call fails
+    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, UserError>;
 }
 
 /// Port for local user replica repository.
@@ -55,8 +56,8 @@ pub trait UserReplicaRepository: Send + Sync + 'static {
     /// Unit on success
     ///
     /// # Errors
-    /// Returns error string if database operation fails
-    async fn upsert(&self, user: User) -> Result<(), String>;
+    /// Returns `UserError` if the database operation fails
+    async fn upsert(&self, user: User) -> Result<(), UserError>;
 
     /// Delete user from replica.
     ///
@@ -67,8 +68,8 @@ pub trait UserReplicaRepository: Send + Sync + 'static {
     /// Unit on success
     ///
     /// # Errors
-    /// Returns error string if database operation fails
-    async fn delete(&self, user_id: UserId) -> Result<(), String>;
+    /// Returns `UserError` if the database operation fails
+    async fn delete(&self, user_id: UserId) -> Result<(), UserError>;
 
     /// Get user from replica by ID.
     ///
@@ -79,8 +80,8 @@ pub trait UserReplicaRepository: Send + Sync + 'static {
     /// User if found, None if not found
     ///
     /// # Errors
-    /// Returns error string if database operation fails
-    async fn get(&self, user_id: UserId) -> Result<Option<User>, String>;
+    /// Returns `UserError` if the database operation fails
+    async fn get(&self, user_id: UserId) -> Result<Option<User>, UserError>;
 
     /// Get multiple users from replica by IDs.
     ///
@@ -91,8 +92,8 @@ pub trait UserReplicaRepository: Send + Sync + 'static {
     /// Vector of found users (missing IDs are skipped without error)
     ///
     /// # Errors
-    /// Returns error string if database operation fails
-    async fn get_many(&self, user_ids: &[UserId]) -> Result<Vec<User>, String>;
+    /// Returns `UserError` if the database operation fails
+    async fn get_many(&self, user_ids: &[UserId]) -> Result<Vec<User>, UserError>;
 }
 
 /// Event consumer for user-service domain events.
@@ -114,7 +115,7 @@ pub trait UserEventConsumer: Send + Sync + 'static {
     /// # Errors
     /// * Database operation failed
     /// * Invalid user data in event
-    async fn handle_user_created(&self, event: &UserCreatedEvent) -> Result<(), String>;
+    async fn handle_user_created(&self, event: &UserCreatedEvent) -> Result<(), UserError>;
 
     /// Handle user update event.
     ///
@@ -129,7 +130,7 @@ pub trait UserEventConsumer: Send + Sync + 'static {
     /// # Errors
     /// * Database operation failed
     /// * Invalid user data in event
-    async fn handle_user_updated(&self, event: &UserUpdatedEvent) -> Result<(), String>;
+    async fn handle_user_updated(&self, event: &UserUpdatedEvent) -> Result<(), UserError>;
 
     /// Handle user deletion event.
     ///
@@ -147,5 +148,5 @@ pub trait UserEventConsumer: Send + Sync + 'static {
     /// # Errors
     /// * Database operation failed during cleanup
     /// * Invalid user ID in event
-    async fn handle_user_deleted(&self, event: &UserDeletedEvent) -> Result<(), String>;
+    async fn handle_user_deleted(&self, event: &UserDeletedEvent) -> Result<(), UserError>;
 }

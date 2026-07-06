@@ -21,3 +21,23 @@ pub enum UsernameError {
     )]
     InvalidCharacters,
 }
+
+/// Top-level error type for chat-service's user-domain operations: replica
+/// reads/writes and remote user-service lookups.
+#[derive(Debug, Error)]
+pub enum UserError {
+    #[error("Invalid user ID: {0}")]
+    InvalidUserId(#[from] UserIdError),
+
+    #[error("Invalid username: {0}")]
+    InvalidUsername(#[from] UsernameError),
+
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
+    #[error("Remote user-service error: {0}")]
+    RemoteError(String),
+
+    #[error("Unknown error: {0}")]
+    Unknown(String),
+}

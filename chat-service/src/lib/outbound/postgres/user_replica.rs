@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
 
+use crate::domain::user::errors::UserError;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
@@ -29,7 +30,7 @@ impl UserReplicaRepository {
 
 #[async_trait]
 impl ports::UserReplicaRepository for UserReplicaRepository {
-    async fn upsert(&self, user: User) -> Result<(), String> {
+    async fn upsert(&self, user: User) -> Result<(), UserError> {
         sqlx::query!(
             r#"
             INSERT INTO user_replica (id, username, created_at, updated_at, synced_at)
@@ -47,13 +48,13 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| format!("Failed to upsert user replica: {}", e))?;
+        .map_err(|e| UserError::DatabaseError(format!("Failed to upsert user replica: {}", e)))?;
 
         tracing::debug!("User {} upserted in replica", user.id);
         Ok(())
     }
 
-    async fn delete(&self, user_id: UserId) -> Result<(), String> {
+    async fn delete(&self, user_id: UserId) -> Result<(), UserError> {
         let result = sqlx::query!(
             r#"
             DELETE FROM user_replica
@@ -63,7 +64,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| format!("Failed to delete user from replica: {}", e))?;
+        .map_err(|e| UserError::DatabaseError(format!("Failed to delete user from replica: {}", e)))?;
 
         if result.rows_affected() == 0 {
             tracing::warn!("User {} not found in replica for deletion", user_id);
@@ -74,7 +75,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         Ok(())
     }
 
-    async fn get(&self, user_id: UserId) -> Result<Option<User>, String> {
+    async fn get(&self, user_id: UserId) -> Result<Option<User>, UserError> {
         let record = sqlx::query!(
             r#"
             SELECT id, username, created_at, updated_at
@@ -85,7 +86,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| format!("Failed to get user from replica: {}", e))?;
+        .map_err(|e| UserError::DatabaseError(format!("Failed to get user from replica: {}", e)))?;
 
         Ok(record.map(|r| {
             let username = Username::new(r.username)
@@ -99,7 +100,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         }))
     }
 
-    async fn get_many(&self, user_ids: &[UserId]) -> Result<Vec<User>, String> {
+    async fn get_many(&self, user_ids: &[UserId]) -> Result<Vec<User>, UserError> {
         let uuids: Vec<uuid::Uuid> = user_ids.iter().map(|id| *id.as_uuid()).collect();
 
         let records = sqlx::query!(
@@ -112,7 +113,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("Failed to get users from replica: {}", e))?;
+        .map_err(|e| UserError::DatabaseError(format!("Failed to get users from replica: {}", e)))?;
 
         Ok(records
             .into_iter()

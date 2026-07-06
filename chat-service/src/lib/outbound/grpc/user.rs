@@ -1,6 +1,7 @@
 use anyhow::Error;
 use tonic::transport::Channel;
 
+use crate::domain::user::errors::UserError;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
@@ -21,7 +22,7 @@ impl UserServiceClient {
 
 #[async_trait::async_trait]
 impl RemoteUserLookup for UserServiceClient {
-    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, String> {
+    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, UserError> {
         let request = tonic::Request::new(GetUserRequest {
             user_id: user_id.to_string(),
         });
@@ -30,17 +31,14 @@ impl RemoteUserLookup for UserServiceClient {
         let response = client
             .get_user(request)
             .await
-            .map_err(|e| format!("gRPC error: {}", e))?;
+            .map_err(|e| UserError::RemoteError(format!("gRPC error: {}", e)))?;
 
         let result = response.into_inner();
 
         match result.result {
             Some(crate::proto::get_user_response::Result::User(user)) => {
-                let user_id =
-                    UserId::from_string(&user.id).map_err(|e| format!("Invalid user ID: {}", e))?;
-
-                let username = Username::new(user.username)
-                    .map_err(|e| format!("Invalid username from gRPC: {}", e))?;
+                let user_id = UserId::from_string(&user.id)?;
+                let username = Username::new(user.username)?;
 
                 Ok(Some(User::new(
                     user_id,
@@ -49,7 +47,9 @@ impl RemoteUserLookup for UserServiceClient {
                     Default::default(),
                 )))
             }
-            Some(crate::proto::get_user_response::Result::Error(err)) => Err(err),
+            Some(crate::proto::get_user_response::Result::Error(err)) => {
+                Err(UserError::RemoteError(err))
+            }
             None => Ok(None),
         }
     }

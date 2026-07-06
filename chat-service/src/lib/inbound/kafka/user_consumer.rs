@@ -10,7 +10,7 @@ use rdkafka::Message;
 use thiserror::Error;
 
 use crate::config::Config;
-use crate::outbound::kafka::messages::UserEventMessage;
+use crate::domain::user::errors::UserError;
 use crate::domain::user::events::UserCreatedEvent;
 use crate::domain::user::events::UserDeletedEvent;
 use crate::domain::user::events::UserEvent;
@@ -19,6 +19,7 @@ use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::UserReplicaRepository;
+use crate::outbound::kafka::messages::UserEventMessage;
 
 #[derive(Debug, Error)]
 enum MessageProcessingError {
@@ -129,11 +130,11 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
 
         self.handle_event(event)
             .await
-            .map_err(MessageProcessingError::HandlingError)
+            .map_err(|e| MessageProcessingError::HandlingError(e.to_string()))
     }
 
     /// Handle a user event by updating the local replica
-    async fn handle_event(&self, event: UserEvent) -> Result<(), String> {
+    async fn handle_event(&self, event: UserEvent) -> Result<(), UserError> {
         match event {
             UserEvent::UserCreated(created_event) => self.handle_user_created(created_event).await,
             UserEvent::UserUpdated(updated_event) => self.handle_user_updated(updated_event).await,
@@ -142,14 +143,11 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
     }
 
     /// Handle UserCreated event - insert user into replica
-    async fn handle_user_created(&self, event: UserCreatedEvent) -> Result<(), String> {
+    async fn handle_user_created(&self, event: UserCreatedEvent) -> Result<(), UserError> {
         tracing::info!("Handling UserCreated event for user {}", event.user_id);
 
-        let user_id = UserId::from_string(&event.user_id)
-            .map_err(|error| format!("Invalid user_id in UserCreated event: {}", error))?;
-
-        let username = Username::new(event.username.clone())
-            .map_err(|error| format!("Invalid username in UserCreated event: {}", error))?;
+        let user_id = UserId::from_string(&event.user_id)?;
+        let username = Username::new(event.username.clone())?;
 
         let user = User {
             id: user_id,
@@ -170,11 +168,10 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
     }
 
     /// Handle UserUpdated event - update user in replica
-    async fn handle_user_updated(&self, event: UserUpdatedEvent) -> Result<(), String> {
+    async fn handle_user_updated(&self, event: UserUpdatedEvent) -> Result<(), UserError> {
         tracing::info!("Handling UserUpdated event for user {}", event.user_id);
 
-        let user_id = UserId::from_string(&event.user_id)
-            .map_err(|error| format!("Invalid user_id in UserUpdated event: {}", error))?;
+        let user_id = UserId::from_string(&event.user_id)?;
 
         // Get existing user to preserve created_at
         let existing_user = self.user_replica_repository.get(user_id).await?;
@@ -189,8 +186,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
                 Utc::now()
             });
 
-        let username = Username::new(event.username.clone())
-            .map_err(|error| format!("Invalid username in UserUpdated event: {}", error))?;
+        let username = Username::new(event.username.clone())?;
 
         let user = User {
             id: user_id,
@@ -211,11 +207,10 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
     }
 
     /// Handle UserDeleted event - remove user from replica
-    async fn handle_user_deleted(&self, event: UserDeletedEvent) -> Result<(), String> {
+    async fn handle_user_deleted(&self, event: UserDeletedEvent) -> Result<(), UserError> {
         tracing::info!("Handling UserDeleted event for user {}", event.user_id);
 
-        let user_id = UserId::from_string(&event.user_id)
-            .map_err(|error| format!("Invalid user_id in UserDeleted event: {}", error))?;
+        let user_id = UserId::from_string(&event.user_id)?;
 
         self.user_replica_repository.delete(user_id).await?;
 

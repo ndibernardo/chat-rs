@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::domain::user::errors::UserError;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
+use crate::domain::user::ports::RemoteUserLookup;
 use crate::domain::user::ports::UserReplicaRepository;
 use crate::domain::user::ports::UserResolver;
-use crate::domain::user::ports::RemoteUserLookup;
 
 /// Resolves users from the local replica, falling back to user-service via gRPC when not found.
 ///
@@ -45,7 +46,7 @@ where
     R: UserReplicaRepository + 'static,
     C: RemoteUserLookup + 'static,
 {
-    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String> {
+    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError> {
         if let Some(user) = self.replica.get(user_id).await? {
             return Ok(Some(user));
         }
