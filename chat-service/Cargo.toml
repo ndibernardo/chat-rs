@@ -15,11 +15,12 @@ path = "src/bin/server/main.rs"
 [dependencies]
 # gRPC
 tonic = { workspace = true }
+tonic-prost = { workspace = true }
 prost = { workspace = true }
 
 # Web framework (for REST API and WebSocket)
 axum = { workspace = true }
-axum-extra = { version = "0.9", features = ["typed-header"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
@@ -64,4 +65,4 @@ mockall = "0.13"
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-prost-build = { workspace = true }
