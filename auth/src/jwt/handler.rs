@@ -1,3 +1,4 @@
+use jsonwebtoken::dangerous::insecure_decode;
 use jsonwebtoken::decode;
 use jsonwebtoken::encode;
 use jsonwebtoken::Algorithm;
@@ -106,12 +107,8 @@ impl JwtHandler {
         &self,
         token: &str,
     ) -> Result<T, JwtError> {
-        let mut validation = Validation::new(self.algorithm);
-        validation.insecure_disable_signature_validation();
-        validation.required_spec_claims.clear();
-
-        let token_data = decode::<T>(token, &self.decoding_key, &validation)
-            .map_err(|e| JwtError::DecodingFailed(e.to_string()))?;
+        let token_data =
+            insecure_decode::<T>(token).map_err(|e| JwtError::DecodingFailed(e.to_string()))?;
 
         Ok(token_data.claims)
     }

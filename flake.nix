@@ -48,6 +48,8 @@
               openssl
               postgresql
               openssl.dev
+              curl
+              curl.dev
               protobuf
               nixd
               nixfmt

@@ -40,8 +40,11 @@ services:
   cassandra-test:
     image: cassandra:4.1
     container_name: cassandra-test
+    # Must match the internal port: the scylla driver discovers peer addresses via
+    # system.peers/system.local and pairs them with the contact point's port, so a
+    # remapped host port (e.g. 9043:9042) breaks reconnection once topology is fetched.
     ports:
-      - "9043:9042"
+      - "9042:9042"
     volumes:
       - cassandra_test_data:/var/lib/cassandra
     environment:

@@ -15,6 +15,7 @@ path = "src/bin/server/main.rs"
 [dependencies]
 # gRPC
 tonic = { workspace = true }
+tonic-prost = { workspace = true }
 prost = { workspace = true }
 
 # Web framework (for REST API)
@@ -66,4 +67,4 @@ reqwest = { version = "0.12", features = ["json", "cookies"] }
 mockall = "0.13"
 
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-prost-build = { workspace = true }

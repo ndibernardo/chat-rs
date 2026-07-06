@@ -75,9 +75,9 @@ pub fn create_router(
     let api_routes = Router::new()
         .route("/api/channels", post(create_channel))
         .route("/api/channels/public", get(list_public_channels))
-        .route("/api/channels/:channel_id", get(get_channel))
+        .route("/api/channels/{channel_id}", get(get_channel))
         .route(
-            "/api/channels/:channel_id/messages",
+            "/api/channels/{channel_id}/messages",
             get(get_channel_messages),
         )
         .route_layer(middleware::from_fn_with_state(
@@ -85,7 +85,7 @@ pub fn create_router(
             auth_middleware::authenticate,
         ));
 
-    let ws_routes = Router::new().route("/ws/channels/:channel_id", get(websocket_handler));
+    let ws_routes = Router::new().route("/ws/channels/{channel_id}", get(websocket_handler));
 
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|request: &Request<Body>| {

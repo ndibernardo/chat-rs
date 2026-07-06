@@ -1,23 +1,24 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["auth", "user-service", "chat-service"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["ndibernardo"]
 
 [workspace.dependencies]
 # gRPC and Protocol Buffers
-tonic = "0.11"
-tonic-build = "0.11"
-prost = "0.12"
+tonic = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+prost = "0.14"
 
 # Web framework
-axum = { version = "0.7", features = ["ws", "macros"] }
+axum = { version = "0.8", features = ["ws", "macros"] }
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 futures = "0.3"
 
 # Serialization
@@ -25,8 +26,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Database - PostgreSQL
-sqlx = { version = "0.7", features = [
-    "runtime-tokio-rustls",
+sqlx = { version = "0.9", features = [
+    "runtime-tokio",
+    "tls-rustls",
     "postgres",
     "uuid",
     "chrono",
@@ -34,14 +36,14 @@ sqlx = { version = "0.7", features = [
 ] }
 
 # Database - Cassandra
-scylla = { version = "0.12", features = ["ssl", "chrono"] }
+scylla = { version = "1.7", features = ["chrono-04"] }
 
 # Types
 uuid = { version = "1.6", features = ["v1", "v4", "v7", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Email
@@ -55,13 +57,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
-config = "0.14"
+config = "0.15"
 
 # Password hashing
-argon2 = "0.5"
+argon2 = { version = "0.5", features = ["std"] }
 
 # JWT for auth
-jsonwebtoken = "9"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
 # Kafka
-rdkafka = { version = "0.36", features = ["cmake-build"] }
+rdkafka = { version = "0.39", features = ["cmake-build"] }

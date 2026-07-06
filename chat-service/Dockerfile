@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.91-bookworm AS builder
+FROM rust:1.96-bookworm AS builder
 
 WORKDIR /app
 
@@ -7,12 +7,14 @@ WORKDIR /app
 # - protobuf-compiler: for gRPC/protobuf
 # - cmake: for rdkafka-sys
 # - libssl-dev, pkg-config: for SSL/crypto
+# - libcurl4-openssl-dev: for rdkafka-sys's bundled librdkafka (requires curl headers)
 RUN apt-get update && apt-get install -y \
     protobuf-compiler \
     libprotobuf-dev \
     cmake \
     pkg-config \
     libssl-dev \
+    libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set sqlx to offline mode (no database needed for compilation)
