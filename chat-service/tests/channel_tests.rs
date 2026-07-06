@@ -237,6 +237,47 @@ async fn test_get_channel_not_found() {
 }
 
 #[tokio::test]
+async fn test_get_channel_returns_forbidden_for_non_member_of_private_channel() {
+    let app = TestApp::spawn().await;
+    let (creator_token, creator_id) = app.create_test_token();
+    let (outsider_token, _outsider_id) = app.create_test_token();
+
+    let create_response = app
+        .post_authenticated("/api/channels", &creator_token)
+        .json(&json!({
+            "channel_type": "private",
+            "name": "leadership-only",
+            "description": "Restricted channel",
+            "members": [creator_id.to_string()]
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let create_body: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let channel_id = create_body["id"].as_str().unwrap();
+
+    // The creator (a member) can read the channel.
+    let member_response = app
+        .get_authenticated(&format!("/api/channels/{}", channel_id), &creator_token)
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(member_response.status(), StatusCode::OK);
+
+    // An unrelated authenticated user cannot.
+    let outsider_response = app
+        .get_authenticated(&format!("/api/channels/{}", channel_id), &outsider_token)
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(outsider_response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn test_get_channel_with_invalid_uuid() {
     let app = TestApp::spawn().await;
     let (token, _user_id) = app.create_test_token();

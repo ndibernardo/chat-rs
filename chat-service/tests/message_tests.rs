@@ -68,6 +68,38 @@ async fn test_get_messages_from_nonexistent_channel() {
 }
 
 #[tokio::test]
+async fn test_get_channel_messages_returns_forbidden_for_non_member_of_private_channel() {
+    let app = TestApp::spawn().await;
+    let (creator_token, creator_id) = app.create_test_token();
+    let (outsider_token, _outsider_id) = app.create_test_token();
+
+    let create_response = app
+        .post_authenticated("/api/channels", &creator_token)
+        .json(&json!({
+            "channel_type": "private",
+            "name": "incident-response-private",
+            "members": [creator_id.to_string()]
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let create_body: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let channel_id = create_body["id"].as_str().unwrap();
+
+    let response = app
+        .get_authenticated(&format!("/api/channels/{}/messages", channel_id), &outsider_token)
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn test_get_messages_with_invalid_channel_id() {
     let app = TestApp::spawn().await;
     let (token, _user_id) = app.create_test_token();
