@@ -24,9 +24,9 @@ pub trait UserResolver: Send + Sync + 'static {
     async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String>;
 }
 
-/// Port for user-service communication (via gRPC).
+/// Port for looking up a user from the remote user-service (via gRPC).
 #[async_trait]
-pub trait UserServicePort: Send + Sync + 'static {
+pub trait RemoteUserLookup: Send + Sync + 'static {
     /// Get user by ID from user-service.
     ///
     /// # Arguments

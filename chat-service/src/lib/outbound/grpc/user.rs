@@ -4,7 +4,7 @@ use tonic::transport::Channel;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
-use crate::domain::user::ports::UserServicePort;
+use crate::domain::user::ports::RemoteUserLookup;
 use crate::proto::user_service_client::UserServiceClient as ProtoUserServiceClient;
 use crate::proto::GetUserRequest;
 
@@ -20,7 +20,7 @@ impl UserServiceClient {
 }
 
 #[async_trait::async_trait]
-impl UserServicePort for UserServiceClient {
+impl RemoteUserLookup for UserServiceClient {
     async fn get_user(&self, user_id: UserId) -> Result<Option<User>, String> {
         let request = tonic::Request::new(GetUserRequest {
             user_id: user_id.to_string(),

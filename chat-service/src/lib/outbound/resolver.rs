@@ -6,7 +6,7 @@ use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserReplicaRepository;
 use crate::domain::user::ports::UserResolver;
-use crate::domain::user::ports::UserServicePort;
+use crate::domain::user::ports::RemoteUserLookup;
 
 /// Resolves users from the local replica, falling back to user-service via gRPC when not found.
 ///
@@ -15,7 +15,7 @@ use crate::domain::user::ports::UserServicePort;
 pub struct ReplicaWithFallback<R, C>
 where
     R: UserReplicaRepository,
-    C: UserServicePort,
+    C: RemoteUserLookup,
 {
     replica: Arc<R>,
     client: Arc<C>,
@@ -24,7 +24,7 @@ where
 impl<R, C> ReplicaWithFallback<R, C>
 where
     R: UserReplicaRepository,
-    C: UserServicePort,
+    C: RemoteUserLookup,
 {
     /// Create a new resolver that checks the replica before calling user-service.
     ///
@@ -43,7 +43,7 @@ where
 impl<R, C> UserResolver for ReplicaWithFallback<R, C>
 where
     R: UserReplicaRepository + 'static,
-    C: UserServicePort + 'static,
+    C: RemoteUserLookup + 'static,
 {
     async fn resolve(&self, user_id: UserId) -> Result<Option<User>, String> {
         if let Some(user) = self.replica.get(user_id).await? {
