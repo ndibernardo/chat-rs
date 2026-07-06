@@ -4,6 +4,7 @@ use auth::Authenticator;
 use auth::JwtHandler;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::AssertSqlSafe;
 use sqlx::Connection;
 use sqlx::Executor;
 use sqlx::PgConnection;
@@ -161,7 +162,8 @@ impl TestDb {
             .expect("Failed to connect to Postgres");
 
         // Create test database
-        conn.execute(format!(r#"CREATE DATABASE "{}";"#, db_name).as_str())
+        let create_db_query = format!(r#"CREATE DATABASE "{}";"#, db_name);
+        conn.execute(AssertSqlSafe(create_db_query))
             .await
             .expect("Failed to create test database");
 
@@ -198,17 +200,15 @@ impl Drop for TestDb {
 
             if let Ok(mut conn) = PgConnection::connect(&postgres_url).await {
                 // Terminate existing connections
-                let _ = conn.execute(
-                    format!(
-                        r#"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}';"#,
-                        db_name
-                    ).as_str()
-                ).await;
+                let terminate_query = format!(
+                    r#"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}';"#,
+                    db_name
+                );
+                let _ = conn.execute(AssertSqlSafe(terminate_query)).await;
 
                 // Drop database
-                let _ = conn
-                    .execute(format!(r#"DROP DATABASE IF EXISTS "{}";"#, db_name).as_str())
-                    .await;
+                let drop_db_query = format!(r#"DROP DATABASE IF EXISTS "{}";"#, db_name);
+                let _ = conn.execute(AssertSqlSafe(drop_db_query)).await;
             }
         });
     }
