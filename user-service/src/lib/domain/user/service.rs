@@ -52,7 +52,7 @@ where
     async fn create_user(&self, command: CreateUserCommand) -> Result<User, UserError> {
         let password_hash = self
             .password_hasher
-            .hash(&command.password)
+            .hash(command.password.as_str())
             .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))?;
 
         let user = User::new(
@@ -110,7 +110,7 @@ where
             .password
             .map(|p| {
                 self.password_hasher
-                    .hash(&p)
+                    .hash(p.as_str())
                     .map_err(|e| UserError::Password(PasswordError::HashingFailed(e.to_string())))
             })
             .transpose()?;
@@ -150,6 +150,7 @@ mod tests {
 
     use super::*;
     use crate::domain::user::models::EmailAddress;
+    use crate::domain::user::models::Password;
     use crate::domain::user::models::Username;
     use crate::user::errors::EventPublisherError;
 
@@ -215,7 +216,7 @@ mod tests {
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
             email: EmailAddress::new("miles.davis@example.com").unwrap(),
-            password: "K1nd-0f-Blue_1959!".to_string(),
+            password: Password::new("K1nd-0f-Blue_1959!"),
         };
 
         let result = service.create_user(command).await;
@@ -243,7 +244,7 @@ mod tests {
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
             email: EmailAddress::new("john.coltrane@example.com").unwrap(),
-            password: "G1ant-St3ps_1960!".to_string(),
+            password: Password::new("G1ant-St3ps_1960!"),
         };
 
         let result = service.create_user(command).await;
@@ -267,7 +268,7 @@ mod tests {
         let command = CreateUserCommand {
             username: Username::new("john-coltrane").unwrap(),
             email: EmailAddress::new("miles.davis@example.com").unwrap(),
-            password: "G1ant-St3ps_1960!".to_string(),
+            password: Password::new("G1ant-St3ps_1960!"),
         };
 
         let result = service.create_user(command).await;
@@ -462,7 +463,7 @@ mod tests {
         let command = UpdateUserCommand {
             username: Some(Username::new("bird-parker").unwrap()),
             email: Some(EmailAddress::new("bird.parker@example.com").unwrap()),
-            password: Some("0mnivore_Jazz_1945!".to_string()),
+            password: Some(Password::new("0mnivore_Jazz_1945!")),
         };
 
         let result = service.update_user(&user_id, command).await;
@@ -556,7 +557,7 @@ mod tests {
         let command = CreateUserCommand {
             username: Username::new("bill-evans").unwrap(),
             email: EmailAddress::new("bill.evans@example.com").unwrap(),
-            password: "W@ltz-F0r-Debb1y_1961!".to_string(),
+            password: Password::new("W@ltz-F0r-Debb1y_1961!"),
         };
 
         let result = service.create_user(command).await;

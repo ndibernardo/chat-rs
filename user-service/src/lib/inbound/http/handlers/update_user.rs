@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::domain::user::models::EmailAddress;
+use crate::domain::user::models::Password;
 use crate::domain::user::models::UpdateUserCommand;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
@@ -23,7 +24,7 @@ use crate::user::ports::UserService;
 pub struct UpdateUserRequest {
     pub username: Option<String>,
     pub email: Option<String>,
-    pub password: Option<String>,
+    pub password: Option<Password>,
 }
 
 impl UpdateUserRequest {

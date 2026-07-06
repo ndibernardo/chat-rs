@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use super::ApiError;
 use super::ApiSuccess;
+use crate::domain::user::models::Password;
 use crate::domain::user::models::User;
 use crate::domain::user::ports::UserService;
 use crate::inbound::http::router::AppState;
@@ -40,7 +41,7 @@ pub async fn authenticate(
 
     let result = state
         .authenticator
-        .authenticate(&body.password, user.password_hash(), &claims)
+        .authenticate(body.password.as_str(), user.password_hash(), &claims)
         .map_err(|e| match e {
             auth::AuthenticationError::InvalidCredentials => {
                 ApiError::Unauthorized("Invalid credentials".to_string())
@@ -65,7 +66,7 @@ pub async fn authenticate(
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthenticateRequestBody {
     username: String,
-    password: String,
+    password: Password,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

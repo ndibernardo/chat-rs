@@ -3,7 +3,10 @@ use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Deserialize;
 use uuid::Uuid;
+use zeroize::Zeroize;
+use zeroize::ZeroizeOnDrop;
 
 use crate::user::errors::EmailError;
 use crate::user::errors::UserIdError;
@@ -178,16 +181,40 @@ impl EmailAddress {
     }
 }
 
+/// Plaintext password, held only long enough to be hashed or verified.
+///
+/// `Debug` is redacted so the password can never leak via `tracing::debug!(?command)`
+/// or similar, and the buffer is zeroized on drop. There is deliberately no `Serialize`
+/// impl, so a command carrying one can never be echoed back in a response.
+#[derive(Clone, PartialEq, Eq, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct Password(String);
+
+impl Password {
+    pub fn new(password: impl Into<String>) -> Self {
+        Self(password.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Password").field(&"[REDACTED]").finish()
+    }
+}
+
 /// Command to create a new user.
 #[derive(Debug)]
 pub struct CreateUserCommand {
     pub username: Username,
     pub email: EmailAddress,
-    pub password: String,
+    pub password: Password,
 }
 
 impl CreateUserCommand {
-    pub fn new(username: Username, email: EmailAddress, password: String) -> Self {
+    pub fn new(username: Username, email: EmailAddress, password: Password) -> Self {
         Self { username, email, password }
     }
 }
@@ -197,5 +224,5 @@ impl CreateUserCommand {
 pub struct UpdateUserCommand {
     pub username: Option<Username>,
     pub email: Option<EmailAddress>,
-    pub password: Option<String>,
+    pub password: Option<Password>,
 }

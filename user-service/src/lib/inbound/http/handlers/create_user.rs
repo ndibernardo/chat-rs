@@ -11,6 +11,7 @@ use super::ApiError;
 use super::ApiSuccess;
 use crate::domain::user::models::CreateUserCommand;
 use crate::domain::user::models::EmailAddress;
+use crate::domain::user::models::Password;
 use crate::domain::user::models::User;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::UserService;
@@ -35,7 +36,7 @@ pub async fn create_user(
 pub struct CreateUserRequest {
     username: String,
     email: String,
-    password: String,
+    password: Password,
 }
 
 #[derive(Debug, Clone, Error)]
