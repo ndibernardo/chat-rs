@@ -23,25 +23,24 @@ use crate::domain::message::service::Service as MessageService;
 use crate::inbound::middleware as auth_middleware;
 use crate::inbound::websocket::handler::websocket_handler;
 use crate::inbound::websocket::registry::ConnectionRegistry;
-use crate::outbound::grpc::user::UserServiceClient;
-use crate::outbound::kafka::channel_publisher::ChannelEventPublisher;
-use crate::outbound::kafka::message_publisher::MessageEventPublisher;
-use crate::outbound::postgres::channel::ChannelRepository;
-use crate::outbound::postgres::user_replica::UserReplicaRepository;
-use crate::outbound::resolver::ReplicaWithFallback;
-use crate::outbound::scylla::message::MessageRepository;
+use crate::outbound::grpc;
+use crate::outbound::kafka;
+use crate::outbound::postgres;
+use crate::outbound::resolver;
+use crate::outbound::scylla;
 
 /// Unified application state for both HTTP and WebSocket handlers.
 ///
 /// Contains all service dependencies needed across the application.
 #[derive(Clone)]
 pub struct AppState {
-    pub channel_service: Arc<ChannelService<ChannelRepository, ChannelEventPublisher>>,
+    pub channel_service:
+        Arc<ChannelService<postgres::ChannelRepository, kafka::ChannelEventPublisher>>,
     pub message_service: Arc<
         MessageService<
-            MessageRepository,
-            ReplicaWithFallback<UserReplicaRepository, UserServiceClient>,
-            MessageEventPublisher,
+            scylla::MessageRepository,
+            resolver::ReplicaWithFallback<postgres::UserReplicaRepository, grpc::UserServiceClient>,
+            kafka::MessageEventPublisher,
         >,
     >,
     pub connection_registry: Arc<ConnectionRegistry>,
@@ -49,12 +48,12 @@ pub struct AppState {
 }
 
 pub fn create_router(
-    channel_service: Arc<ChannelService<ChannelRepository, ChannelEventPublisher>>,
+    channel_service: Arc<ChannelService<postgres::ChannelRepository, kafka::ChannelEventPublisher>>,
     message_service: Arc<
         MessageService<
-            MessageRepository,
-            ReplicaWithFallback<UserReplicaRepository, UserServiceClient>,
-            MessageEventPublisher,
+            scylla::MessageRepository,
+            resolver::ReplicaWithFallback<postgres::UserReplicaRepository, grpc::UserServiceClient>,
+            kafka::MessageEventPublisher,
         >,
     >,
     connection_registry: Arc<ConnectionRegistry>,

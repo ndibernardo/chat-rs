@@ -10,14 +10,11 @@ use chat_service::inbound::http::create_router;
 use chat_service::inbound::kafka::consumer::EventConsumer;
 use chat_service::inbound::kafka::user_consumer::UserEventsConsumer;
 use chat_service::inbound::websocket::registry::ConnectionRegistry;
-use chat_service::outbound::grpc::user::UserServiceClient;
-use chat_service::outbound::kafka::channel_publisher::ChannelEventPublisher;
-use chat_service::outbound::kafka::message_publisher::MessageEventPublisher;
-use chat_service::outbound::kafka::producer::EventProducer;
-use chat_service::outbound::postgres::channel::ChannelRepository;
-use chat_service::outbound::postgres::user_replica::UserReplicaRepository;
-use chat_service::outbound::resolver::ReplicaWithFallback;
-use chat_service::outbound::scylla::message::MessageRepository;
+use chat_service::outbound::grpc;
+use chat_service::outbound::kafka;
+use chat_service::outbound::postgres;
+use chat_service::outbound::resolver;
+use chat_service::outbound::scylla;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -68,20 +65,20 @@ async fn main() -> Result<(), Error> {
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
     let connection_registry = Arc::new(ConnectionRegistry::new());
 
-    let channel_repository = Arc::new(ChannelRepository::new(pg_pool.clone()));
-    let message_repository = Arc::new(MessageRepository::new(&config).await?);
-    let user_repository = Arc::new(UserReplicaRepository::new(pg_pool));
+    let channel_repository = Arc::new(postgres::ChannelRepository::new(pg_pool.clone()));
+    let message_repository = Arc::new(scylla::MessageRepository::new(&config).await?);
+    let user_repository = Arc::new(postgres::UserReplicaRepository::new(pg_pool));
 
-    let event_producer = Arc::new(EventProducer::new(&config)?);
+    let event_producer = Arc::new(kafka::EventProducer::new(&config)?);
     let message_event_consumer = EventConsumer::new(
         &config,
         Arc::clone(&connection_registry) as Arc<dyn MessageBroadcaster>,
     )?;
     let user_events_consumer = UserEventsConsumer::new(&config, Arc::clone(&user_repository))?;
     let channel_event_publisher =
-        Arc::new(ChannelEventPublisher::new(Arc::clone(&event_producer)));
+        Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(&event_producer)));
     let message_event_publisher =
-        Arc::new(MessageEventPublisher::new(Arc::clone(&event_producer)));
+        Arc::new(kafka::MessageEventPublisher::new(Arc::clone(&event_producer)));
 
     let channel_service = Arc::new(ChannelService::new(
         channel_repository,
@@ -89,11 +86,14 @@ async fn main() -> Result<(), Error> {
     ));
 
     let grpc_user_client = Arc::new(
-        UserServiceClient::new(&config.user_service.grpc_url)
+        grpc::UserServiceClient::new(&config.user_service.grpc_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to user-service: {}", e))?,
     );
-    let user_resolver = Arc::new(ReplicaWithFallback::new(user_repository, grpc_user_client));
+    let user_resolver = Arc::new(resolver::ReplicaWithFallback::new(
+        user_repository,
+        grpc_user_client,
+    ));
 
     let message_service = Arc::new(MessageService::new(
         message_repository,

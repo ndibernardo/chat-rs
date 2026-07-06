@@ -15,14 +15,11 @@ use chat_service::domain::channel::service::Service as ChannelService;
 use chat_service::domain::message::service::Service as MessageService;
 use chat_service::inbound::http::router::create_router;
 use chat_service::inbound::websocket::registry::ConnectionRegistry;
-use chat_service::outbound::kafka::channel_publisher::ChannelEventPublisher;
-use chat_service::outbound::kafka::message_publisher::MessageEventPublisher;
-use chat_service::outbound::kafka::producer::EventProducer;
-use chat_service::outbound::grpc::user::UserServiceClient;
-use chat_service::outbound::postgres::channel::ChannelRepository;
-use chat_service::outbound::scylla::message::MessageRepository;
-use chat_service::outbound::postgres::user_replica::UserReplicaRepository;
-use chat_service::outbound::resolver::ReplicaWithFallback;
+use chat_service::outbound::grpc;
+use chat_service::outbound::kafka;
+use chat_service::outbound::postgres;
+use chat_service::outbound::resolver;
+use chat_service::outbound::scylla as chat_scylla;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use sqlx::postgres::PgConnectOptions;
@@ -63,7 +60,7 @@ impl TestApp {
         let address = format!("http://127.0.0.1:{}", port);
 
         // Create repositories
-        let channel_repo = Arc::new(ChannelRepository::new(db.pg_pool.clone()));
+        let channel_repo = Arc::new(postgres::ChannelRepository::new(db.pg_pool.clone()));
 
         // Get configuration from environment
         let cassandra_nodes = std::env::var("CASSANDRA_NODES")
@@ -110,29 +107,33 @@ impl TestApp {
 
         // Create adapters
         let message_repo = Arc::new(
-            MessageRepository::new(&config)
+            chat_scylla::MessageRepository::new(&config)
                 .await
                 .expect("Failed to create message repository"),
         );
 
-        let kafka_producer =
-            Arc::new(EventProducer::new(&config).expect("Failed to create Kafka producer"));
+        let kafka_producer = Arc::new(
+            kafka::EventProducer::new(&config).expect("Failed to create Kafka producer"),
+        );
         let channel_event_publisher =
-            Arc::new(ChannelEventPublisher::new(Arc::clone(&kafka_producer)));
-        let event_publisher = Arc::new(MessageEventPublisher::new(kafka_producer));
+            Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(&kafka_producer)));
+        let event_publisher = Arc::new(kafka::MessageEventPublisher::new(kafka_producer));
 
         // Create services
         let channel_service = Arc::new(ChannelService::new(channel_repo.clone(), channel_event_publisher));
 
-        let user_replica_repo = Arc::new(UserReplicaRepository::new(db.pg_pool.clone()));
+        let user_replica_repo = Arc::new(postgres::UserReplicaRepository::new(db.pg_pool.clone()));
         let user_service_grpc_url = std::env::var("USER_SERVICE_GRPC_URL")
             .unwrap_or_else(|_| "http://localhost:50052".to_string());
         let grpc_user_client = Arc::new(
-            UserServiceClient::new(&user_service_grpc_url)
+            grpc::UserServiceClient::new(&user_service_grpc_url)
                 .await
                 .expect("Failed to connect to user-service gRPC"),
         );
-        let user_resolver = Arc::new(ReplicaWithFallback::new(user_replica_repo, grpc_user_client));
+        let user_resolver = Arc::new(resolver::ReplicaWithFallback::new(
+            user_replica_repo,
+            grpc_user_client,
+        ));
 
         let message_service = Arc::new(MessageService::new(
             message_repo,
