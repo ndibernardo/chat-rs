@@ -50,11 +50,11 @@ impl TopicSharder {
     ///
     /// # Example
     /// ```
-    /// use chat_service::outbound::events::topic::TopicSharder;
+    /// use chat_service::outbound::kafka::topic::TopicSharder;
     ///
     /// let sharder = TopicSharder::new(16, "chat.messages")?;
     /// // Creates topics: chat.messages.0, chat.messages.1, ..., chat.messages.15
-    /// # Ok::<(), chat_service::outbound::events::topic::ShardingError>(())
+    /// # Ok::<(), chat_service::outbound::kafka::topic::ShardingError>(())
     /// ```
     pub fn new(num_shards: u32, topic_prefix: &str) -> Result<Self, ShardingError> {
         if num_shards == 0 {

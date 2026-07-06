@@ -17,7 +17,7 @@ use super::messages::ServerMessage;
 use super::messages::WsChannelId;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::message::models::MessageContent;
-use crate::domain::message::ports::MessageServicePort;
+use crate::domain::message::ports::MessageService;
 use crate::domain::user::models::UserId;
 use crate::inbound::http::router::AppState;
 
@@ -171,7 +171,7 @@ async fn process_client_message(
     msg: WebSocketMessage,
     channel_id: ChannelId,
     user_id: UserId,
-    message_service: &dyn MessageServicePort,
+    message_service: &dyn MessageService,
     tx: &tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
 ) -> Result<(), String> {
     match msg {

@@ -1,7 +1,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use crate::domain::channel::ports::ChannelServicePort;
+use crate::domain::channel::ports::ChannelService;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::handlers::ChannelResponseData;

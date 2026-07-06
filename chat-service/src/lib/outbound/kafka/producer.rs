@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
 
 #[derive(Debug, Error)]
-pub enum KafkaProducerError {
+pub enum ProducerError {
     #[error("Failed to send message to Kafka: {0}")]
     SendError(String),
 
@@ -21,13 +21,13 @@ pub enum KafkaProducerError {
     SerializationError(String),
 }
 
-pub struct KafkaEventProducer {
+pub struct EventProducer {
     producer: FutureProducer,
     timeout: Duration,
     sharder: Arc<TopicSharder>,
 }
 
-impl KafkaEventProducer {
+impl EventProducer {
     /// Create a new Kafka event producer with topic sharding
     ///
     /// # Arguments
@@ -71,9 +71,9 @@ impl KafkaEventProducer {
         channel_id: ChannelId,
         key: &str,
         event: &T,
-    ) -> Result<(), KafkaProducerError> {
+    ) -> Result<(), ProducerError> {
         let payload = serde_json::to_string(event)
-            .map_err(|e| KafkaProducerError::SerializationError(e.to_string()))?;
+            .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
         let topic = self.sharder.get_shard_for_channel(channel_id);
 
@@ -91,7 +91,7 @@ impl KafkaEventProducer {
             .await
             .map_err(|(err, _)| {
                 tracing::error!("Failed to send message to Kafka: {}", err);
-                KafkaProducerError::SendError(err.to_string())
+                ProducerError::SendError(err.to_string())
             })?;
 
         tracing::debug!(

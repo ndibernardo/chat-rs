@@ -1,3 +1,3 @@
 pub mod user;
 
-pub use user::GrpcUserServiceClient;
+pub use user::UserServiceClient;

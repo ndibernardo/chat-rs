@@ -3,15 +3,15 @@ mod common;
 use chat_service::domain::user::models::User;
 use chat_service::domain::user::models::UserId;
 use chat_service::domain::user::models::Username;
-use chat_service::domain::user::ports::UserReplicaRepository;
-use chat_service::outbound::repositories::user_replica::PostgresUserReplicaRepository;
+use chat_service::domain::user::ports::UserReplicaRepository as _;
+use chat_service::outbound::postgres::user_replica::UserReplicaRepository;
 use chrono::Utc;
 use common::TestDb;
 
 #[tokio::test]
 async fn test_upsert_new_user() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id = UserId::new();
     let user = User::new(
@@ -38,7 +38,7 @@ async fn test_upsert_new_user() {
 #[tokio::test]
 async fn test_upsert_existing_user() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id = UserId::new();
     let created_at = Utc::now();
@@ -77,7 +77,7 @@ async fn test_upsert_existing_user() {
 #[tokio::test]
 async fn test_delete_user() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id = UserId::new();
 
@@ -107,7 +107,7 @@ async fn test_delete_user() {
 #[tokio::test]
 async fn test_delete_nonexistent_user() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id = UserId::new();
 
@@ -121,7 +121,7 @@ async fn test_delete_nonexistent_user() {
 #[tokio::test]
 async fn test_get_many_users() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id_1 = UserId::new();
     let user_id_2 = UserId::new();
@@ -174,7 +174,7 @@ async fn test_get_many_users() {
 #[tokio::test]
 async fn test_get_many_partial_match() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id_1 = UserId::new();
     let user_id_2 = UserId::new(); // This one won't be inserted
@@ -204,7 +204,7 @@ async fn test_get_many_partial_match() {
 #[tokio::test]
 async fn test_upsert_preserves_unique_constraints() {
     let test_database = TestDb::new().await;
-    let user_replica_repository = PostgresUserReplicaRepository::new(test_database.pg_pool.clone());
+    let user_replica_repository = UserReplicaRepository::new(test_database.pg_pool.clone());
 
     let user_id_1 = UserId::new();
     let user_1 = User::new(

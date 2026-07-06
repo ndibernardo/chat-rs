@@ -9,14 +9,14 @@ use super::models::MessageContent;
 use super::models::MessageId;
 use super::ports::MessageEventPublisher;
 use super::ports::MessageRepository;
-use super::ports::MessageServicePort;
+use super::ports::MessageService;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::ports::ChannelRepository;
 use crate::domain::message::errors::MessageError;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserResolver;
 
-pub struct MessageService<MR, CR, UC, EP>
+pub struct Service<MR, CR, UC, EP>
 where
     MR: MessageRepository,
     CR: ChannelRepository,
@@ -29,7 +29,7 @@ where
     event_publisher: Arc<EP>,
 }
 
-impl<MR, CR, UC, EP> MessageService<MR, CR, UC, EP>
+impl<MR, CR, UC, EP> Service<MR, CR, UC, EP>
 where
     MR: MessageRepository,
     CR: ChannelRepository,
@@ -62,7 +62,7 @@ where
 }
 
 #[async_trait]
-impl<MR, CR, UC, EP> MessageServicePort for MessageService<MR, CR, UC, EP>
+impl<MR, CR, UC, EP> MessageService for Service<MR, CR, UC, EP>
 where
     MR: MessageRepository + 'static,
     CR: ChannelRepository + 'static,
@@ -256,7 +256,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = MessageService::new(
+        let service = Service::new(
             Arc::new(message_repository),
             Arc::new(channel_repository),
             Arc::new(user_resolver),
@@ -288,7 +288,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(None));
 
-        let service = MessageService::new(
+        let service = Service::new(
             Arc::new(message_repository),
             Arc::new(channel_repository),
             Arc::new(user_resolver),
@@ -321,7 +321,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(None));
 
-        let service = MessageService::new(
+        let service = Service::new(
             Arc::new(message_repository),
             Arc::new(channel_repository),
             Arc::new(user_resolver),
@@ -373,7 +373,7 @@ mod tests {
             .times(1)
             .returning(move |_, _, _| Ok(returned.clone()));
 
-        let service = MessageService::new(
+        let service = Service::new(
             Arc::new(message_repository),
             Arc::new(channel_repository),
             Arc::new(user_resolver),
@@ -397,7 +397,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(None));
 
-        let service = MessageService::new(
+        let service = Service::new(
             Arc::new(message_repository),
             Arc::new(channel_repository),
             Arc::new(user_resolver),

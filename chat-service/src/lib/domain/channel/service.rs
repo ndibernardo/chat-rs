@@ -13,10 +13,10 @@ use super::models::PrivateChannel;
 use super::models::PublicChannel;
 use super::ports::ChannelEventPublisher;
 use super::ports::ChannelRepository;
-use super::ports::ChannelServicePort;
+use super::ports::ChannelService;
 use crate::domain::user::models::UserId;
 
-pub struct ChannelService<CR, EP>
+pub struct Service<CR, EP>
 where
     CR: ChannelRepository,
     EP: ChannelEventPublisher,
@@ -25,7 +25,7 @@ where
     event_publisher: Arc<EP>,
 }
 
-impl<CR, EP> ChannelService<CR, EP>
+impl<CR, EP> Service<CR, EP>
 where
     CR: ChannelRepository,
     EP: ChannelEventPublisher,
@@ -39,7 +39,7 @@ where
 }
 
 #[async_trait]
-impl<CR, EP> ChannelServicePort for ChannelService<CR, EP>
+impl<CR, EP> ChannelService for Service<CR, EP>
 where
     CR: ChannelRepository + 'static,
     EP: ChannelEventPublisher + 'static,
@@ -151,8 +151,8 @@ mod tests {
     fn make_service(
         repo: MockTestChannelRepository,
         publisher: MockTestChannelEventPublisher,
-    ) -> ChannelService<MockTestChannelRepository, MockTestChannelEventPublisher> {
-        ChannelService::new(Arc::new(repo), Arc::new(publisher))
+    ) -> Service<MockTestChannelRepository, MockTestChannelEventPublisher> {
+        Service::new(Arc::new(repo), Arc::new(publisher))
     }
 
     #[tokio::test]

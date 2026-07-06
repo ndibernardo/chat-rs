@@ -18,10 +18,10 @@ use chat_service::domain::message::events::MessageSentEvent;
 use chat_service::domain::message::models::Message;
 use chat_service::domain::message::models::MessageContent;
 use chat_service::domain::user::models::UserId;
-use chat_service::outbound::events::messages::ChannelCreatedMessage;
-use chat_service::outbound::events::messages::ChatEventMessage;
-use chat_service::outbound::events::messages::MessageSentMessage;
-use chat_service::outbound::events::producer::KafkaEventProducer;
+use chat_service::outbound::kafka::messages::ChannelCreatedMessage;
+use chat_service::outbound::kafka::messages::ChatEventMessage;
+use chat_service::outbound::kafka::messages::MessageSentMessage;
+use chat_service::outbound::kafka::producer::EventProducer;
 use common::TestDb;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
@@ -30,7 +30,7 @@ use rdkafka::message::Message as KafkaMessage;
 use tokio::time::timeout;
 
 /// Helper to create Kafka producer for testing
-fn create_kafka_producer(kafka_brokers: &str) -> KafkaEventProducer {
+fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
     let config = Config {
         database: DatabaseConfig {
             url: "postgresql://unused".to_string(),
@@ -58,7 +58,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> KafkaEventProducer {
         },
     };
 
-    KafkaEventProducer::new(&config).expect("Failed to create Kafka producer")
+    EventProducer::new(&config).expect("Failed to create Kafka producer")
 }
 
 /// Test that Kafka producer can publish events to sharded topics
@@ -166,7 +166,7 @@ async fn test_kafka_publish_and_consume() {
         .expect("Failed to publish event");
 
     // Calculate which shard this channel_id maps to
-    use chat_service::outbound::events::topic::TopicSharder;
+    use chat_service::outbound::kafka::topic::TopicSharder;
     let sharder = TopicSharder::new(16, "chat.messages").unwrap();
     let topic = sharder.get_shard_for_channel(channel_id);
 
@@ -305,7 +305,7 @@ async fn test_kafka_error_handling() {
 async fn test_kafka_sharding_distribution() {
     use std::collections::HashSet;
 
-    use chat_service::outbound::events::topic::TopicSharder;
+    use chat_service::outbound::kafka::topic::TopicSharder;
 
     let sharder = TopicSharder::new(16, "chat.messages").unwrap();
 
@@ -329,7 +329,7 @@ async fn test_kafka_sharding_distribution() {
 /// Test that the same channel always maps to the same shard (consistency)
 #[tokio::test]
 async fn test_kafka_sharding_consistency() {
-    use chat_service::outbound::events::topic::TopicSharder;
+    use chat_service::outbound::kafka::topic::TopicSharder;
 
     let sharder = TopicSharder::new(16, "chat.messages").unwrap();
 

@@ -37,12 +37,12 @@ enum MessageProcessingError {
 /// This consumer subscribes to ALL topic shards but only broadcasts messages
 /// to channels that have active WebSocket connections on this instance.
 /// This allows horizontal scaling while minimizing unnecessary network traffic.
-pub struct KafkaEventConsumer {
+pub struct EventConsumer {
     consumer: StreamConsumer,
     connection_manager: Arc<ConnectionRegistry>,
 }
 
-impl KafkaEventConsumer {
+impl EventConsumer {
     /// Create a new Kafka event consumer with sharding support
     ///
     /// # Arguments

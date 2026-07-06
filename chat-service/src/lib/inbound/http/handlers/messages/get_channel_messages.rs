@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 
 use crate::domain::channel::models::ChannelId;
-use crate::domain::message::ports::MessageServicePort;
+use crate::domain::message::ports::MessageService;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::handlers::MessageResponseData;

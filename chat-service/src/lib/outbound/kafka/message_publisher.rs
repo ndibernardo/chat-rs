@@ -8,20 +8,20 @@ use async_trait::async_trait;
 use super::messages::ChatEventMessage;
 use super::messages::MessageDeletedMessage;
 use super::messages::MessageSentMessage;
-use super::producer::KafkaEventProducer;
+use super::producer::EventProducer;
 use crate::domain::errors::EventPublisherError;
 use crate::domain::message::events::MessageDeletedEvent;
 use crate::domain::message::events::MessageSentEvent;
-use crate::domain::message::ports::MessageEventPublisher;
+use crate::domain::message::ports;
 
 /// Kafka implementation of MessageEventPublisher.
 ///
 /// Publishes message domain events to Kafka topics using the event producer.
-pub struct KafkaMessageEventPublisher {
-    producer: Arc<KafkaEventProducer>,
+pub struct MessageEventPublisher {
+    producer: Arc<EventProducer>,
 }
 
-impl KafkaMessageEventPublisher {
+impl MessageEventPublisher {
     /// Create a new Kafka message event publisher.
     ///
     /// # Arguments
@@ -29,13 +29,13 @@ impl KafkaMessageEventPublisher {
     ///
     /// # Returns
     /// Configured publisher instance
-    pub fn new(producer: Arc<KafkaEventProducer>) -> Self {
+    pub fn new(producer: Arc<EventProducer>) -> Self {
         Self { producer }
     }
 }
 
 #[async_trait]
-impl MessageEventPublisher for KafkaMessageEventPublisher {
+impl ports::MessageEventPublisher for MessageEventPublisher {
     async fn publish_message_sent(
         &self,
         event: &MessageSentEvent,

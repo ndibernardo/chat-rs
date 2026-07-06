@@ -3,20 +3,20 @@ use std::sync::Arc;
 use anyhow::Error;
 use auth::Authenticator;
 use chat_service::config::Config;
-use chat_service::domain::channel::service::ChannelService;
-use chat_service::domain::message::service::MessageService;
+use chat_service::domain::channel::service::Service as ChannelService;
+use chat_service::domain::message::service::Service as MessageService;
 use chat_service::inbound::http::create_router;
 use chat_service::inbound::websocket::registry::ConnectionRegistry;
-use chat_service::outbound::events::consumer::KafkaEventConsumer;
-use chat_service::outbound::events::channel_publisher::KafkaChannelEventPublisher;
-use chat_service::outbound::events::message_publisher::KafkaMessageEventPublisher;
-use chat_service::outbound::events::producer::KafkaEventProducer;
-use chat_service::outbound::events::user_consumer::UserEventsConsumer;
-use chat_service::outbound::grpc::user::GrpcUserServiceClient;
-use chat_service::outbound::repositories::channel::PostgresChannelRepository;
-use chat_service::outbound::repositories::message::CassandraMessageRepository;
-use chat_service::outbound::repositories::user_replica::PostgresUserReplicaRepository;
-use chat_service::outbound::user::resolver::ReplicaWithFallback;
+use chat_service::outbound::grpc::user::UserServiceClient;
+use chat_service::outbound::kafka::channel_publisher::ChannelEventPublisher;
+use chat_service::outbound::kafka::consumer::EventConsumer;
+use chat_service::outbound::kafka::message_publisher::MessageEventPublisher;
+use chat_service::outbound::kafka::producer::EventProducer;
+use chat_service::outbound::kafka::user_consumer::UserEventsConsumer;
+use chat_service::outbound::postgres::channel::ChannelRepository;
+use chat_service::outbound::postgres::user_replica::UserReplicaRepository;
+use chat_service::outbound::resolver::ReplicaWithFallback;
+use chat_service::outbound::scylla::message::MessageRepository;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -67,18 +67,18 @@ async fn main() -> Result<(), Error> {
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
     let connection_registry = Arc::new(ConnectionRegistry::new());
 
-    let channel_repository = Arc::new(PostgresChannelRepository::new(pg_pool.clone()));
-    let message_repository = Arc::new(CassandraMessageRepository::new(&config).await?);
-    let user_repository = Arc::new(PostgresUserReplicaRepository::new(pg_pool));
+    let channel_repository = Arc::new(ChannelRepository::new(pg_pool.clone()));
+    let message_repository = Arc::new(MessageRepository::new(&config).await?);
+    let user_repository = Arc::new(UserReplicaRepository::new(pg_pool));
 
-    let event_producer = Arc::new(KafkaEventProducer::new(&config)?);
+    let event_producer = Arc::new(EventProducer::new(&config)?);
     let message_event_consumer =
-        KafkaEventConsumer::new(&config, Arc::clone(&connection_registry))?;
+        EventConsumer::new(&config, Arc::clone(&connection_registry))?;
     let user_events_consumer = UserEventsConsumer::new(&config, Arc::clone(&user_repository))?;
     let channel_event_publisher =
-        Arc::new(KafkaChannelEventPublisher::new(Arc::clone(&event_producer)));
+        Arc::new(ChannelEventPublisher::new(Arc::clone(&event_producer)));
     let message_event_publisher =
-        Arc::new(KafkaMessageEventPublisher::new(Arc::clone(&event_producer)));
+        Arc::new(MessageEventPublisher::new(Arc::clone(&event_producer)));
 
     let channel_service = Arc::new(ChannelService::new(
         Arc::clone(&channel_repository),
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Error> {
     ));
 
     let grpc_user_client = Arc::new(
-        GrpcUserServiceClient::new(&config.user_service.grpc_url)
+        UserServiceClient::new(&config.user_service.grpc_url)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to user-service: {}", e))?,
     );

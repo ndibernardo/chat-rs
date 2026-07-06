@@ -14,14 +14,14 @@ use crate::domain::message::errors::MessageError;
 use crate::domain::message::models::Message;
 use crate::domain::message::models::MessageContent;
 use crate::domain::message::models::MessageId;
-use crate::domain::message::ports::MessageRepository;
+use crate::domain::message::ports;
 use crate::domain::user::models::UserId;
 
-pub struct CassandraMessageRepository {
+pub struct MessageRepository {
     session: Arc<Session>,
 }
 
-impl CassandraMessageRepository {
+impl MessageRepository {
     pub async fn new(config: &Config) -> Result<Self, anyhow::Error> {
         let session = SessionBuilder::new()
             .known_nodes(&config.cassandra.nodes)
@@ -84,7 +84,7 @@ impl CassandraMessageRepository {
 }
 
 #[async_trait]
-impl MessageRepository for CassandraMessageRepository {
+impl ports::MessageRepository for MessageRepository {
     async fn create(&self, message: Message) -> Result<Message, MessageError> {
         // Convert domain Uuid to CqlTimeuuid for Cassandra
         let message_id_timeuuid = CqlTimeuuid::from(*message.id.as_uuid());

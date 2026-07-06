@@ -9,14 +9,14 @@ use crate::domain::channel::models::ChannelName;
 use crate::domain::channel::models::DirectChannel;
 use crate::domain::channel::models::PrivateChannel;
 use crate::domain::channel::models::PublicChannel;
-use crate::domain::channel::ports::ChannelRepository;
+use crate::domain::channel::ports;
 use crate::domain::user::models::UserId;
 
-pub struct PostgresChannelRepository {
+pub struct ChannelRepository {
     pool: PgPool,
 }
 
-impl PostgresChannelRepository {
+impl ChannelRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -115,7 +115,7 @@ impl PostgresChannelRepository {
 }
 
 #[async_trait]
-impl ChannelRepository for PostgresChannelRepository {
+impl ports::ChannelRepository for ChannelRepository {
     async fn create(&self, channel: Channel) -> Result<Channel, ChannelError> {
         let name = channel.name().map(|n| n.as_str().to_owned());
         let description = channel.description().map(str::to_owned);

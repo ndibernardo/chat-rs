@@ -13,7 +13,7 @@ use crate::domain::user::models::UserId;
 
 /// Port for message domain service operations.
 #[async_trait]
-pub trait MessageServicePort: Send + Sync + 'static {
+pub trait MessageService: Send + Sync + 'static {
     /// Send a message to a channel.
     ///
     /// Publishes MessageSentEvent to Kafka if event producer is configured.

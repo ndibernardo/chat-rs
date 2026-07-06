@@ -13,7 +13,7 @@ use crate::domain::user::models::UserId;
 
 /// Port for channel domain service operations.
 #[async_trait]
-pub trait ChannelServicePort: Send + Sync + 'static {
+pub trait ChannelService: Send + Sync + 'static {
     /// Create a new channel of specified type.
     ///
     /// # Arguments

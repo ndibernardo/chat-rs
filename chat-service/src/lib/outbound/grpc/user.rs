@@ -5,22 +5,22 @@ use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::UserServicePort;
-use crate::proto::user_service_client::UserServiceClient;
+use crate::proto::user_service_client::UserServiceClient as ProtoUserServiceClient;
 use crate::proto::GetUserRequest;
 
-pub struct GrpcUserServiceClient {
-    client: UserServiceClient<Channel>,
+pub struct UserServiceClient {
+    client: ProtoUserServiceClient<Channel>,
 }
 
-impl GrpcUserServiceClient {
+impl UserServiceClient {
     pub async fn new(url: &str) -> Result<Self, Error> {
-        let client = UserServiceClient::connect(url.to_string()).await?;
+        let client = ProtoUserServiceClient::connect(url.to_string()).await?;
         Ok(Self { client })
     }
 }
 
 #[async_trait::async_trait]
-impl UserServicePort for GrpcUserServiceClient {
+impl UserServicePort for UserServiceClient {
     async fn get_user(&self, user_id: UserId) -> Result<Option<User>, String> {
         let request = tonic::Request::new(GetUserRequest {
             user_id: user_id.to_string(),

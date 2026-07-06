@@ -7,20 +7,20 @@ use super::messages::ChannelDeletedMessage;
 use super::messages::ChatEventMessage;
 use super::messages::UserJoinedChannelMessage;
 use super::messages::UserLeftChannelMessage;
-use super::producer::KafkaEventProducer;
+use super::producer::EventProducer;
 use crate::domain::channel::events::ChannelCreatedEvent;
 use crate::domain::channel::events::ChannelDeletedEvent;
 use crate::domain::channel::events::UserJoinedChannelEvent;
 use crate::domain::channel::events::UserLeftChannelEvent;
-use crate::domain::channel::ports::ChannelEventPublisher;
+use crate::domain::channel::ports;
 use crate::domain::errors::EventPublisherError;
 
 /// Kafka implementation of ChannelEventPublisher.
-pub struct KafkaChannelEventPublisher {
-    producer: Arc<KafkaEventProducer>,
+pub struct ChannelEventPublisher {
+    producer: Arc<EventProducer>,
 }
 
-impl KafkaChannelEventPublisher {
+impl ChannelEventPublisher {
     /// Create a new Kafka channel event publisher.
     ///
     /// # Arguments
@@ -28,13 +28,13 @@ impl KafkaChannelEventPublisher {
     ///
     /// # Returns
     /// Configured publisher instance
-    pub fn new(producer: Arc<KafkaEventProducer>) -> Self {
+    pub fn new(producer: Arc<EventProducer>) -> Self {
         Self { producer }
     }
 }
 
 #[async_trait]
-impl ChannelEventPublisher for KafkaChannelEventPublisher {
+impl ports::ChannelEventPublisher for ChannelEventPublisher {
     async fn publish_channel_created(
         &self,
         event: &ChannelCreatedEvent,

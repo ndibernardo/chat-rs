@@ -4,17 +4,17 @@ use sqlx::PgPool;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
-use crate::domain::user::ports::UserReplicaRepository;
+use crate::domain::user::ports;
 
 /// PostgreSQL implementation of UserReplicaRepository.
 ///
 /// Stores denormalized user data from user-service events in a local replica table.
 /// This enables fast read-path queries without calling user-service gRPC.
-pub struct PostgresUserReplicaRepository {
+pub struct UserReplicaRepository {
     pool: PgPool,
 }
 
-impl PostgresUserReplicaRepository {
+impl UserReplicaRepository {
     /// Create a new PostgreSQL user replica repository.
     ///
     /// # Arguments
@@ -28,7 +28,7 @@ impl PostgresUserReplicaRepository {
 }
 
 #[async_trait]
-impl UserReplicaRepository for PostgresUserReplicaRepository {
+impl ports::UserReplicaRepository for UserReplicaRepository {
     async fn upsert(&self, user: User) -> Result<(), String> {
         sqlx::query!(
             r#"

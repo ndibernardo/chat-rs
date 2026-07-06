@@ -1,4 +1,5 @@
-pub mod events;
 pub mod grpc;
-pub mod repositories;
-pub mod user;
+pub mod kafka;
+pub mod postgres;
+pub mod resolver;
+pub mod scylla;
