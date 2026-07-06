@@ -61,6 +61,7 @@ config = "0.15"
 
 # Password hashing
 argon2 = { version = "0.5", features = ["std"] }
+zeroize = { version = "1.8", features = ["derive"] }
 
 # JWT for auth
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
