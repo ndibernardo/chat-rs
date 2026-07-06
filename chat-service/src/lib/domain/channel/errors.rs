@@ -21,6 +21,13 @@ pub enum ChannelNameError {
     TooLong { max: usize, actual: usize },
 }
 
+/// Error type for ChannelType parsing failures
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum ChannelTypeError {
+    #[error("Unknown channel type: {0}")]
+    Unknown(String),
+}
+
 /// Top-level error type for all channel-related operations
 #[derive(Debug, Error)]
 pub enum ChannelError {
@@ -32,6 +39,9 @@ pub enum ChannelError {
 
     #[error("Invalid user ID: {0}")]
     InvalidUserId(#[from] UserIdError),
+
+    #[error("Invalid channel type: {0}")]
+    InvalidChannelType(#[from] ChannelTypeError),
 
     #[error("Channel not found: {0}")]
     NotFound(ChannelId),

@@ -8,7 +8,6 @@ use uuid::Uuid;
 
 use crate::domain::channel::errors::ChannelIdError;
 use crate::domain::channel::models::ChannelId;
-use crate::domain::channel::models::ChannelType;
 use crate::domain::message::errors::MessageIdError;
 use crate::domain::message::models::MessageId;
 use crate::domain::user::errors::UserIdError;
@@ -131,34 +130,5 @@ impl UserIdMessage {
     /// Convert to domain UserId.
     pub fn into_domain(self) -> UserId {
         UserId::from(self.0)
-    }
-}
-
-/// Serializable wrapper for ChannelType.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChannelTypeMessage {
-    Public,
-    Private,
-    Direct,
-}
-
-impl From<ChannelType> for ChannelTypeMessage {
-    fn from(channel_type: ChannelType) -> Self {
-        match channel_type {
-            ChannelType::Public => ChannelTypeMessage::Public,
-            ChannelType::Private => ChannelTypeMessage::Private,
-            ChannelType::Direct => ChannelTypeMessage::Direct,
-        }
-    }
-}
-
-impl From<ChannelTypeMessage> for ChannelType {
-    fn from(msg: ChannelTypeMessage) -> Self {
-        match msg {
-            ChannelTypeMessage::Public => ChannelType::Public,
-            ChannelTypeMessage::Private => ChannelType::Private,
-            ChannelTypeMessage::Direct => ChannelType::Direct,
-        }
     }
 }

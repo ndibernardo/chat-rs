@@ -99,11 +99,7 @@ impl From<&Channel> for ChannelResponseData {
     fn from(channel: &Channel) -> Self {
         Self {
             id: channel.id().into(),
-            channel_type: match channel {
-                Channel::Public(_) => "public".to_string(),
-                Channel::Private(_) => "private".to_string(),
-                Channel::Direct(_) => "direct".to_string(),
-            },
+            channel_type: channel.channel_type().as_str().to_string(),
             name: channel.name().map(|n| n.as_str().to_string()),
             description: channel.description().map(|d| d.to_string()),
             created_by: channel.created_by().into(),
@@ -121,7 +117,8 @@ impl From<ChannelError> for ApiError {
             }
             ChannelError::InvalidChannelId(_)
             | ChannelError::InvalidChannelName(_)
-            | ChannelError::InvalidUserId(_) => ApiError::UnprocessableEntity(err.to_string()),
+            | ChannelError::InvalidUserId(_)
+            | ChannelError::InvalidChannelType(_) => ApiError::UnprocessableEntity(err.to_string()),
             ChannelError::UserServiceError(msg) => ApiError::ServiceUnavailable(msg),
             ChannelError::DatabaseError(msg) | ChannelError::Unknown(msg) => {
                 ApiError::InternalServerError(msg)

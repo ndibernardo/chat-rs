@@ -2,10 +2,13 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use sqlx::Row;
 
+use std::str::FromStr;
+
 use crate::domain::channel::errors::ChannelError;
 use crate::domain::channel::models::Channel;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::models::ChannelName;
+use crate::domain::channel::models::ChannelType;
 use crate::domain::channel::models::DirectChannel;
 use crate::domain::channel::models::PrivateChannel;
 use crate::domain::channel::models::PublicChannel;
@@ -75,8 +78,8 @@ impl ChannelRepository {
         let channel_id = ChannelId::from(id);
         let user_id = UserId::from(created_by);
 
-        match channel_type.as_str() {
-            "public" => {
+        match ChannelType::from_str(&channel_type)? {
+            ChannelType::Public => {
                 let channel_name = ChannelName::new(name.unwrap_or_default())?;
                 Ok(Channel::Public(PublicChannel {
                     id: channel_id,
@@ -86,7 +89,7 @@ impl ChannelRepository {
                     created_at,
                 }))
             }
-            "private" => {
+            ChannelType::Private => {
                 let channel_name = ChannelName::new(name.unwrap_or_default())?;
                 let members = self.load_members(channel_id).await?;
                 Ok(Channel::Private(PrivateChannel {
@@ -98,7 +101,7 @@ impl ChannelRepository {
                     members,
                 }))
             }
-            "direct" => {
+            ChannelType::Direct => {
                 let participants = self.load_participants(channel_id).await?;
                 Ok(Channel::Direct(DirectChannel {
                     id: channel_id,
@@ -107,9 +110,6 @@ impl ChannelRepository {
                     participants,
                 }))
             }
-            other => Err(ChannelError::DatabaseError(format!(
-                "unknown channel_type in database: {other}"
-            ))),
         }
     }
 }
@@ -122,7 +122,7 @@ impl ports::ChannelRepository for ChannelRepository {
         let id = channel.id().into_uuid();
         let created_by = channel.created_by().into_uuid();
         let created_at = channel.created_at();
-        let channel_type = channel.channel_type();
+        let channel_type = channel.channel_type().as_str();
 
         let member_ids: Vec<uuid::Uuid> = channel.members().iter().map(|&m| m.into_uuid()).collect();
         let participant_ids: Vec<uuid::Uuid> = channel

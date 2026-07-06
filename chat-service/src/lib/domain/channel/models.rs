@@ -1,4 +1,5 @@
 use std::fmt;
+use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -7,6 +8,7 @@ use uuid::Uuid;
 use crate::domain::channel::errors::ChannelError;
 use crate::domain::channel::errors::ChannelIdError;
 use crate::domain::channel::errors::ChannelNameError;
+use crate::domain::channel::errors::ChannelTypeError;
 use crate::domain::user::models::UserId;
 
 /// Channel unique identifier value object.
@@ -76,15 +78,15 @@ pub enum Channel {
 }
 
 impl Channel {
-    /// Get the channel type name.
+    /// Get the channel type discriminator.
     ///
     /// # Returns
-    /// Channel type string ("public", "private", or "direct")
-    pub fn channel_type(&self) -> &'static str {
+    /// The channel's `ChannelType` variant
+    pub fn channel_type(&self) -> ChannelType {
         match self {
-            Channel::Public(_) => "public",
-            Channel::Private(_) => "private",
-            Channel::Direct(_) => "direct",
+            Channel::Public(_) => ChannelType::Public,
+            Channel::Private(_) => ChannelType::Private,
+            Channel::Direct(_) => ChannelType::Direct,
         }
     }
 
@@ -318,11 +320,46 @@ impl fmt::Display for ChannelName {
 }
 
 /// Channel type discriminator.
+///
+/// The single source of truth for the "public"/"private"/"direct" string
+/// representation used at storage and wire boundaries: `as_str` produces it,
+/// `FromStr` parses it back, and both live here rather than being re-derived
+/// independently at each boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChannelType {
     Public,
     Private,
     Direct,
+}
+
+impl ChannelType {
+    /// Get the storage/wire representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ChannelType::Public => "public",
+            ChannelType::Private => "private",
+            ChannelType::Direct => "direct",
+        }
+    }
+}
+
+impl FromStr for ChannelType {
+    type Err = ChannelTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "public" => Ok(ChannelType::Public),
+            "private" => Ok(ChannelType::Private),
+            "direct" => Ok(ChannelType::Direct),
+            other => Err(ChannelTypeError::Unknown(other.to_string())),
+        }
+    }
+}
+
+impl fmt::Display for ChannelType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Command to create a channel.
@@ -342,4 +379,25 @@ pub enum CreateChannelCommand {
     Direct {
         participant_id: UserId,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn channel_type_round_trips_through_as_str_and_from_str() {
+        for channel_type in [ChannelType::Public, ChannelType::Private, ChannelType::Direct] {
+            assert_eq!(
+                ChannelType::from_str(channel_type.as_str()).unwrap(),
+                channel_type
+            );
+        }
+    }
+
+    #[test]
+    fn channel_type_from_str_returns_error_for_unknown_value() {
+        let result = ChannelType::from_str("group");
+        assert!(matches!(result, Err(ChannelTypeError::Unknown(ref s)) if s == "group"));
+    }
 }
