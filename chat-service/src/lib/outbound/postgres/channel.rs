@@ -35,7 +35,7 @@ impl ChannelRepository {
 
         Ok(rows
             .into_iter()
-            .map(|r| UserId::from(r.get::<uuid::Uuid, _>("user_id")))
+            .map(|r| UserId::from_uuid(r.get::<uuid::Uuid, _>("user_id")))
             .collect())
     }
 
@@ -53,7 +53,7 @@ impl ChannelRepository {
 
         let ids: Vec<UserId> = rows
             .into_iter()
-            .map(|r| UserId::from(r.get::<uuid::Uuid, _>("user_id")))
+            .map(|r| UserId::from_uuid(r.get::<uuid::Uuid, _>("user_id")))
             .collect();
 
         match ids.as_slice() {
@@ -75,8 +75,8 @@ impl ChannelRepository {
         created_at: chrono::DateTime<chrono::Utc>,
         channel_type: String,
     ) -> Result<Channel, ChannelError> {
-        let channel_id = ChannelId::from(id);
-        let user_id = UserId::from(created_by);
+        let channel_id = ChannelId::from_uuid(id);
+        let user_id = UserId::from_uuid(created_by);
 
         match ChannelType::from_str(&channel_type)? {
             ChannelType::Public => {

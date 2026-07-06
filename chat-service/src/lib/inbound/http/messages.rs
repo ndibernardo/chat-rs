@@ -26,7 +26,7 @@ impl From<ChannelId> for ChannelIdMessage {
 
 impl From<ChannelIdMessage> for ChannelId {
     fn from(msg: ChannelIdMessage) -> Self {
-        ChannelId::from(msg.0)
+        ChannelId::from_uuid(msg.0)
     }
 }
 
@@ -49,7 +49,7 @@ impl ChannelIdMessage {
 
     /// Convert to domain ChannelId.
     pub fn into_domain(self) -> ChannelId {
-        ChannelId::from(self.0)
+        ChannelId::from_uuid(self.0)
     }
 }
 
@@ -66,7 +66,7 @@ impl From<MessageId> for MessageIdMessage {
 
 impl From<MessageIdMessage> for MessageId {
     fn from(msg: MessageIdMessage) -> Self {
-        MessageId::from(msg.0)
+        MessageId::from_uuid(msg.0)
     }
 }
 
@@ -89,7 +89,7 @@ impl MessageIdMessage {
 
     /// Convert to domain MessageId.
     pub fn into_domain(self) -> MessageId {
-        MessageId::from(self.0)
+        MessageId::from_uuid(self.0)
     }
 }
 
@@ -106,7 +106,7 @@ impl From<UserId> for UserIdMessage {
 
 impl From<UserIdMessage> for UserId {
     fn from(msg: UserIdMessage) -> Self {
-        UserId::from(msg.0)
+        UserId::from_uuid(msg.0)
     }
 }
 
@@ -129,6 +129,6 @@ impl UserIdMessage {
 
     /// Convert to domain UserId.
     pub fn into_domain(self) -> UserId {
-        UserId::from(self.0)
+        UserId::from_uuid(self.0)
     }
 }

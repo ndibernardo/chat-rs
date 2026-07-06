@@ -167,9 +167,9 @@ impl ports::MessageRepository for MessageRepository {
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
             messages.push(Message {
-                id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
-                channel_id: ChannelId::from(channel_id),
-                user_id: UserId::from(user_id),
+                id: MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
+                channel_id: ChannelId::from_uuid(channel_id),
+                user_id: UserId::from_uuid(user_id),
                 content: MessageContent::new(content)?,
                 timestamp,
             });
@@ -208,9 +208,9 @@ impl ports::MessageRepository for MessageRepository {
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
             messages.push(Message {
-                id: MessageId::from(uuid::Uuid::from(message_id_timeuuid)),
-                channel_id: ChannelId::from(channel_id),
-                user_id: UserId::from(user_id),
+                id: MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
+                channel_id: ChannelId::from_uuid(channel_id),
+                user_id: UserId::from_uuid(user_id),
                 content: MessageContent::new(content)?,
                 timestamp,
             });

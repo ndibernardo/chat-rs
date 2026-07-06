@@ -91,7 +91,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
             let username = Username::new(r.username)
                 .expect("Invalid username in database - should never happen");
             User {
-                id: UserId::from(r.id),
+                id: UserId::from_uuid(r.id),
                 username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
@@ -120,7 +120,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
                 let username = Username::new(r.username)
                     .expect("Invalid username in database - should never happen");
                 User {
-                    id: UserId::from(r.id),
+                    id: UserId::from_uuid(r.id),
                     username,
                     created_at: r.created_at,
                     updated_at: r.updated_at,

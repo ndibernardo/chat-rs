@@ -84,10 +84,9 @@ impl UserId {
     pub fn into_uuid(self) -> Uuid {
         self.0
     }
-}
 
-impl From<Uuid> for UserId {
-    fn from(uuid: Uuid) -> Self {
+    /// Construct from a raw UUID — for use within the crate only (e.g. database mapping).
+    pub(crate) fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 }
