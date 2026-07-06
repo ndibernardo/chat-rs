@@ -45,6 +45,7 @@ pub enum ApiError {
     NotFound(String),
     Conflict(String),
     Unauthorized(String),
+    Forbidden(String),
 }
 
 impl From<anyhow::Error> for ApiError {
@@ -62,6 +63,7 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
         };
 
         (status, Json(ApiResponseBody::new_error(status, message))).into_response()
