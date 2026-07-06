@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::message::errors::MessageContentError;
 use crate::domain::message::errors::MessageIdError;
+use crate::domain::message::errors::MessageLimitError;
 use crate::domain::user::models::UserId;
 
 /// Message aggregate root entity.
@@ -179,6 +180,46 @@ impl MessageContent {
     }
 }
 
+/// Bounded pagination limit for message queries.
+///
+/// Guards against negative or unbounded values flowing from a query string
+/// straight into the database layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limit(i32);
+
+impl Limit {
+    pub const MIN: i32 = 1;
+    pub const MAX: i32 = 100;
+    pub const DEFAULT: i32 = 50;
+
+    /// Validate a requested limit.
+    ///
+    /// # Errors
+    /// * `OutOfRange` - value is outside `[MIN, MAX]`
+    pub fn new(value: i32) -> Result<Self, MessageLimitError> {
+        if (Self::MIN..=Self::MAX).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(MessageLimitError::OutOfRange {
+                min: Self::MIN,
+                max: Self::MAX,
+                actual: value,
+            })
+        }
+    }
+
+    /// Get the validated limit as a raw integer, for binding to a query parameter.
+    pub fn value(&self) -> i32 {
+        self.0
+    }
+}
+
+impl Default for Limit {
+    fn default() -> Self {
+        Self(Self::DEFAULT)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +259,35 @@ mod tests {
         let at_limit = "x".repeat(MessageContent::MAX_LENGTH);
         let result = MessageContent::new(at_limit);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn limit_new_accepts_value_within_bounds() {
+        let result = Limit::new(10);
+        assert_eq!(result.unwrap().value(), 10);
+    }
+
+    #[test]
+    fn limit_new_returns_error_for_zero_or_negative() {
+        assert!(matches!(
+            Limit::new(0),
+            Err(MessageLimitError::OutOfRange { .. })
+        ));
+        assert!(matches!(
+            Limit::new(-1),
+            Err(MessageLimitError::OutOfRange { .. })
+        ));
+    }
+
+    #[test]
+    fn limit_new_returns_error_above_max() {
+        let result = Limit::new(Limit::MAX + 1);
+        assert!(matches!(result, Err(MessageLimitError::OutOfRange { .. })));
+    }
+
+    #[test]
+    fn limit_default_is_within_bounds() {
+        let limit = Limit::default();
+        assert_eq!(limit.value(), Limit::DEFAULT);
     }
 }

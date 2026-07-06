@@ -4,6 +4,7 @@ use chrono::Utc;
 
 use super::events::MessageDeletedEvent;
 use super::events::MessageSentEvent;
+use super::models::Limit;
 use super::models::Message;
 use super::models::MessageContent;
 use crate::domain::channel::models::ChannelId;
@@ -53,7 +54,7 @@ pub trait MessageService: Send + Sync + 'static {
     async fn get_channel_messages(
         &self,
         membership: Membership,
-        limit: i32,
+        limit: Limit,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError>;
 }
@@ -92,7 +93,7 @@ pub trait MessageRepository: Send + Sync + 'static {
     async fn find_by_channel(
         &self,
         channel_id: ChannelId,
-        limit: i32,
+        limit: Limit,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError>;
 
@@ -109,7 +110,7 @@ pub trait MessageRepository: Send + Sync + 'static {
     ///
     /// # Errors
     /// * `DatabaseError` - Database operation failed
-    async fn find_by_user(&self, user_id: UserId, limit: i32)
+    async fn find_by_user(&self, user_id: UserId, limit: Limit)
         -> Result<Vec<Message>, MessageError>;
 }
 

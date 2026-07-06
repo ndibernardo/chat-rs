@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::ports::ChannelService;
+use crate::domain::message::models::Limit;
 use crate::domain::message::ports::MessageService;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
@@ -37,7 +38,12 @@ pub async fn get_channel_messages(
 
     let membership = channel.membership_of(auth_user.user_id)?;
 
-    let limit = params.limit.unwrap_or(50);
+    let limit = params
+        .limit
+        .map(Limit::new)
+        .transpose()
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?
+        .unwrap_or_default();
     let before = params
         .before
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())

@@ -23,6 +23,13 @@ pub enum MessageContentError {
     TooLong { max: usize, actual: usize },
 }
 
+/// Error type for Limit validation failures
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum MessageLimitError {
+    #[error("limit must be between {min} and {max}, got {actual}")]
+    OutOfRange { min: i32, max: i32, actual: i32 },
+}
+
 /// Top-level error type for all message-related operations
 #[derive(Debug, Error)]
 pub enum MessageError {

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 
 use super::events::MessageSentEvent;
+use super::models::Limit;
 use super::models::Message;
 use super::models::MessageContent;
 use super::models::MessageId;
@@ -97,7 +98,7 @@ where
     async fn get_channel_messages(
         &self,
         membership: Membership,
-        limit: i32,
+        limit: Limit,
         before: Option<chrono::DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError> {
         self.message_repository
@@ -128,13 +129,13 @@ mod tests {
             async fn find_by_channel(
                 &self,
                 channel_id: ChannelId,
-                limit: i32,
+                limit: Limit,
                 before: Option<chrono::DateTime<Utc>>,
             ) -> Result<Vec<Message>, MessageError>;
             async fn find_by_user(
                 &self,
                 user_id: UserId,
-                limit: i32,
+                limit: Limit,
             ) -> Result<Vec<Message>, MessageError>;
         }
     }
@@ -276,9 +277,10 @@ mod tests {
         ];
 
         let returned = messages.clone();
+        let limit = Limit::new(10).unwrap();
         message_repository
             .expect_find_by_channel()
-            .withf(move |ch, limit, before| *ch == channel_id && *limit == 10 && before.is_none())
+            .withf(move |ch, l, before| *ch == channel_id && *l == limit && before.is_none())
             .times(1)
             .returning(move |_, _, _| Ok(returned.clone()));
 
@@ -288,7 +290,7 @@ mod tests {
             Arc::new(event_publisher),
         );
 
-        let result = service.get_channel_messages(membership, 10, None).await;
+        let result = service.get_channel_messages(membership, limit, None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
     }

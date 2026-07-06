@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::message::errors::MessageError;
+use crate::domain::message::models::Limit;
 use crate::domain::message::models::Message;
 use crate::domain::message::models::MessageContent;
 use crate::domain::message::models::MessageId;
@@ -127,7 +128,7 @@ impl ports::MessageRepository for MessageRepository {
     async fn find_by_channel(
         &self,
         channel_id: ChannelId,
-        limit: i32,
+        limit: Limit,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError> {
         let query = if let Some(before_time) = before {
@@ -137,7 +138,7 @@ impl ports::MessageRepository for MessageRepository {
                      FROM messages_by_channel
                      WHERE channel_id = ? AND message_id < maxTimeuuid(?)
                      LIMIT ?",
-                    (channel_id.as_uuid(), before_time, limit),
+                    (channel_id.as_uuid(), before_time, limit.value()),
                 )
                 .await
         } else {
@@ -147,7 +148,7 @@ impl ports::MessageRepository for MessageRepository {
                      FROM messages_by_channel
                      WHERE channel_id = ?
                      LIMIT ?",
-                    (channel_id.as_uuid(), limit),
+                    (channel_id.as_uuid(), limit.value()),
                 )
                 .await
         };
@@ -180,7 +181,7 @@ impl ports::MessageRepository for MessageRepository {
     async fn find_by_user(
         &self,
         user_id: UserId,
-        limit: i32,
+        limit: Limit,
     ) -> Result<Vec<Message>, MessageError> {
         let rows = self
             .session
@@ -189,7 +190,7 @@ impl ports::MessageRepository for MessageRepository {
                  FROM messages_by_user
                  WHERE user_id = ?
                  LIMIT ?",
-                (user_id.as_uuid(), limit),
+                (user_id.as_uuid(), limit.value()),
             )
             .await
             .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
