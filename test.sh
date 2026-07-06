@@ -39,7 +39,7 @@ docker exec cassandra-test cqlsh -e "USE chat; CREATE TABLE IF NOT EXISTS messag
 echo "Running tests..."
 export SQLX_OFFLINE=true
 export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/postgres"
-export CASSANDRA_NODES="localhost:9043"
+export CASSANDRA_NODES="localhost:9042"
 export KAFKA__BROKERS="localhost:9093"
 export USER_SERVICE_GRPC_URL="http://localhost:50052"
 
