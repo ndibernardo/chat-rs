@@ -1,20 +1,29 @@
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::Extension;
 
 use crate::domain::user::models::UserId;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
+use crate::inbound::http::middleware::AuthenticatedUser;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::UserError;
 use crate::user::ports::UserService;
 
 pub async fn delete_user(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthenticatedUser>,
     Path(id): Path<String>,
 ) -> Result<ApiSuccess<()>, ApiError> {
     // Parse user ID
     let user_id = UserId::from_string(&id).map_err(|e| UserError::from(e))?;
+
+    if auth_user.user_id != user_id {
+        return Err(ApiError::Forbidden(
+            "Cannot delete another user's account".to_string(),
+        ));
+    }
 
     state
         .user_service

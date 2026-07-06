@@ -1,6 +1,7 @@
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::Extension;
 use axum::Json;
 use serde::Deserialize;
 use serde::Serialize;
@@ -12,6 +13,7 @@ use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
+use crate::inbound::http::middleware::AuthenticatedUser;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::UserError;
 use crate::user::ports::UserService;
@@ -61,11 +63,19 @@ impl From<User> for UserResponse {
 
 pub async fn update_user(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthenticatedUser>,
     Path(id): Path<String>,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<ApiSuccess<UserResponse>, ApiError> {
     // Parse user ID and request at HTTP boundary - errors automatically converted
     let user_id = UserId::from_string(&id).map_err(UserError::from)?;
+
+    if auth_user.user_id != user_id {
+        return Err(ApiError::Forbidden(
+            "Cannot modify another user's account".to_string(),
+        ));
+    }
+
     let command = req.try_into_command()?;
 
     state

@@ -1,6 +1,7 @@
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::Extension;
 use chrono::DateTime;
 use chrono::Utc;
 use serde::Serialize;
@@ -10,13 +11,21 @@ use super::ApiSuccess;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserService;
+use crate::inbound::http::middleware::AuthenticatedUser;
 use crate::inbound::http::router::AppState;
 
 pub async fn get_user(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthenticatedUser>,
     Path(user_id): Path<String>,
 ) -> Result<ApiSuccess<GetUserResponseData>, ApiError> {
     let user_id = UserId::from_string(&user_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+
+    if auth_user.user_id != user_id {
+        return Err(ApiError::Forbidden(
+            "Cannot view another user's account".to_string(),
+        ));
+    }
 
     state
         .user_service
