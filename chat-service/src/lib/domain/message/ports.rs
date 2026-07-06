@@ -152,3 +152,15 @@ pub trait MessageEventPublisher: Send + Sync + 'static {
         event: &MessageDeletedEvent,
     ) -> Result<(), EventPublisherError>;
 }
+
+/// Port for broadcasting a sent message to clients connected to its channel.
+///
+/// Implemented by the delivery-mechanism adapter (the WebSocket connection
+/// registry). Inbound Kafka consumers depend on this domain port instead of
+/// the concrete registry, so event consumption stays decoupled from the
+/// delivery transport.
+#[async_trait]
+pub trait MessageBroadcaster: Send + Sync + 'static {
+    /// Broadcast a message to clients connected to its channel on this instance.
+    async fn broadcast(&self, message: &Message);
+}

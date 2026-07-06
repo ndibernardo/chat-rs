@@ -1,12 +1,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::extract::ws::Message as WsMessage;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use super::messages::ServerMessage;
+use super::messages::WsMessageId;
+use super::messages::WsUserId;
 use crate::domain::channel::models::ChannelId;
+use crate::domain::message::models::Message;
+use crate::domain::message::ports::MessageBroadcaster;
 use crate::domain::user::models::UserId;
 
 /// Represents a connected WebSocket client
@@ -144,5 +150,50 @@ impl ConnectionRegistry {
 impl Default for ConnectionRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[async_trait]
+impl MessageBroadcaster for ConnectionRegistry {
+    /// Broadcast a message to clients connected to its channel on this instance.
+    ///
+    /// Implements client-side filtering: the caller (a Kafka consumer) receives
+    /// events for every channel, but only channels with connections on this
+    /// instance actually get an outbound WebSocket send.
+    async fn broadcast(&self, message: &Message) {
+        let channel_id = message.channel_id();
+        let conn_count = self.get_channel_connection_count(channel_id).await;
+
+        if conn_count == 0 {
+            tracing::trace!(
+                "No active connections for channel {} on this instance, skipping broadcast",
+                channel_id
+            );
+            return;
+        }
+
+        let server_message = ServerMessage::NewMessage {
+            id: WsMessageId::from(message.id()),
+            user_id: WsUserId::from(message.user_id()),
+            content: message.content().as_str().to_string(),
+            timestamp: message.timestamp(),
+        };
+
+        let ws_message = match serde_json::to_string(&server_message) {
+            Ok(json) => WsMessage::Text(json.into()),
+            Err(e) => {
+                tracing::error!("Failed to serialize server message: {}", e);
+                return;
+            }
+        };
+
+        tracing::debug!(
+            "Broadcasting message {} to {} connections in channel {} on this instance",
+            message.id(),
+            conn_count,
+            channel_id
+        );
+
+        self.broadcast_to_channel(channel_id, ws_message).await;
     }
 }
