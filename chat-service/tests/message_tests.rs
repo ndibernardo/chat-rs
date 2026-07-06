@@ -197,6 +197,78 @@ async fn test_get_messages_with_before_parameter() {
 }
 
 #[tokio::test]
+async fn test_get_messages_with_malformed_before_returns_bad_request() {
+    let app = TestApp::spawn().await;
+    let (token, _user_id) = app.create_test_token();
+
+    let create_response = app
+        .post_authenticated("/api/channels", &token)
+        .json(&json!({
+            "channel_type": "public",
+            "name": "malformed-cursor-channel"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let create_body: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let channel_id = create_body["id"].as_str().unwrap();
+
+    let response = app
+        .get_authenticated(
+            &format!("/api/channels/{}/messages?before=not-a-timestamp", channel_id),
+            &token,
+        )
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert!(body["error"].is_string());
+}
+
+#[tokio::test]
+async fn test_get_messages_with_out_of_range_limit_returns_bad_request() {
+    let app = TestApp::spawn().await;
+    let (token, _user_id) = app.create_test_token();
+
+    let create_response = app
+        .post_authenticated("/api/channels", &token)
+        .json(&json!({
+            "channel_type": "public",
+            "name": "out-of-range-limit-channel"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let create_body: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let channel_id = create_body["id"].as_str().unwrap();
+
+    let response = app
+        .get_authenticated(
+            &format!("/api/channels/{}/messages?limit=0", channel_id),
+            &token,
+        )
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body: serde_json::Value = response.json().await.expect("Failed to parse response");
+    assert!(body["error"].is_string());
+}
+
+#[tokio::test]
 async fn test_get_messages_with_limit_and_before() {
     let app = TestApp::spawn().await;
     let (token, _user_id) = app.create_test_token();

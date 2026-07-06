@@ -46,8 +46,12 @@ pub async fn get_channel_messages(
         .unwrap_or_default();
     let before = params
         .before
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .map(|s| {
+            chrono::DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map_err(|e| ApiError::BadRequest(format!("Invalid 'before' cursor: {}", e)))
+        })
+        .transpose()?;
 
     state
         .message_service
