@@ -7,7 +7,7 @@ use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::UserError;
-use crate::user::ports::UserServicePort;
+use crate::user::ports::UserService;
 
 pub async fn delete_user(
     State(state): State<AppState>,

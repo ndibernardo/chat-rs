@@ -14,7 +14,7 @@ use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::UserError;
-use crate::user::ports::UserServicePort;
+use crate::user::ports::UserService;
 
 /// HTTP request body for updating a user (raw JSON)
 #[derive(Debug, Deserialize)]

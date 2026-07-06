@@ -5,19 +5,19 @@ use tonic::Response;
 use tonic::Status;
 
 use super::handlers::get_user;
-use crate::domain::user::service::UserService;
-use crate::outbound::events::KafkaEventProducer;
-use crate::outbound::repositories::PostgresUserRepository;
+use crate::domain::user::service::Service;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::postgres::UserRepository;
 use crate::proto::user_service_server::UserService as UserServiceProto;
 use crate::proto::GetUserRequest;
 use crate::proto::GetUserResponse;
 
 pub struct UserGrpcService {
-    service: Arc<UserService<PostgresUserRepository, KafkaEventProducer>>,
+    service: Arc<Service<UserRepository, EventProducer>>,
 }
 
 impl UserGrpcService {
-    pub fn new(service: Arc<UserService<PostgresUserRepository, KafkaEventProducer>>) -> Self {
+    pub fn new(service: Arc<Service<UserRepository, EventProducer>>) -> Self {
         Self { service }
     }
 }

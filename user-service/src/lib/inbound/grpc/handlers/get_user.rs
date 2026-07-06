@@ -3,15 +3,15 @@ use std::sync::Arc;
 use tonic::Status;
 
 use crate::domain::user::models::UserId;
-use crate::domain::user::ports::UserServicePort;
-use crate::domain::user::service::UserService;
-use crate::outbound::events::KafkaEventProducer;
-use crate::outbound::repositories::PostgresUserRepository;
+use crate::domain::user::ports::UserService;
+use crate::domain::user::service::Service;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::postgres::UserRepository;
 use crate::proto::GetUserRequest;
 use crate::proto::GetUserResponse;
 
 pub async fn get_user(
-    service: Arc<UserService<PostgresUserRepository, KafkaEventProducer>>,
+    service: Arc<Service<UserRepository, EventProducer>>,
     request: GetUserRequest,
 ) -> Result<GetUserResponse, Status> {
     let user_id = UserId::from_string(&request.user_id)

@@ -9,7 +9,7 @@ use serde::Serialize;
 use super::ApiError;
 use super::ApiSuccess;
 use crate::domain::user::models::User;
-use crate::domain::user::ports::UserServicePort;
+use crate::domain::user::ports::UserService;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::UserError;
 use crate::user::models::Username;

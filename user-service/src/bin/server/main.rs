@@ -6,11 +6,11 @@ use tonic::transport::Server;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use user_service::config::Config;
-use user_service::domain::user::service::UserService;
+use user_service::domain::user::service::Service as UserService;
 use user_service::inbound::grpc::UserGrpcService;
 use user_service::inbound::http::router::create_router;
-use user_service::outbound::events::KafkaEventProducer;
-use user_service::outbound::repositories::PostgresUserRepository;
+use user_service::outbound::kafka::EventProducer;
+use user_service::outbound::postgres::UserRepository;
 use user_service::proto::user_service_server::UserServiceServer;
 
 #[tokio::main]
@@ -54,8 +54,8 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!(database = "postgresql", "Database migrations completed");
 
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
-    let user_repository = Arc::new(PostgresUserRepository::new(pg_pool));
-    let event_producer = Arc::new(KafkaEventProducer::new(&config)?);
+    let user_repository = Arc::new(UserRepository::new(pg_pool));
+    let event_producer = Arc::new(EventProducer::new(&config)?);
 
     let user_service = Arc::new(UserService::new(user_repository, event_producer));
 

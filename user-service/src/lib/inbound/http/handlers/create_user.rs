@@ -13,7 +13,7 @@ use crate::domain::user::models::CreateUserCommand;
 use crate::domain::user::models::EmailAddress;
 use crate::domain::user::models::User;
 use crate::domain::user::models::Username;
-use crate::domain::user::ports::UserServicePort;
+use crate::domain::user::ports::UserService;
 use crate::inbound::http::router::AppState;
 use crate::user::errors::EmailError;
 use crate::user::errors::UsernameError;

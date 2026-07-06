@@ -22,19 +22,19 @@ use super::handlers::delete_user::delete_user;
 use super::handlers::get_user::get_user;
 use super::handlers::update_user::update_user;
 use super::middleware::authenticate as auth_middleware;
-use crate::domain::user::service::UserService;
-use crate::outbound::events::KafkaEventProducer;
-use crate::outbound::repositories::PostgresUserRepository;
+use crate::domain::user::service::Service as UserService;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::postgres::UserRepository;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub user_service: Arc<UserService<PostgresUserRepository, KafkaEventProducer>>,
+    pub user_service: Arc<UserService<UserRepository, EventProducer>>,
     pub authenticator: Arc<Authenticator>,
     pub jwt_expiration_hours: i64,
 }
 
 pub fn create_router(
-    user_service: Arc<UserService<PostgresUserRepository, KafkaEventProducer>>,
+    user_service: Arc<UserService<UserRepository, EventProducer>>,
     authenticator: Arc<Authenticator>,
     jwt_expiration_hours: i64,
 ) -> Router {

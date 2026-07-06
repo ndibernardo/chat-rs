@@ -9,7 +9,7 @@ use super::ApiError;
 use super::ApiSuccess;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
-use crate::domain::user::ports::UserServicePort;
+use crate::domain::user::ports::UserService;
 use crate::inbound::http::router::AppState;
 
 pub async fn get_user(

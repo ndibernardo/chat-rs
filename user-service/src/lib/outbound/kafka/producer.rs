@@ -12,12 +12,12 @@ use crate::config::Config;
 use crate::domain::user::events::UserCreatedEvent;
 use crate::domain::user::events::UserDeletedEvent;
 use crate::domain::user::events::UserUpdatedEvent;
-use crate::outbound::events::messages::UserEventMessage;
+use crate::outbound::kafka::messages::UserEventMessage;
 use crate::user::errors::EventPublisherError;
 use crate::user::ports::EventPublisher;
 
 #[derive(Debug, Error)]
-pub enum KafkaProducerError {
+pub enum ProducerError {
     #[error("Failed to send message to Kafka: {0}")]
     SendError(String),
 
@@ -25,24 +25,24 @@ pub enum KafkaProducerError {
     SerializationError(String),
 }
 
-impl From<KafkaProducerError> for EventPublisherError {
-    fn from(err: KafkaProducerError) -> Self {
+impl From<ProducerError> for EventPublisherError {
+    fn from(err: ProducerError) -> Self {
         match err {
-            KafkaProducerError::SerializationError(msg) => {
+            ProducerError::SerializationError(msg) => {
                 EventPublisherError::SerializationFailed(msg)
             }
-            KafkaProducerError::SendError(msg) => EventPublisherError::PublishFailed(msg),
+            ProducerError::SendError(msg) => EventPublisherError::PublishFailed(msg),
         }
     }
 }
 
-pub struct KafkaEventProducer {
+pub struct EventProducer {
     producer: FutureProducer,
     topic: String,
     timeout: Duration,
 }
 
-impl KafkaEventProducer {
+impl EventProducer {
     /// Create a new Kafka event producer with "at least once" delivery semantics
     ///
     /// # Arguments
@@ -91,9 +91,9 @@ impl KafkaEventProducer {
         &self,
         user_id: &str,
         event: &T,
-    ) -> Result<(), KafkaProducerError> {
+    ) -> Result<(), ProducerError> {
         let payload = serde_json::to_string(event)
-            .map_err(|e| KafkaProducerError::SerializationError(e.to_string()))?;
+            .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
         tracing::debug!(
             "Publishing event to topic '{}' (user_id: {})",
@@ -121,13 +121,13 @@ impl KafkaEventProducer {
                     "Failed to publish event to Kafka after all retries: {}",
                     err
                 );
-                KafkaProducerError::SendError(err.to_string())
+                ProducerError::SendError(err.to_string())
             })
     }
 }
 
 #[async_trait]
-impl EventPublisher for KafkaEventProducer {
+impl EventPublisher for EventProducer {
     async fn publish_user_created(
         &self,
         event: &UserCreatedEvent,

@@ -5,21 +5,21 @@ use crate::domain::user::models::EmailAddress;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
-use crate::domain::user::ports::UserRepository;
+use crate::domain::user::ports;
 use crate::user::errors::UserError;
 
-pub struct PostgresUserRepository {
+pub struct UserRepository {
     pool: PgPool,
 }
 
-impl PostgresUserRepository {
+impl UserRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait]
-impl UserRepository for PostgresUserRepository {
+impl ports::UserRepository for UserRepository {
     async fn create(&self, user: User) -> Result<User, UserError> {
         sqlx::query!(
             r#"

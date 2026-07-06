@@ -15,10 +15,10 @@ use crate::user::errors::PasswordError;
 use crate::user::errors::UserError;
 use crate::user::ports::EventPublisher;
 use crate::user::ports::UserRepository;
-use crate::user::ports::UserServicePort;
+use crate::user::ports::UserService;
 
 /// Domain service for user operations.
-pub struct UserService<UR, EP>
+pub struct Service<UR, EP>
 where
     UR: UserRepository,
     EP: EventPublisher,
@@ -28,7 +28,7 @@ where
     password_hasher: auth::PasswordHasher,
 }
 
-impl<UR, EP> UserService<UR, EP>
+impl<UR, EP> Service<UR, EP>
 where
     UR: UserRepository,
     EP: EventPublisher,
@@ -44,7 +44,7 @@ where
 }
 
 #[async_trait]
-impl<UR, EP> UserServicePort for UserService<UR, EP>
+impl<UR, EP> UserService for Service<UR, EP>
 where
     UR: UserRepository,
     EP: EventPublisher,
@@ -210,7 +210,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
@@ -238,7 +238,7 @@ mod tests {
 
         event_publisher.expect_publish_user_created().times(0);
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
@@ -262,7 +262,7 @@ mod tests {
 
         event_publisher.expect_publish_user_created().times(0);
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
             username: Username::new("john-coltrane").unwrap(),
@@ -290,7 +290,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(returned_user.clone())));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.get_user(&user_id).await;
         assert!(result.is_ok());
@@ -307,7 +307,7 @@ mod tests {
 
         repository.expect_find_by_id().times(1).returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.get_user(&UserId::new()).await;
 
@@ -331,7 +331,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(returned_user.clone())));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_ok());
@@ -345,7 +345,7 @@ mod tests {
 
         repository.expect_find_by_username().times(1).returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let username = Username::new("ravi-shankar").unwrap();
         let result = service.get_user_by_username(&username).await;
@@ -385,7 +385,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(returned_users.clone()));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.get_users_by_ids(&user_ids).await;
         assert!(result.is_ok());
@@ -412,7 +412,7 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(vec![returned_user.clone()]));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
         let result = service.get_users_by_ids(&[existing_id, UserId::new()]).await;
 
         assert!(result.is_ok());
@@ -457,7 +457,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = UpdateUserCommand {
             username: Some(Username::new("bird-parker").unwrap()),
@@ -480,7 +480,7 @@ mod tests {
 
         repository.expect_find_by_id().times(1).returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = UpdateUserCommand {
             username: Some(Username::new("ella-fitzgerald").unwrap()),
@@ -511,7 +511,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.delete_user(&user_id).await;
         assert!(result.is_ok());
@@ -529,7 +529,7 @@ mod tests {
             .times(1)
             .returning(move |_| Err(UserError::NotFound(user_id)));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.delete_user(&user_id).await;
         assert!(result.is_err());
@@ -551,7 +551,7 @@ mod tests {
             .times(1)
             .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = CreateUserCommand {
             username: Username::new("bill-evans").unwrap(),
@@ -587,7 +587,7 @@ mod tests {
             .times(1)
             .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let command = UpdateUserCommand {
             username: Some(Username::new("miles-dewey-davis").unwrap()),
@@ -616,7 +616,7 @@ mod tests {
             .times(1)
             .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
 
-        let service = UserService::new(Arc::new(repository), Arc::new(event_publisher));
+        let service = Service::new(Arc::new(repository), Arc::new(event_publisher));
 
         let result = service.delete_user(&user_id).await;
         assert!(result.is_ok(), "delete_user must succeed even when event publish fails");

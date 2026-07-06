@@ -13,7 +13,7 @@ use crate::user::models::Username;
 
 /// Port for user domain service operations.
 #[async_trait]
-pub trait UserServicePort: Send + Sync + 'static {
+pub trait UserService: Send + Sync + 'static {
     /// Create new user with validated credentials.
     ///
     /// # Arguments
