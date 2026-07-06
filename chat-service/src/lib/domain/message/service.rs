@@ -10,29 +10,24 @@ use super::models::MessageId;
 use super::ports::MessageEventPublisher;
 use super::ports::MessageRepository;
 use super::ports::MessageService;
-use crate::domain::channel::models::ChannelId;
-use crate::domain::channel::ports::ChannelRepository;
+use crate::domain::channel::models::Membership;
 use crate::domain::message::errors::MessageError;
-use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserResolver;
 
-pub struct Service<MR, CR, UC, EP>
+pub struct Service<MR, UC, EP>
 where
     MR: MessageRepository,
-    CR: ChannelRepository,
     UC: UserResolver,
     EP: MessageEventPublisher,
 {
     message_repository: Arc<MR>,
-    channel_repository: Arc<CR>,
     user_resolver: Arc<UC>,
     event_publisher: Arc<EP>,
 }
 
-impl<MR, CR, UC, EP> Service<MR, CR, UC, EP>
+impl<MR, UC, EP> Service<MR, UC, EP>
 where
     MR: MessageRepository,
-    CR: ChannelRepository,
     UC: UserResolver,
     EP: MessageEventPublisher,
 {
@@ -40,7 +35,6 @@ where
     ///
     /// # Arguments
     /// * `message_repository` - Message persistence implementation
-    /// * `channel_repository` - Channel repository for existence checks
     /// * `user_resolver` - Resolver for sender identity (replica-first with gRPC fallback)
     /// * `event_publisher` - Event publisher implementation
     ///
@@ -48,13 +42,11 @@ where
     /// Configured message service instance
     pub fn new(
         message_repository: Arc<MR>,
-        channel_repository: Arc<CR>,
         user_resolver: Arc<UC>,
         event_publisher: Arc<EP>,
     ) -> Self {
         Self {
             message_repository,
-            channel_repository,
             user_resolver,
             event_publisher,
         }
@@ -62,35 +54,30 @@ where
 }
 
 #[async_trait]
-impl<MR, CR, UC, EP> MessageService for Service<MR, CR, UC, EP>
+impl<MR, UC, EP> MessageService for Service<MR, UC, EP>
 where
     MR: MessageRepository + 'static,
-    CR: ChannelRepository + 'static,
     UC: UserResolver + 'static,
     EP: MessageEventPublisher + 'static,
 {
     async fn send_message(
         &self,
-        channel_id: ChannelId,
-        user_id: UserId,
+        membership: Membership,
         content: MessageContent,
     ) -> Result<Message, MessageError> {
-        self.channel_repository
-            .find_by_id(channel_id)
+        // Channel existence is already proven by `membership`; only sender
+        // resolution remains to check.
+        let resolved_user = self
+            .user_resolver
+            .resolve(membership.user_id())
             .await
-            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
-            .ok_or(MessageError::ChannelNotFound(channel_id))?;
-
-        self.user_resolver
-            .resolve(user_id)
-            .await
-            .map_err(|e| MessageError::DatabaseError(e))?
-            .ok_or(MessageError::UserNotFound(user_id))?;
+            .map_err(MessageError::DatabaseError)?;
+        resolved_user.ok_or(MessageError::UserNotFound(membership.user_id()))?;
 
         let message = Message {
             id: MessageId::new_time_based(),
-            channel_id,
-            user_id,
+            channel_id: membership.channel_id(),
+            user_id: membership.user_id(),
             content: content.clone(),
             timestamp: Utc::now(),
         };
@@ -109,18 +96,12 @@ where
 
     async fn get_channel_messages(
         &self,
-        channel_id: ChannelId,
+        membership: Membership,
         limit: i32,
         before: Option<chrono::DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError> {
-        self.channel_repository
-            .find_by_id(channel_id)
-            .await
-            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
-            .ok_or(MessageError::ChannelNotFound(channel_id))?;
-
         self.message_repository
-            .find_by_channel(channel_id, limit, before)
+            .find_by_channel(membership.channel_id(), limit, before)
             .await
     }
 }
@@ -132,13 +113,10 @@ mod tests {
     use mockall::predicate::*;
 
     use super::*;
-    use crate::domain::channel::errors::ChannelError;
-    use crate::domain::channel::models::Channel;
-    use crate::domain::channel::models::ChannelName;
-    use crate::domain::channel::models::PublicChannel;
-    use crate::domain::channel::ports::ChannelRepository;
+    use crate::domain::channel::models::ChannelId;
     use crate::domain::message::events::MessageDeletedEvent;
     use crate::domain::user::models::User;
+    use crate::domain::user::models::UserId;
     use crate::domain::user::models::Username;
 
     mock! {
@@ -158,19 +136,6 @@ mod tests {
                 user_id: UserId,
                 limit: i32,
             ) -> Result<Vec<Message>, MessageError>;
-        }
-    }
-
-    mock! {
-        pub TestChannelRepository {}
-
-        #[async_trait]
-        impl ChannelRepository for TestChannelRepository {
-            async fn create(&self, channel: Channel) -> Result<Channel, ChannelError>;
-            async fn find_by_id(&self, id: ChannelId) -> Result<Option<Channel>, ChannelError>;
-            async fn find_public_channels(&self) -> Result<Vec<Channel>, ChannelError>;
-            async fn find_by_user(&self, user_id: UserId) -> Result<Vec<Channel>, ChannelError>;
-            async fn delete(&self, id: ChannelId) -> Result<(), ChannelError>;
         }
     }
 
@@ -200,16 +165,6 @@ mod tests {
         }
     }
 
-    fn public_channel(channel_id: ChannelId, creator_id: UserId) -> Channel {
-        Channel::Public(PublicChannel {
-            id: channel_id,
-            name: ChannelName::new("engineering").unwrap(),
-            description: None,
-            created_by: creator_id,
-            created_at: Utc::now(),
-        })
-    }
-
     fn known_user(user_id: UserId) -> User {
         User::new(
             user_id,
@@ -222,18 +177,12 @@ mod tests {
     #[tokio::test]
     async fn send_message_returns_persisted_message() {
         let mut message_repository = MockTestMessageRepository::new();
-        let mut channel_repository = MockTestChannelRepository::new();
         let mut user_resolver = MockTestUserResolver::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
         let user_id = UserId::new();
         let channel_id = ChannelId::new();
-
-        channel_repository
-            .expect_find_by_id()
-            .withf(move |id| *id == channel_id)
-            .times(1)
-            .returning(move |_| Ok(Some(public_channel(channel_id, user_id))));
+        let membership = Membership::test_new(user_id, channel_id);
 
         user_resolver
             .expect_resolve()
@@ -258,13 +207,12 @@ mod tests {
 
         let service = Service::new(
             Arc::new(message_repository),
-            Arc::new(channel_repository),
             Arc::new(user_resolver),
             Arc::new(event_publisher),
         );
 
         let content = MessageContent::new("What's the deployment status?".to_string()).unwrap();
-        let result = service.send_message(channel_id, user_id, content).await;
+        let result = service.send_message(membership, content).await;
 
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -274,47 +222,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_message_returns_channel_not_found_for_missing_channel() {
-        let message_repository = MockTestMessageRepository::new();
-        let mut channel_repository = MockTestChannelRepository::new();
-        let user_resolver = MockTestUserResolver::new();
-        let event_publisher = MockTestEventPublisher::new();
-
-        let user_id = UserId::new();
-        let channel_id = ChannelId::new();
-
-        channel_repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(|_| Ok(None));
-
-        let service = Service::new(
-            Arc::new(message_repository),
-            Arc::new(channel_repository),
-            Arc::new(user_resolver),
-            Arc::new(event_publisher),
-        );
-
-        let content = MessageContent::new("Has the incident been resolved?".to_string()).unwrap();
-        let result = service.send_message(channel_id, user_id, content).await;
-
-        assert!(matches!(result, Err(MessageError::ChannelNotFound(_))));
-    }
-
-    #[tokio::test]
     async fn send_message_returns_user_not_found_when_sender_missing() {
         let message_repository = MockTestMessageRepository::new();
-        let mut channel_repository = MockTestChannelRepository::new();
         let mut user_resolver = MockTestUserResolver::new();
         let event_publisher = MockTestEventPublisher::new();
 
         let user_id = UserId::new();
         let channel_id = ChannelId::new();
-
-        channel_repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(move |_| Ok(Some(public_channel(channel_id, user_id))));
+        let membership = Membership::test_new(user_id, channel_id);
 
         user_resolver
             .expect_resolve()
@@ -323,13 +238,12 @@ mod tests {
 
         let service = Service::new(
             Arc::new(message_repository),
-            Arc::new(channel_repository),
             Arc::new(user_resolver),
             Arc::new(event_publisher),
         );
 
         let content = MessageContent::new("This sender was deleted".to_string()).unwrap();
-        let result = service.send_message(channel_id, user_id, content).await;
+        let result = service.send_message(membership, content).await;
 
         assert!(matches!(result, Err(MessageError::UserNotFound(_))));
     }
@@ -337,17 +251,12 @@ mod tests {
     #[tokio::test]
     async fn get_channel_messages_returns_messages_in_order() {
         let mut message_repository = MockTestMessageRepository::new();
-        let mut channel_repository = MockTestChannelRepository::new();
         let user_resolver = MockTestUserResolver::new();
         let event_publisher = MockTestEventPublisher::new();
 
         let user_id = UserId::new();
         let channel_id = ChannelId::new();
-
-        channel_repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(move |_| Ok(Some(public_channel(channel_id, user_id))));
+        let membership = Membership::test_new(user_id, channel_id);
 
         let messages = vec![
             Message {
@@ -375,38 +284,12 @@ mod tests {
 
         let service = Service::new(
             Arc::new(message_repository),
-            Arc::new(channel_repository),
             Arc::new(user_resolver),
             Arc::new(event_publisher),
         );
 
-        let result = service.get_channel_messages(channel_id, 10, None).await;
+        let result = service.get_channel_messages(membership, 10, None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
-    }
-
-    #[tokio::test]
-    async fn get_channel_messages_returns_channel_not_found_for_missing_channel() {
-        let message_repository = MockTestMessageRepository::new();
-        let mut channel_repository = MockTestChannelRepository::new();
-        let user_resolver = MockTestUserResolver::new();
-        let event_publisher = MockTestEventPublisher::new();
-
-        channel_repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(|_| Ok(None));
-
-        let service = Service::new(
-            Arc::new(message_repository),
-            Arc::new(channel_repository),
-            Arc::new(user_resolver),
-            Arc::new(event_publisher),
-        );
-
-        let result = service
-            .get_channel_messages(ChannelId::new(), 10, None)
-            .await;
-        assert!(matches!(result, Err(MessageError::ChannelNotFound(_))));
     }
 }

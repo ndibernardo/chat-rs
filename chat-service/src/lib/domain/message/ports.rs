@@ -7,6 +7,7 @@ use super::events::MessageSentEvent;
 use super::models::Message;
 use super::models::MessageContent;
 use crate::domain::channel::models::ChannelId;
+use crate::domain::channel::models::Membership;
 use crate::domain::errors::EventPublisherError;
 use crate::domain::message::errors::MessageError;
 use crate::domain::user::models::UserId;
@@ -20,20 +21,18 @@ pub trait MessageService: Send + Sync + 'static {
     /// Broadcasts to WebSocket clients if broadcaster is configured.
     ///
     /// # Arguments
-    /// * `channel_id` - Target channel ID
-    /// * `user_id` - Sender user ID
+    /// * `membership` - Proof the sender was verified as a member of the target channel
     /// * `content` - Validated message content
     ///
     /// # Returns
     /// Created message entity
     ///
     /// # Errors
-    /// * `ChannelNotFound` - Channel does not exist
+    /// * `UserNotFound` - Sender no longer exists
     /// * `DatabaseError` - Database operation failed
     async fn send_message(
         &self,
-        channel_id: ChannelId,
-        user_id: UserId,
+        membership: Membership,
         content: MessageContent,
     ) -> Result<Message, MessageError>;
 
@@ -42,7 +41,7 @@ pub trait MessageService: Send + Sync + 'static {
     /// Returns messages in reverse chronological order (newest first).
     ///
     /// # Arguments
-    /// * `channel_id` - Channel ID to query
+    /// * `membership` - Proof the caller was verified as a member of the channel
     /// * `limit` - Maximum number of messages to return
     /// * `before` - Optional timestamp cursor for pagination (fetch messages before this time)
     ///
@@ -53,7 +52,7 @@ pub trait MessageService: Send + Sync + 'static {
     /// * `DatabaseError` - Database operation failed
     async fn get_channel_messages(
         &self,
-        channel_id: ChannelId,
+        membership: Membership,
         limit: i32,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<Message>, MessageError>;

@@ -4,6 +4,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use uuid::Uuid;
 
+use crate::domain::channel::errors::ChannelError;
 use crate::domain::channel::errors::ChannelIdError;
 use crate::domain::channel::errors::ChannelNameError;
 use crate::domain::user::models::UserId;
@@ -169,6 +170,27 @@ impl Channel {
         }
     }
 
+    /// Verify that `user_id` may read/write this channel, producing a proof
+    /// usable by downstream APIs instead of a `bool` every caller must remember to check.
+    ///
+    /// Public channels are open to any authenticated user; private channels
+    /// require membership; direct channels require being one of the two participants.
+    pub fn membership_of(&self, user_id: UserId) -> Result<Membership, ChannelError> {
+        let ok = match self {
+            Channel::Public(_) => true,
+            Channel::Private(c) => c.members.contains(&user_id),
+            Channel::Direct(c) => c.participants.contains(&user_id),
+        };
+        ok.then_some(Membership {
+            user_id,
+            channel_id: self.id(),
+        })
+        .ok_or(ChannelError::NotMember {
+            user_id,
+            channel_id: self.id(),
+        })
+    }
+
     /// Create a public channel with the given ID and metadata.
     pub fn new_public(id: ChannelId, name: ChannelName, description: Option<String>, created_by: UserId) -> Self {
         Channel::Public(PublicChannel {
@@ -178,6 +200,41 @@ impl Channel {
             created_by,
             created_at: Utc::now(),
         })
+    }
+}
+
+/// Proof that a user was verified as a member of a channel.
+///
+/// Only constructible via [`Channel::membership_of`] — private fields, no
+/// public constructor, so it cannot be forged. Downstream APIs that require
+/// authorization should take a `Membership` instead of a `ChannelId`, so that
+/// skipping the check is a compile error rather than a missing `if`.
+#[derive(Debug, Clone, Copy)]
+pub struct Membership {
+    user_id: UserId,
+    channel_id: ChannelId,
+}
+
+impl Membership {
+    /// The member's user ID.
+    pub fn user_id(&self) -> UserId {
+        self.user_id
+    }
+
+    /// The channel this membership was verified against.
+    pub fn channel_id(&self) -> ChannelId {
+        self.channel_id
+    }
+}
+
+#[cfg(test)]
+impl Membership {
+    /// Test-only constructor, bypassing `Channel::membership_of`.
+    pub fn test_new(user_id: UserId, channel_id: ChannelId) -> Self {
+        Self {
+            user_id,
+            channel_id,
+        }
     }
 }
 
