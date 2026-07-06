@@ -280,7 +280,9 @@ async fn get_user_returns_user_for_authenticated_request() {
 }
 
 #[tokio::test]
-async fn get_user_returns_not_found_for_missing_id() {
+async fn get_user_returns_forbidden_for_other_users_id() {
+    // Object-level authorization: a token only grants access to its own user record,
+    // not to any other id (existing or not) — this is checked before any DB lookup.
     let app = TestApp::spawn().await;
 
     app.post("/api/users")
@@ -309,17 +311,161 @@ async fn get_user_returns_not_found_for_missing_id() {
         .expect("Failed to parse response");
     let token = auth_body["data"]["token"].as_str().unwrap();
 
-    let fake_uuid = uuid::Uuid::new_v4().to_string();
+    let other_uuid = uuid::Uuid::new_v4().to_string();
     let response = app
-        .get_authenticated(&format!("/api/users/{}", fake_uuid), token)
+        .get_authenticated(&format!("/api/users/{}", other_uuid), token)
         .send()
         .await
         .expect("Failed to execute request");
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert!(body["data"]["message"].is_string());
+}
+
+#[tokio::test]
+async fn update_user_returns_forbidden_for_other_users_id() {
+    let app = TestApp::spawn().await;
+
+    // Victim account
+    let victim_create: serde_json::Value = app
+        .post("/api/users")
+        .json(&json!({
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let victim_id = victim_create["data"]["id"].as_str().unwrap();
+
+    // Attacker account + token
+    app.post("/api/users")
+        .json(&json!({
+            "username": "john-coltrane",
+            "email": "john.coltrane@example.com",
+            "password": "A-L0ve-Supreme_1965!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let attacker_auth: serde_json::Value = app
+        .post("/api/auth/login")
+        .json(&json!({
+            "username": "john-coltrane",
+            "password": "A-L0ve-Supreme_1965!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let attacker_token = attacker_auth["data"]["token"].as_str().unwrap();
+
+    let response = app
+        .patch_authenticated(&format!("/api/users/{}", victim_id), attacker_token)
+        .json(&json!({ "email": "hijacked@example.com" }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Victim's data must be untouched.
+    let victim_auth: serde_json::Value = app
+        .post("/api/auth/login")
+        .json(&json!({
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let victim_token = victim_auth["data"]["token"].as_str().unwrap();
+
+    let victim_response: serde_json::Value = app
+        .get_authenticated(&format!("/api/users/{}", victim_id), victim_token)
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    assert_eq!(victim_response["data"]["email"], "miles.davis@example.com");
+}
+
+#[tokio::test]
+async fn delete_user_returns_forbidden_for_other_users_id() {
+    let app = TestApp::spawn().await;
+
+    let victim_create: serde_json::Value = app
+        .post("/api/users")
+        .json(&json!({
+            "username": "miles-davis",
+            "email": "miles.davis@example.com",
+            "password": "K1nd-0f-Blue_1959!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let victim_id = victim_create["data"]["id"].as_str().unwrap();
+
+    app.post("/api/users")
+        .json(&json!({
+            "username": "john-coltrane",
+            "email": "john.coltrane@example.com",
+            "password": "A-L0ve-Supreme_1965!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    let attacker_auth: serde_json::Value = app
+        .post("/api/auth/login")
+        .json(&json!({
+            "username": "john-coltrane",
+            "password": "A-L0ve-Supreme_1965!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request")
+        .json()
+        .await
+        .expect("Failed to parse response");
+    let attacker_token = attacker_auth["data"]["token"].as_str().unwrap();
+
+    let response = app
+        .delete_authenticated(&format!("/api/users/{}", victim_id), attacker_token)
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Victim account must still exist.
+    let victim_auth = app
+        .post("/api/auth/login")
+        .json(&json!({
+            "username": "miles-davis",
+            "password": "K1nd-0f-Blue_1959!"
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(victim_auth.status(), StatusCode::OK);
 }
 
 #[tokio::test]
