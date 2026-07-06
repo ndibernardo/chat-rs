@@ -5,14 +5,19 @@ use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use rdkafka::ClientConfig;
-use rdkafka::Message;
+use rdkafka::Message as _;
 use thiserror::Error;
 
-use super::messages::ChatEventMessage;
-use super::topic::TopicSharder;
 use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
-use crate::inbound::websocket::registry::ConnectionRegistry;
+use crate::domain::message::models::Message;
+use crate::domain::message::models::MessageContent;
+use crate::domain::message::models::MessageId;
+use crate::domain::message::ports::MessageBroadcaster;
+use crate::domain::user::models::UserId;
+use crate::outbound::kafka::messages::ChatEventMessage;
+use crate::outbound::kafka::messages::MessageSentMessage;
+use crate::outbound::kafka::topic::TopicSharder;
 
 #[derive(Debug, Error)]
 enum MessageProcessingError {
@@ -39,7 +44,7 @@ enum MessageProcessingError {
 /// This allows horizontal scaling while minimizing unnecessary network traffic.
 pub struct EventConsumer {
     consumer: StreamConsumer,
-    connection_manager: Arc<ConnectionRegistry>,
+    broadcaster: Arc<dyn MessageBroadcaster>,
 }
 
 impl EventConsumer {
@@ -47,10 +52,10 @@ impl EventConsumer {
     ///
     /// # Arguments
     /// * `config` - Application configuration
-    /// * `connection_manager` - WebSocket connection manager for broadcasting
+    /// * `broadcaster` - Delivery port for broadcasting messages to connected clients
     pub fn new(
         config: &Config,
-        connection_manager: Arc<ConnectionRegistry>,
+        broadcaster: Arc<dyn MessageBroadcaster>,
     ) -> Result<Self, anyhow::Error> {
         tracing::info!(
             "Initializing Kafka consumer with brokers: {}, group_id: {}, shards: {}",
@@ -87,7 +92,7 @@ impl EventConsumer {
 
         Ok(Self {
             consumer,
-            connection_manager,
+            broadcaster,
         })
     }
 
@@ -168,14 +173,10 @@ impl EventConsumer {
         }
     }
 
-    /// Broadcast a message to all connected clients in the channel (if any)
-    ///
-    /// This method implements client-side filtering:
-    /// - Consumer receives events from all shards
-    /// - But only broadcasts to channels with active connections on this instance
-    /// - This minimizes unnecessary message broadcasting
-    async fn broadcast_message(&self, event: super::messages::MessageSentMessage) {
-        // Parse string IDs back to domain types
+    /// Reconstruct the domain message from the wire event and hand it to the
+    /// broadcaster port. Client-side filtering (only instances with an active
+    /// connection for the channel actually send) is the broadcaster's concern.
+    async fn broadcast_message(&self, event: MessageSentMessage) {
         let channel_id = match ChannelId::from_string(&event.channel_id) {
             Ok(id) => id,
             Err(e) => {
@@ -184,29 +185,6 @@ impl EventConsumer {
             }
         };
 
-        // Check if THIS instance has any connections for this channel
-        let conn_count = self
-            .connection_manager
-            .get_channel_connection_count(channel_id)
-            .await;
-
-        if conn_count == 0 {
-            // No connections on this instance for this channel - skip broadcasting
-            tracing::trace!(
-                "No active connections for channel {} on this instance, skipping broadcast",
-                event.channel_id
-            );
-            return;
-        }
-
-        // We have connections - broadcast the message using type-safe ServerMessage enum
-        use crate::domain::message::models::MessageId;
-        use crate::domain::user::models::UserId;
-        use crate::inbound::websocket::messages::ServerMessage;
-        use crate::inbound::websocket::messages::WsMessageId;
-        use crate::inbound::websocket::messages::WsUserId;
-
-        // Parse domain types from event
         let message_id = match MessageId::from_string(&event.message_id) {
             Ok(id) => id,
             Err(e) => {
@@ -223,31 +201,22 @@ impl EventConsumer {
             }
         };
 
-        // Create type-safe server message
-        let server_message = ServerMessage::NewMessage {
-            id: WsMessageId::from(message_id),
-            user_id: WsUserId::from(user_id),
-            content: event.content,
-            timestamp: event.timestamp,
-        };
-
-        let ws_message = match serde_json::to_string(&server_message) {
-            Ok(json) => axum::extract::ws::Message::Text(json.into()),
+        let content = match MessageContent::new(event.content) {
+            Ok(content) => content,
             Err(e) => {
-                tracing::error!("Failed to serialize server message: {}", e);
+                tracing::error!("Invalid message content in event: {}", e);
                 return;
             }
         };
 
-        tracing::debug!(
-            "Broadcasting message {} to {} connections in channel {} on this instance",
-            event.message_id,
-            conn_count,
-            event.channel_id
-        );
+        let message = Message {
+            id: message_id,
+            channel_id,
+            user_id,
+            content,
+            timestamp: event.timestamp,
+        };
 
-        self.connection_manager
-            .broadcast_to_channel(channel_id, ws_message)
-            .await;
+        self.broadcaster.broadcast(&message).await;
     }
 }

@@ -9,8 +9,8 @@ use rdkafka::ClientConfig;
 use rdkafka::Message;
 use thiserror::Error;
 
-use super::messages::UserEventMessage;
 use crate::config::Config;
+use crate::outbound::kafka::messages::UserEventMessage;
 use crate::domain::user::events::UserCreatedEvent;
 use crate::domain::user::events::UserDeletedEvent;
 use crate::domain::user::events::UserEvent;
