@@ -192,14 +192,99 @@ impl Channel {
         })
     }
 
-    /// Create a public channel with the given ID and metadata.
-    pub fn new_public(id: ChannelId, name: ChannelName, description: Option<String>, created_by: UserId) -> Self {
+    /// Create a public channel with a freshly generated ID.
+    pub fn new_public(name: ChannelName, description: Option<String>, created_by: UserId) -> Self {
+        Channel::Public(PublicChannel {
+            id: ChannelId::new(),
+            name,
+            description,
+            created_by,
+            created_at: Utc::now(),
+        })
+    }
+
+    /// Create a private channel with a freshly generated ID. The creator is
+    /// always included in `members`, even if the caller omitted them.
+    pub fn new_private(
+        name: ChannelName,
+        description: Option<String>,
+        mut members: Vec<UserId>,
+        created_by: UserId,
+    ) -> Self {
+        if !members.contains(&created_by) {
+            members.push(created_by);
+        }
+        Channel::Private(PrivateChannel {
+            id: ChannelId::new(),
+            name,
+            description,
+            created_by,
+            created_at: Utc::now(),
+            members,
+        })
+    }
+
+    /// Create a direct channel between the creator and `participant_id`, with a freshly generated ID.
+    pub fn new_direct(created_by: UserId, participant_id: UserId) -> Self {
+        Channel::Direct(DirectChannel {
+            id: ChannelId::new(),
+            created_by,
+            created_at: Utc::now(),
+            participants: [created_by, participant_id],
+        })
+    }
+
+    /// Reconstruct a public channel from persisted parts — for use within the
+    /// crate only (e.g. database mapping).
+    pub(crate) fn from_public_parts(
+        id: ChannelId,
+        name: ChannelName,
+        description: Option<String>,
+        created_by: UserId,
+        created_at: DateTime<Utc>,
+    ) -> Self {
         Channel::Public(PublicChannel {
             id,
             name,
             description,
             created_by,
-            created_at: Utc::now(),
+            created_at,
+        })
+    }
+
+    /// Reconstruct a private channel from persisted parts — for use within the
+    /// crate only (e.g. database mapping).
+    pub(crate) fn from_private_parts(
+        id: ChannelId,
+        name: ChannelName,
+        description: Option<String>,
+        created_by: UserId,
+        created_at: DateTime<Utc>,
+        members: Vec<UserId>,
+    ) -> Self {
+        Channel::Private(PrivateChannel {
+            id,
+            name,
+            description,
+            created_by,
+            created_at,
+            members,
+        })
+    }
+
+    /// Reconstruct a direct channel from persisted parts — for use within the
+    /// crate only (e.g. database mapping).
+    pub(crate) fn from_direct_parts(
+        id: ChannelId,
+        created_by: UserId,
+        created_at: DateTime<Utc>,
+        participants: [UserId; 2],
+    ) -> Self {
+        Channel::Direct(DirectChannel {
+            id,
+            created_by,
+            created_at,
+            participants,
         })
     }
 }
@@ -242,31 +327,31 @@ impl Membership {
 /// Public channel accessible to all users.
 #[derive(Debug, Clone)]
 pub struct PublicChannel {
-    pub(crate) id: ChannelId,
-    pub(crate) name: ChannelName,
-    pub(crate) description: Option<String>,
-    pub(crate) created_by: UserId,
-    pub(crate) created_at: DateTime<Utc>,
+    id: ChannelId,
+    name: ChannelName,
+    description: Option<String>,
+    created_by: UserId,
+    created_at: DateTime<Utc>,
 }
 
 /// Private channel with restricted membership.
 #[derive(Debug, Clone)]
 pub struct PrivateChannel {
-    pub(crate) id: ChannelId,
-    pub(crate) name: ChannelName,
-    pub(crate) description: Option<String>,
-    pub(crate) created_by: UserId,
-    pub(crate) created_at: DateTime<Utc>,
-    pub(crate) members: Vec<UserId>,
+    id: ChannelId,
+    name: ChannelName,
+    description: Option<String>,
+    created_by: UserId,
+    created_at: DateTime<Utc>,
+    members: Vec<UserId>,
 }
 
 /// Direct message channel between exactly two users.
 #[derive(Debug, Clone)]
 pub struct DirectChannel {
-    pub(crate) id: ChannelId,
-    pub(crate) created_by: UserId,
-    pub(crate) created_at: DateTime<Utc>,
-    pub(crate) participants: [UserId; 2],
+    id: ChannelId,
+    created_by: UserId,
+    created_at: DateTime<Utc>,
+    participants: [UserId; 2],
 }
 
 /// Channel name value object.

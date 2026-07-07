@@ -146,11 +146,11 @@ pub struct MessageResponseData {
 impl From<&Message> for MessageResponseData {
     fn from(message: &Message) -> Self {
         Self {
-            id: message.id.into(),
-            channel_id: message.channel_id.into(),
-            user_id: message.user_id.into(),
-            content: message.content.as_str().to_string(),
-            timestamp: message.timestamp,
+            id: message.id().into(),
+            channel_id: message.channel_id().into(),
+            user_id: message.user_id().into(),
+            content: message.content().as_str().to_string(),
+            timestamp: message.timestamp(),
         }
     }
 }

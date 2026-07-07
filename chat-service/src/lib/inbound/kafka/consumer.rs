@@ -209,13 +209,7 @@ impl EventConsumer {
             }
         };
 
-        let message = Message {
-            id: message_id,
-            channel_id,
-            user_id,
-            content,
-            timestamp: event.timestamp,
-        };
+        let message = Message::from_parts(message_id, channel_id, user_id, content, event.timestamp);
 
         self.broadcaster.broadcast(&message).await;
     }

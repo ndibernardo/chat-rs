@@ -1,16 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::Utc;
 
 use super::errors::ChannelError;
 use super::events::ChannelCreatedEvent;
 use super::models::Channel;
 use super::models::ChannelId;
 use super::models::CreateChannelCommand;
-use super::models::DirectChannel;
-use super::models::PrivateChannel;
-use super::models::PublicChannel;
 use super::ports::ChannelEventPublisher;
 use super::ports::ChannelRepository;
 use super::ports::ChannelService;
@@ -50,37 +46,17 @@ where
         created_by: UserId,
     ) -> Result<Channel, ChannelError> {
         let channel = match command {
-            CreateChannelCommand::Public { name, description } => Channel::Public(PublicChannel {
-                id: ChannelId::new(),
-                name,
-                description,
-                created_by,
-                created_at: Utc::now(),
-            }),
+            CreateChannelCommand::Public { name, description } => {
+                Channel::new_public(name, description, created_by)
+            }
             CreateChannelCommand::Private {
                 name,
                 description,
-                mut members,
-            } => {
-                // creator is always a member of their own private channel
-                if !members.contains(&created_by) {
-                    members.push(created_by);
-                }
-                Channel::Private(PrivateChannel {
-                    id: ChannelId::new(),
-                    name,
-                    description,
-                    created_by,
-                    created_at: Utc::now(),
-                    members,
-                })
+                members,
+            } => Channel::new_private(name, description, members, created_by),
+            CreateChannelCommand::Direct { participant_id } => {
+                Channel::new_direct(created_by, participant_id)
             }
-            CreateChannelCommand::Direct { participant_id } => Channel::Direct(DirectChannel {
-                id: ChannelId::new(),
-                created_by,
-                created_at: Utc::now(),
-                participants: [created_by, participant_id],
-            }),
         };
 
         let channel = self.channel_repository.create(channel).await?;
@@ -113,6 +89,7 @@ where
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
+    use chrono::Utc;
     use mockall::mock;
     use mockall::predicate::*;
 
@@ -205,12 +182,12 @@ mod tests {
 
         repo.expect_create()
             .withf(move |channel| {
-                let Channel::Private(c) = channel else { return false };
-                c.name.as_str() == "private-team"
-                    && c.created_by == creator_id
-                    && c.members.contains(&creator_id)
-                    && c.members.contains(&member1_id)
-                    && c.members.contains(&member2_id)
+                matches!(channel, Channel::Private(_))
+                    && channel.name().unwrap().as_str() == "private-team"
+                    && channel.created_by() == creator_id
+                    && channel.members().contains(&creator_id)
+                    && channel.members().contains(&member1_id)
+                    && channel.members().contains(&member2_id)
             })
             .times(1)
             .returning(|channel| Ok(channel));
@@ -234,11 +211,12 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let Channel::Private(c) = result.unwrap() else { panic!("expected Private") };
-        assert_eq!(c.name.as_str(), "private-team");
-        assert!(c.members.contains(&creator_id), "creator must be a member");
-        assert!(c.members.contains(&member1_id));
-        assert!(c.members.contains(&member2_id));
+        let channel = result.unwrap();
+        assert!(matches!(channel, Channel::Private(_)));
+        assert_eq!(channel.name().unwrap().as_str(), "private-team");
+        assert!(channel.members().contains(&creator_id), "creator must be a member");
+        assert!(channel.members().contains(&member1_id));
+        assert!(channel.members().contains(&member2_id));
     }
 
     #[tokio::test]
@@ -250,8 +228,7 @@ mod tests {
 
         repo.expect_create()
             .withf(move |channel| {
-                let Channel::Private(c) = channel else { return false };
-                c.members.iter().filter(|&&m| m == creator_id).count() == 1
+                channel.members().iter().filter(|&&m| m == creator_id).count() == 1
             })
             .times(1)
             .returning(|channel| Ok(channel));
@@ -275,8 +252,9 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let Channel::Private(c) = result.unwrap() else { panic!("expected Private") };
-        assert_eq!(c.members.iter().filter(|&&m| m == creator_id).count(), 1);
+        let channel = result.unwrap();
+        assert!(matches!(channel, Channel::Private(_)));
+        assert_eq!(channel.members().iter().filter(|&&m| m == creator_id).count(), 1);
     }
 
     #[tokio::test]
@@ -322,13 +300,13 @@ mod tests {
         let creator_id = UserId::new();
         let channel_id = ChannelId::new();
 
-        let expected = Channel::Public(PublicChannel {
-            id: channel_id,
-            name: ChannelName::new("engineering").unwrap(),
-            description: None,
-            created_by: creator_id,
-            created_at: Utc::now(),
-        });
+        let expected = Channel::from_public_parts(
+            channel_id,
+            ChannelName::new("engineering").unwrap(),
+            None,
+            creator_id,
+            Utc::now(),
+        );
 
         let returned = expected.clone();
         repo.expect_find_by_id()
@@ -366,20 +344,20 @@ mod tests {
         let creator_id = UserId::new();
 
         let channels = vec![
-            Channel::Public(PublicChannel {
-                id: ChannelId::new(),
-                name: ChannelName::new("engineering").unwrap(),
-                description: None,
-                created_by: creator_id,
-                created_at: Utc::now(),
-            }),
-            Channel::Public(PublicChannel {
-                id: ChannelId::new(),
-                name: ChannelName::new("product").unwrap(),
-                description: None,
-                created_by: creator_id,
-                created_at: Utc::now(),
-            }),
+            Channel::from_public_parts(
+                ChannelId::new(),
+                ChannelName::new("engineering").unwrap(),
+                None,
+                creator_id,
+                Utc::now(),
+            ),
+            Channel::from_public_parts(
+                ChannelId::new(),
+                ChannelName::new("product").unwrap(),
+                None,
+                creator_id,
+                Utc::now(),
+            ),
         ];
 
         let returned = channels.clone();

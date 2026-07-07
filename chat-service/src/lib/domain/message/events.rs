@@ -75,11 +75,11 @@ impl MessageSentEvent {
     pub fn new(message: &Message) -> Self {
         Self {
             event_id: Uuid::new_v4().to_string(),
-            message_id: message.id,
-            channel_id: message.channel_id,
-            user_id: message.user_id,
-            content: message.content.as_str().to_string(),
-            timestamp: message.timestamp,
+            message_id: message.id(),
+            channel_id: message.channel_id(),
+            user_id: message.user_id(),
+            content: message.content().as_str().to_string(),
+            timestamp: message.timestamp(),
         }
     }
 }

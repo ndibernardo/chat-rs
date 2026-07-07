@@ -41,16 +41,16 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
                 updated_at = EXCLUDED.updated_at,
                 synced_at = NOW()
             "#,
-            user.id.as_uuid(),
-            user.username.as_str(),
-            user.created_at,
-            user.updated_at,
+            user.id().into_uuid(),
+            user.username().as_str(),
+            user.created_at(),
+            user.updated_at(),
         )
         .execute(&self.pool)
         .await
         .map_err(|e| UserError::DatabaseError(format!("Failed to upsert user replica: {}", e)))?;
 
-        tracing::debug!("User {} upserted in replica", user.id);
+        tracing::debug!("User {} upserted in replica", user.id());
         Ok(())
     }
 
@@ -91,12 +91,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         Ok(record.map(|r| {
             let username = Username::new(r.username)
                 .expect("Invalid username in database - should never happen");
-            User {
-                id: UserId::from_uuid(r.id),
-                username,
-                created_at: r.created_at,
-                updated_at: r.updated_at,
-            }
+            User::new(UserId::from_uuid(r.id), username, r.created_at, r.updated_at)
         }))
     }
 
@@ -120,12 +115,7 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
             .map(|r| {
                 let username = Username::new(r.username)
                     .expect("Invalid username in database - should never happen");
-                User {
-                    id: UserId::from_uuid(r.id),
-                    username,
-                    created_at: r.created_at,
-                    updated_at: r.updated_at,
-                }
+                User::new(UserId::from_uuid(r.id), username, r.created_at, r.updated_at)
             })
             .collect())
     }

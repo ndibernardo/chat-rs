@@ -223,7 +223,7 @@ async fn process_client_message(
 
                     tracing::debug!(
                         "Message {} saved and published to Kafka for channel {}",
-                        message.id,
+                        message.id(),
                         membership.channel_id()
                     );
 

@@ -13,10 +13,10 @@ use crate::domain::user::errors::UsernameError;
 /// Used for read-path enrichment (displaying usernames in messages, channels, etc.).
 #[derive(Debug, Clone)]
 pub struct User {
-    pub(crate) id: UserId,
-    pub(crate) username: Username,
-    pub(crate) created_at: DateTime<Utc>,
-    pub(crate) updated_at: DateTime<Utc>,
+    id: UserId,
+    username: Username,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 impl User {

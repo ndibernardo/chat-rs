@@ -91,7 +91,7 @@ impl MessageRepository {
 impl ports::MessageRepository for MessageRepository {
     async fn create(&self, message: Message) -> Result<Message, MessageError> {
         // Convert domain Uuid to CqlTimeuuid for Cassandra
-        let message_id_timeuuid = CqlTimeuuid::from(*message.id.as_uuid());
+        let message_id_timeuuid = CqlTimeuuid::from(*message.id().as_uuid());
 
         // The two denormalized inserts are independent (different partitions, different
         // tables) so they run concurrently rather than paying two round-trips serially.
@@ -99,11 +99,11 @@ impl ports::MessageRepository for MessageRepository {
             "INSERT INTO messages_by_channel (channel_id, message_id, user_id, content, timestamp)
              VALUES (?, ?, ?, ?, ?)",
             (
-                message.channel_id.as_uuid(),
+                message.channel_id().into_uuid(),
                 message_id_timeuuid,
-                message.user_id.as_uuid(),
-                message.content.as_str(),
-                message.timestamp,
+                message.user_id().into_uuid(),
+                message.content().as_str(),
+                message.timestamp(),
             ),
         );
 
@@ -111,11 +111,11 @@ impl ports::MessageRepository for MessageRepository {
             "INSERT INTO messages_by_user (user_id, message_id, channel_id, content, timestamp)
              VALUES (?, ?, ?, ?, ?)",
             (
-                message.user_id.as_uuid(),
+                message.user_id().into_uuid(),
                 message_id_timeuuid,
-                message.channel_id.as_uuid(),
-                message.content.as_str(),
-                message.timestamp,
+                message.channel_id().into_uuid(),
+                message.content().as_str(),
+                message.timestamp(),
             ),
         );
 
@@ -166,13 +166,13 @@ impl ports::MessageRepository for MessageRepository {
             let (channel_id, message_id_timeuuid, user_id, content, timestamp) =
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-            messages.push(Message {
-                id: MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
-                channel_id: ChannelId::from_uuid(channel_id),
-                user_id: UserId::from_uuid(user_id),
-                content: MessageContent::new(content)?,
+            messages.push(Message::from_parts(
+                MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
+                ChannelId::from_uuid(channel_id),
+                UserId::from_uuid(user_id),
+                MessageContent::new(content)?,
                 timestamp,
-            });
+            ));
         }
 
         Ok(messages)
@@ -207,13 +207,13 @@ impl ports::MessageRepository for MessageRepository {
             let (user_id, message_id_timeuuid, channel_id, content, timestamp) =
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-            messages.push(Message {
-                id: MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
-                channel_id: ChannelId::from_uuid(channel_id),
-                user_id: UserId::from_uuid(user_id),
-                content: MessageContent::new(content)?,
+            messages.push(Message::from_parts(
+                MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
+                ChannelId::from_uuid(channel_id),
+                UserId::from_uuid(user_id),
+                MessageContent::new(content)?,
                 timestamp,
-            });
+            ));
         }
 
         Ok(messages)

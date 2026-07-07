@@ -107,13 +107,12 @@ async fn test_kafka_publish_channel_event() {
     let kafka_producer = create_kafka_producer(&kafka_brokers);
 
     // Create a test channel and event
-    let channel_id = ChannelId::new();
     let channel = Channel::new_public(
-        channel_id,
         ChannelName::new("test-channel").unwrap(),
         Some("Test channel".to_string()),
         UserId::new(),
     );
+    let channel_id = channel.id();
 
     let event = ChannelCreatedEvent::new(&channel);
     let key = event.channel_id.to_string();

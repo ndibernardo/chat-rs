@@ -7,7 +7,6 @@ use super::events::MessageSentEvent;
 use super::models::Limit;
 use super::models::Message;
 use super::models::MessageContent;
-use super::models::MessageId;
 use super::ports::MessageEventPublisher;
 use super::ports::MessageRepository;
 use super::ports::MessageService;
@@ -75,13 +74,7 @@ where
             .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
         resolved_user.ok_or(MessageError::UserNotFound(membership.user_id()))?;
 
-        let message = Message {
-            id: MessageId::new_time_based(),
-            channel_id: membership.channel_id(),
-            user_id: membership.user_id(),
-            content: content.clone(),
-            timestamp: Utc::now(),
-        };
+        let message = Message::new(membership.channel_id(), membership.user_id(), content);
 
         let saved_message = self.message_repository.create(message).await?;
 
@@ -195,9 +188,9 @@ mod tests {
         message_repository
             .expect_create()
             .withf(move |m| {
-                m.channel_id == channel_id
-                    && m.user_id == user_id
-                    && m.content.as_str() == "What's the deployment status?"
+                m.channel_id() == channel_id
+                    && m.user_id() == user_id
+                    && m.content().as_str() == "What's the deployment status?"
             })
             .times(1)
             .returning(|m| Ok(m));
@@ -218,9 +211,9 @@ mod tests {
 
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message.channel_id, channel_id);
-        assert_eq!(message.user_id, user_id);
-        assert_eq!(message.content.as_str(), "What's the deployment status?");
+        assert_eq!(message.channel_id(), channel_id);
+        assert_eq!(message.user_id(), user_id);
+        assert_eq!(message.content().as_str(), "What's the deployment status?");
     }
 
     #[tokio::test]
@@ -261,20 +254,16 @@ mod tests {
         let membership = Membership::test_new(user_id, channel_id);
 
         let messages = vec![
-            Message {
-                id: MessageId::new_time_based(),
+            Message::new(
                 channel_id,
                 user_id,
-                content: MessageContent::new("First deploy attempt".to_string()).unwrap(),
-                timestamp: Utc::now(),
-            },
-            Message {
-                id: MessageId::new_time_based(),
+                MessageContent::new("First deploy attempt".to_string()).unwrap(),
+            ),
+            Message::new(
                 channel_id,
                 user_id,
-                content: MessageContent::new("Rollback complete".to_string()).unwrap(),
-                timestamp: Utc::now(),
-            },
+                MessageContent::new("Rollback complete".to_string()).unwrap(),
+            ),
         ];
 
         let returned = messages.clone();

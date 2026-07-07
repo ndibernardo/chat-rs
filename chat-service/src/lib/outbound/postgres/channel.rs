@@ -9,9 +9,6 @@ use crate::domain::channel::models::Channel;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::models::ChannelName;
 use crate::domain::channel::models::ChannelType;
-use crate::domain::channel::models::DirectChannel;
-use crate::domain::channel::models::PrivateChannel;
-use crate::domain::channel::models::PublicChannel;
 use crate::domain::channel::ports;
 use crate::domain::user::models::UserId;
 
@@ -81,34 +78,34 @@ impl ChannelRepository {
         match ChannelType::from_str(&channel_type)? {
             ChannelType::Public => {
                 let channel_name = ChannelName::new(name.unwrap_or_default())?;
-                Ok(Channel::Public(PublicChannel {
-                    id: channel_id,
-                    name: channel_name,
+                Ok(Channel::from_public_parts(
+                    channel_id,
+                    channel_name,
                     description,
-                    created_by: user_id,
+                    user_id,
                     created_at,
-                }))
+                ))
             }
             ChannelType::Private => {
                 let channel_name = ChannelName::new(name.unwrap_or_default())?;
                 let members = self.load_members(channel_id).await?;
-                Ok(Channel::Private(PrivateChannel {
-                    id: channel_id,
-                    name: channel_name,
+                Ok(Channel::from_private_parts(
+                    channel_id,
+                    channel_name,
                     description,
-                    created_by: user_id,
+                    user_id,
                     created_at,
                     members,
-                }))
+                ))
             }
             ChannelType::Direct => {
                 let participants = self.load_participants(channel_id).await?;
-                Ok(Channel::Direct(DirectChannel {
-                    id: channel_id,
-                    created_by: user_id,
+                Ok(Channel::from_direct_parts(
+                    channel_id,
+                    user_id,
                     created_at,
                     participants,
-                }))
+                ))
             }
         }
     }

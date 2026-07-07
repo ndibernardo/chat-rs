@@ -18,11 +18,11 @@ use crate::domain::user::models::UserId;
 /// Represents a single message in a channel with content and metadata.
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub(crate) id: MessageId,
-    pub(crate) channel_id: ChannelId,
-    pub(crate) user_id: UserId,
-    pub(crate) content: MessageContent,
-    pub(crate) timestamp: DateTime<Utc>,
+    id: MessageId,
+    channel_id: ChannelId,
+    user_id: UserId,
+    content: MessageContent,
+    timestamp: DateTime<Utc>,
 }
 
 impl Message {
@@ -34,6 +34,24 @@ impl Message {
             user_id,
             content,
             timestamp: Utc::now(),
+        }
+    }
+
+    /// Reconstruct a message from persisted parts — for use within the crate
+    /// only (e.g. database mapping).
+    pub(crate) fn from_parts(
+        id: MessageId,
+        channel_id: ChannelId,
+        user_id: UserId,
+        content: MessageContent,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            channel_id,
+            user_id,
+            content,
+            timestamp,
         }
     }
 

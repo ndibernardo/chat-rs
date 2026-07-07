@@ -149,12 +149,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         let user_id = UserId::from_string(&event.user_id)?;
         let username = Username::new(event.username.clone())?;
 
-        let user = User {
-            id: user_id,
-            username,
-            created_at: event.created_at,
-            updated_at: event.created_at, // Same as created_at for new users
-        };
+        let user = User::new(user_id, username, event.created_at, event.created_at);
 
         self.user_replica_repository.upsert(user).await?;
 
@@ -177,7 +172,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         let existing_user = self.user_replica_repository.get(user_id).await?;
 
         let created_at = existing_user
-            .map(|user| user.created_at)
+            .map(|user| user.created_at())
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "User {} not found in replica during update, using current time for created_at",
@@ -188,12 +183,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
 
         let username = Username::new(event.username.clone())?;
 
-        let user = User {
-            id: user_id,
-            username,
-            created_at,
-            updated_at: event.updated_at,
-        };
+        let user = User::new(user_id, username, created_at, event.updated_at);
 
         self.user_replica_repository.upsert(user).await?;
 
