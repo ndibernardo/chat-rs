@@ -95,6 +95,30 @@ where
             .ok_or_else(|| UserError::NotFoundByUsername(username.clone()))
     }
 
+    async fn verify_credentials(
+        &self,
+        username: &Username,
+        password: &str,
+    ) -> Result<User, UserError> {
+        let user = self
+            .repository
+            .find_by_username(username)
+            .await?
+            .ok_or(UserError::InvalidCredentials)?;
+
+        let is_valid = self
+            .password_hasher
+            .verify(password, user.password_hash())
+            .await
+            .map_err(UserError::Password)?;
+
+        if !is_valid {
+            return Err(UserError::InvalidCredentials);
+        }
+
+        Ok(user)
+    }
+
     async fn get_users_by_ids(&self, user_ids: &[UserId]) -> Result<Vec<User>, UserError> {
         self.repository.find_by_ids(user_ids).await
     }
@@ -401,6 +425,84 @@ mod tests {
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UserError::NotFoundByUsername(_)));
+    }
+
+    #[tokio::test]
+    async fn verify_credentials_returns_user_for_correct_password() {
+        let mut repository = MockTestUserRepository::new();
+        let event_publisher = MockTestEventPublisher::new();
+        let mut password_hasher = MockTestPasswordHasher::new();
+
+        let username = Username::new("miles-davis").unwrap();
+        let user = miles_davis();
+
+        let returned_user = user.clone();
+        repository
+            .expect_find_by_username()
+            .times(1)
+            .returning(move |_| Ok(Some(returned_user.clone())));
+
+        password_hasher
+            .expect_verify()
+            .withf(|password, hash| password == "K1nd-0f-Blue_1959!" && hash == "$argon2id$test_hash")
+            .times(1)
+            .returning(|_, _| Ok(true));
+
+        let service = Service::new(
+            Arc::new(repository),
+            Arc::new(event_publisher),
+            Arc::new(password_hasher),
+        );
+
+        let result = service.verify_credentials(&username, "K1nd-0f-Blue_1959!").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().username().as_str(), "miles-davis");
+    }
+
+    #[tokio::test]
+    async fn verify_credentials_rejects_wrong_password() {
+        let mut repository = MockTestUserRepository::new();
+        let event_publisher = MockTestEventPublisher::new();
+        let mut password_hasher = MockTestPasswordHasher::new();
+
+        let username = Username::new("miles-davis").unwrap();
+        let user = miles_davis();
+
+        repository
+            .expect_find_by_username()
+            .times(1)
+            .returning(move |_| Ok(Some(user.clone())));
+
+        password_hasher.expect_verify().times(1).returning(|_, _| Ok(false));
+
+        let service = Service::new(
+            Arc::new(repository),
+            Arc::new(event_publisher),
+            Arc::new(password_hasher),
+        );
+
+        let result = service.verify_credentials(&username, "wrong-password").await;
+        assert!(matches!(result, Err(UserError::InvalidCredentials)));
+    }
+
+    #[tokio::test]
+    async fn verify_credentials_rejects_unknown_username_without_calling_hasher() {
+        let mut repository = MockTestUserRepository::new();
+        let event_publisher = MockTestEventPublisher::new();
+        let mut password_hasher = MockTestPasswordHasher::new();
+
+        repository.expect_find_by_username().times(1).returning(|_| Ok(None));
+        password_hasher.expect_verify().times(0);
+
+        let service = Service::new(
+            Arc::new(repository),
+            Arc::new(event_publisher),
+            Arc::new(password_hasher),
+        );
+
+        let username = Username::new("ravi-shankar").unwrap();
+        let result = service.verify_credentials(&username, "irrelevant").await;
+        assert!(matches!(result, Err(UserError::InvalidCredentials)));
     }
 
     #[tokio::test]

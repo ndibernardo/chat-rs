@@ -55,6 +55,28 @@ pub trait UserService: Send + Sync + 'static {
     /// * `DatabaseError` - Database operation failed
     async fn get_user_by_username(&self, username: &Username) -> Result<User, UserError>;
 
+    /// Verify login credentials, returning the user on success.
+    ///
+    /// Unknown username and wrong password both fail with the same
+    /// `InvalidCredentials` error, so callers cannot distinguish user
+    /// enumeration from a bad password.
+    ///
+    /// # Arguments
+    /// * `username` - Username to authenticate
+    /// * `password` - Plaintext password to verify
+    ///
+    /// # Returns
+    /// The matching user entity
+    ///
+    /// # Errors
+    /// * `InvalidCredentials` - No such username, or password does not match
+    /// * `DatabaseError` - Database operation failed
+    async fn verify_credentials(
+        &self,
+        username: &Username,
+        password: &str,
+    ) -> Result<User, UserError>;
+
     /// Retrieve multiple users by identifiers.
     ///
     /// # Arguments

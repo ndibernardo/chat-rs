@@ -24,10 +24,10 @@ pub async fn authenticate(
 
     let user = state
         .user_service
-        .get_user_by_username(&username)
+        .verify_credentials(&username, body.password.as_str())
         .await
         .map_err(|e| match e {
-            UserError::NotFoundByUsername(_) => {
+            UserError::InvalidCredentials => {
                 ApiError::Unauthorized("Invalid credentials".to_string())
             }
             _ => ApiError::from(e),
@@ -39,26 +39,16 @@ pub async fn authenticate(
         state.jwt_expiration_hours,
     );
 
-    let result = state
+    let access_token = state
         .authenticator
-        .authenticate(body.password.as_str(), user.password_hash(), &claims)
-        .map_err(|e| match e {
-            auth::AuthenticationError::InvalidCredentials => {
-                ApiError::Unauthorized("Invalid credentials".to_string())
-            }
-            auth::AuthenticationError::PasswordError(err) => {
-                ApiError::InternalServerError(format!("Password verification failed: {}", err))
-            }
-            auth::AuthenticationError::JwtError(err) => {
-                ApiError::InternalServerError(format!("Token generation failed: {}", err))
-            }
-        })?;
+        .generate_token(&claims)
+        .map_err(|e| ApiError::InternalServerError(format!("Token generation failed: {}", e)))?;
 
     Ok(ApiSuccess::new(
         StatusCode::OK,
         AuthenticateResponseData {
             user: (&user).into(),
-            token: result.access_token,
+            token: access_token,
         },
     ))
 }
