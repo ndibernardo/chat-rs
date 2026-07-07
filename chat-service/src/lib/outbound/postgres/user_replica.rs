@@ -15,6 +15,22 @@ pub struct UserReplicaRepository {
     pool: PgPool,
 }
 
+/// Row shape shared by every query that selects a full `user_replica` row.
+struct UserReplicaRow {
+    id: uuid::Uuid,
+    username: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<UserReplicaRow> for User {
+    fn from(row: UserReplicaRow) -> Self {
+        let username = Username::new(row.username)
+            .expect("Invalid username in database - should never happen");
+        User::new(UserId::from_uuid(row.id), username, row.created_at, row.updated_at)
+    }
+}
+
 impl UserReplicaRepository {
     /// Create a new PostgreSQL user replica repository.
     ///
@@ -76,7 +92,8 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
     }
 
     async fn get(&self, user_id: UserId) -> Result<Option<User>, UserError> {
-        let record = sqlx::query!(
+        let record = sqlx::query_as!(
+            UserReplicaRow,
             r#"
             SELECT id, username, created_at, updated_at
             FROM user_replica
@@ -88,17 +105,14 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         .await
         .map_err(|e| UserError::DatabaseError(format!("Failed to get user from replica: {}", e)))?;
 
-        Ok(record.map(|r| {
-            let username = Username::new(r.username)
-                .expect("Invalid username in database - should never happen");
-            User::new(UserId::from_uuid(r.id), username, r.created_at, r.updated_at)
-        }))
+        Ok(record.map(User::from))
     }
 
     async fn get_many(&self, user_ids: &[UserId]) -> Result<Vec<User>, UserError> {
         let uuids: Vec<uuid::Uuid> = user_ids.iter().map(|id| *id.as_uuid()).collect();
 
-        let records = sqlx::query!(
+        let records = sqlx::query_as!(
+            UserReplicaRow,
             r#"
             SELECT id, username, created_at, updated_at
             FROM user_replica
@@ -110,13 +124,6 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         .await
         .map_err(|e| UserError::DatabaseError(format!("Failed to get users from replica: {}", e)))?;
 
-        Ok(records
-            .into_iter()
-            .map(|r| {
-                let username = Username::new(r.username)
-                    .expect("Invalid username in database - should never happen");
-                User::new(UserId::from_uuid(r.id), username, r.created_at, r.updated_at)
-            })
-            .collect())
+        Ok(records.into_iter().map(User::from).collect())
     }
 }

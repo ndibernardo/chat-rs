@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
-use sqlx::Row;
 
 use std::str::FromStr;
 
@@ -16,42 +15,46 @@ pub struct ChannelRepository {
     pool: PgPool,
 }
 
+/// Row shape shared by every query that selects a full `channels` row.
+struct ChannelRow {
+    id: uuid::Uuid,
+    name: Option<String>,
+    description: Option<String>,
+    created_by: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    channel_type: String,
+}
+
 impl ChannelRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     async fn load_members(&self, channel_id: ChannelId) -> Result<Vec<UserId>, ChannelError> {
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             "SELECT user_id FROM channel_members WHERE channel_id = $1",
+            channel_id.as_uuid(),
         )
-        .bind(channel_id.as_uuid())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|r| UserId::from_uuid(r.get::<uuid::Uuid, _>("user_id")))
-            .collect())
+        Ok(rows.into_iter().map(|r| UserId::from_uuid(r.user_id)).collect())
     }
 
     async fn load_participants(
         &self,
         channel_id: ChannelId,
     ) -> Result<[UserId; 2], ChannelError> {
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             "SELECT user_id FROM channel_participants WHERE channel_id = $1",
+            channel_id.as_uuid(),
         )
-        .bind(channel_id.as_uuid())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        let ids: Vec<UserId> = rows
-            .into_iter()
-            .map(|r| UserId::from_uuid(r.get::<uuid::Uuid, _>("user_id")))
-            .collect();
+        let ids: Vec<UserId> = rows.into_iter().map(|r| UserId::from_uuid(r.user_id)).collect();
 
         match ids.as_slice() {
             [a, b] => Ok([*a, *b]),
@@ -63,38 +66,30 @@ impl ChannelRepository {
         }
     }
 
-    async fn build_channel(
-        &self,
-        id: uuid::Uuid,
-        name: Option<String>,
-        description: Option<String>,
-        created_by: uuid::Uuid,
-        created_at: chrono::DateTime<chrono::Utc>,
-        channel_type: String,
-    ) -> Result<Channel, ChannelError> {
-        let channel_id = ChannelId::from_uuid(id);
-        let user_id = UserId::from_uuid(created_by);
+    async fn build_channel(&self, row: ChannelRow) -> Result<Channel, ChannelError> {
+        let channel_id = ChannelId::from_uuid(row.id);
+        let user_id = UserId::from_uuid(row.created_by);
 
-        match ChannelType::from_str(&channel_type)? {
+        match ChannelType::from_str(&row.channel_type)? {
             ChannelType::Public => {
-                let channel_name = ChannelName::new(name.unwrap_or_default())?;
+                let channel_name = ChannelName::new(row.name.unwrap_or_default())?;
                 Ok(Channel::from_public_parts(
                     channel_id,
                     channel_name,
-                    description,
+                    row.description,
                     user_id,
-                    created_at,
+                    row.created_at,
                 ))
             }
             ChannelType::Private => {
-                let channel_name = ChannelName::new(name.unwrap_or_default())?;
+                let channel_name = ChannelName::new(row.name.unwrap_or_default())?;
                 let members = self.load_members(channel_id).await?;
                 Ok(Channel::from_private_parts(
                     channel_id,
                     channel_name,
-                    description,
+                    row.description,
                     user_id,
-                    created_at,
+                    row.created_at,
                     members,
                 ))
             }
@@ -103,7 +98,7 @@ impl ChannelRepository {
                 Ok(Channel::from_direct_parts(
                     channel_id,
                     user_id,
-                    created_at,
+                    row.created_at,
                     participants,
                 ))
             }
@@ -133,18 +128,18 @@ impl ports::ChannelRepository for ChannelRepository {
             .await
             .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        sqlx::query(
+        sqlx::query!(
             r#"
             INSERT INTO channels (id, name, description, created_by, created_at, channel_type)
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
+            id,
+            name.as_deref(),
+            description.as_deref(),
+            created_by,
+            created_at,
+            channel_type,
         )
-        .bind(id)
-        .bind(name.as_deref())
-        .bind(description.as_deref())
-        .bind(created_by)
-        .bind(created_at)
-        .bind(channel_type)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
@@ -161,22 +156,22 @@ impl ports::ChannelRepository for ChannelRepository {
         })?;
 
         for member_id in &member_ids {
-            sqlx::query(
+            sqlx::query!(
                 "INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)",
+                id,
+                member_id,
             )
-            .bind(id)
-            .bind(member_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
         }
 
         for participant_id in &participant_ids {
-            sqlx::query(
+            sqlx::query!(
                 "INSERT INTO channel_participants (channel_id, user_id) VALUES ($1, $2)",
+                id,
+                participant_id,
             )
-            .bind(id)
-            .bind(participant_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
@@ -190,36 +185,28 @@ impl ports::ChannelRepository for ChannelRepository {
     }
 
     async fn find_by_id(&self, id: ChannelId) -> Result<Option<Channel>, ChannelError> {
-        let row = sqlx::query(
+        let row = sqlx::query_as!(
+            ChannelRow,
             r#"
             SELECT id, name, description, created_by, created_at, channel_type
             FROM channels
             WHERE id = $1
             "#,
+            id.as_uuid(),
         )
-        .bind(id.as_uuid())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
         match row {
-            Some(r) => Ok(Some(
-                self.build_channel(
-                    r.get("id"),
-                    r.get("name"),
-                    r.get("description"),
-                    r.get("created_by"),
-                    r.get("created_at"),
-                    r.get("channel_type"),
-                )
-                .await?,
-            )),
+            Some(r) => Ok(Some(self.build_channel(r).await?)),
             None => Ok(None),
         }
     }
 
     async fn find_public_channels(&self) -> Result<Vec<Channel>, ChannelError> {
-        let rows = sqlx::query(
+        let rows = sqlx::query_as!(
+            ChannelRow,
             r#"
             SELECT id, name, description, created_by, created_at, channel_type
             FROM channels
@@ -233,23 +220,15 @@ impl ports::ChannelRepository for ChannelRepository {
 
         let mut channels = Vec::with_capacity(rows.len());
         for r in rows {
-            channels.push(
-                self.build_channel(
-                    r.get("id"),
-                    r.get("name"),
-                    r.get("description"),
-                    r.get("created_by"),
-                    r.get("created_at"),
-                    r.get("channel_type"),
-                )
-                .await?,
-            );
+            channels.push(self.build_channel(r).await?);
         }
         Ok(channels)
     }
 
     async fn find_by_user(&self, user_id: UserId) -> Result<Vec<Channel>, ChannelError> {
-        let rows = sqlx::query(
+        let uuid = user_id.as_uuid();
+        let rows = sqlx::query_as!(
+            ChannelRow,
             r#"
             SELECT DISTINCT c.id, c.name, c.description, c.created_by, c.created_at, c.channel_type
             FROM channels c
@@ -260,32 +239,21 @@ impl ports::ChannelRepository for ChannelRepository {
                OR cp.user_id   = $1
             ORDER BY c.created_at DESC
             "#,
+            uuid,
         )
-        .bind(user_id.as_uuid())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
         let mut channels = Vec::with_capacity(rows.len());
         for r in rows {
-            channels.push(
-                self.build_channel(
-                    r.get("id"),
-                    r.get("name"),
-                    r.get("description"),
-                    r.get("created_by"),
-                    r.get("created_at"),
-                    r.get("channel_type"),
-                )
-                .await?,
-            );
+            channels.push(self.build_channel(r).await?);
         }
         Ok(channels)
     }
 
     async fn delete(&self, id: ChannelId) -> Result<(), ChannelError> {
-        let result = sqlx::query("DELETE FROM channels WHERE id = $1")
-            .bind(id.as_uuid())
+        let result = sqlx::query!("DELETE FROM channels WHERE id = $1", id.as_uuid())
             .execute(&self.pool)
             .await
             .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;

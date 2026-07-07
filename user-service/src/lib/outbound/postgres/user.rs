@@ -12,6 +12,29 @@ pub struct UserRepository {
     pool: PgPool,
 }
 
+/// Row shape shared by every query that selects a full `users` row.
+struct UserRow {
+    id: uuid::Uuid,
+    username: String,
+    email: String,
+    password_hash: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl TryFrom<UserRow> for User {
+    type Error = UserError;
+
+    fn try_from(row: UserRow) -> Result<Self, Self::Error> {
+        Ok(User::new(
+            UserId::from_uuid(row.id),
+            Username::new(row.username)?,
+            EmailAddress::new(row.email)?,
+            row.password_hash,
+            row.created_at,
+        ))
+    }
+}
+
 impl UserRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -54,7 +77,8 @@ impl ports::UserRepository for UserRepository {
     }
 
     async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, UserError> {
-        let row = sqlx::query!(
+        let row = sqlx::query_as!(
+            UserRow,
             r#"
             SELECT id, username, email, password_hash, created_at
             FROM users
@@ -66,20 +90,12 @@ impl ports::UserRepository for UserRepository {
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
-        match row {
-            Some(r) => Ok(Some(User::new(
-                UserId::from_uuid(r.id),
-                Username::new(r.username)?,
-                EmailAddress::new(r.email)?,
-                r.password_hash,
-                r.created_at,
-            ))),
-            None => Ok(None),
-        }
+        row.map(User::try_from).transpose()
     }
 
     async fn find_by_username(&self, username: &Username) -> Result<Option<User>, UserError> {
-        let row = sqlx::query!(
+        let row = sqlx::query_as!(
+            UserRow,
             r#"
             SELECT id, username, email, password_hash, created_at
             FROM users
@@ -91,22 +107,14 @@ impl ports::UserRepository for UserRepository {
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
-        match row {
-            Some(r) => Ok(Some(User::new(
-                UserId::from_uuid(r.id),
-                Username::new(r.username)?,
-                EmailAddress::new(r.email)?,
-                r.password_hash,
-                r.created_at,
-            ))),
-            None => Ok(None),
-        }
+        row.map(User::try_from).transpose()
     }
 
     async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError> {
         let uuids: Vec<_> = ids.iter().map(|id| id.value()).collect();
 
-        let rows = sqlx::query!(
+        let rows = sqlx::query_as!(
+            UserRow,
             r#"
             SELECT id, username, email, password_hash, created_at
             FROM users
@@ -118,17 +126,7 @@ impl ports::UserRepository for UserRepository {
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
-        rows.into_iter()
-            .map(|r| {
-                Ok(User::new(
-                    UserId::from_uuid(r.id),
-                    Username::new(r.username)?,
-                    EmailAddress::new(r.email)?,
-                    r.password_hash,
-                    r.created_at,
-                ))
-            })
-            .collect()
+        rows.into_iter().map(User::try_from).collect()
     }
 
     async fn update(&self, user: User) -> Result<User, UserError> {

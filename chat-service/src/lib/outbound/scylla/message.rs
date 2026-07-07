@@ -21,6 +21,24 @@ use crate::domain::user::models::UserId;
 /// Number of distinct prepared-statement shapes this repository executes.
 const PREPARED_STATEMENT_CACHE_SIZE: usize = 8;
 
+/// Convert a decoded row, shared by `messages_by_channel` and `messages_by_user`
+/// (which store the same columns under a different clustering key), into a `Message`.
+fn row_to_message(
+    message_id_timeuuid: CqlTimeuuid,
+    channel_id: Uuid,
+    user_id: Uuid,
+    content: String,
+    timestamp: DateTime<Utc>,
+) -> Result<Message, MessageError> {
+    Ok(Message::from_parts(
+        MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
+        ChannelId::from_uuid(channel_id),
+        UserId::from_uuid(user_id),
+        MessageContent::new(content)?,
+        timestamp,
+    ))
+}
+
 pub struct MessageRepository {
     session: Arc<CachingSession>,
 }
@@ -166,13 +184,13 @@ impl ports::MessageRepository for MessageRepository {
             let (channel_id, message_id_timeuuid, user_id, content, timestamp) =
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-            messages.push(Message::from_parts(
-                MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
-                ChannelId::from_uuid(channel_id),
-                UserId::from_uuid(user_id),
-                MessageContent::new(content)?,
+            messages.push(row_to_message(
+                message_id_timeuuid,
+                channel_id,
+                user_id,
+                content,
                 timestamp,
-            ));
+            )?);
         }
 
         Ok(messages)
@@ -207,13 +225,13 @@ impl ports::MessageRepository for MessageRepository {
             let (user_id, message_id_timeuuid, channel_id, content, timestamp) =
                 row.map_err(|e| MessageError::DatabaseError(e.to_string()))?;
 
-            messages.push(Message::from_parts(
-                MessageId::from_uuid(uuid::Uuid::from(message_id_timeuuid)),
-                ChannelId::from_uuid(channel_id),
-                UserId::from_uuid(user_id),
-                MessageContent::new(content)?,
+            messages.push(row_to_message(
+                message_id_timeuuid,
+                channel_id,
+                user_id,
+                content,
                 timestamp,
-            ));
+            )?);
         }
 
         Ok(messages)
