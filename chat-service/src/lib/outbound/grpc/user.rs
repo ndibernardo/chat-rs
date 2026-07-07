@@ -2,7 +2,7 @@ use anyhow::Error;
 use tonic::transport::Channel;
 
 use crate::domain::user::errors::UserError;
-use crate::domain::user::models::User;
+use crate::domain::user::models::ResolvedUser;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::RemoteUserLookup;
@@ -22,7 +22,7 @@ impl UserServiceClient {
 
 #[async_trait::async_trait]
 impl RemoteUserLookup for UserServiceClient {
-    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, UserError> {
+    async fn get_user(&self, user_id: UserId) -> Result<Option<ResolvedUser>, UserError> {
         let request = tonic::Request::new(GetUserRequest {
             user_id: user_id.to_string(),
         });
@@ -40,12 +40,7 @@ impl RemoteUserLookup for UserServiceClient {
                 let user_id = UserId::from_string(&user.id)?;
                 let username = Username::new(user.username)?;
 
-                Ok(Some(User::new(
-                    user_id,
-                    username,
-                    Default::default(),
-                    Default::default(),
-                )))
+                Ok(Some(ResolvedUser::new(user_id, username)))
             }
             Some(crate::proto::get_user_response::Result::Error(err)) => {
                 Err(UserError::RemoteError(err))

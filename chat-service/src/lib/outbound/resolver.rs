@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::domain::user::errors::UserError;
-use crate::domain::user::models::User;
+use crate::domain::user::models::ResolvedUser;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::RemoteUserLookup;
 use crate::domain::user::ports::UserReplicaRepository;
@@ -46,9 +46,9 @@ where
     R: UserReplicaRepository + 'static,
     C: RemoteUserLookup + 'static,
 {
-    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError> {
+    async fn resolve(&self, user_id: UserId) -> Result<Option<ResolvedUser>, UserError> {
         if let Some(user) = self.replica.get(user_id).await? {
-            return Ok(Some(user));
+            return Ok(Some(ResolvedUser::from(user)));
         }
         tracing::debug!(
             user_id = %user_id,

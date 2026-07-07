@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 
 use crate::domain::user::errors::UserError;
+use crate::domain::user::models::ResolvedUser;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 
@@ -19,7 +20,7 @@ pub trait UserResolver: Send + Sync + 'static {
     ///
     /// # Errors
     /// Returns `UserError` if both sources fail
-    async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError>;
+    async fn resolve(&self, user_id: UserId) -> Result<Option<ResolvedUser>, UserError>;
 }
 
 /// Port for looking up a user from the remote user-service.
@@ -35,7 +36,7 @@ pub trait RemoteUserLookup: Send + Sync + 'static {
     ///
     /// # Errors
     /// Returns `UserError` if the remote call fails
-    async fn get_user(&self, user_id: UserId) -> Result<Option<User>, UserError>;
+    async fn get_user(&self, user_id: UserId) -> Result<Option<ResolvedUser>, UserError>;
 }
 
 /// Port for local user replica repository.

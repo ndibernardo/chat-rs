@@ -38,6 +38,39 @@ impl User {
     pub fn updated_at(&self) -> DateTime<Utc> { self.updated_at }
 }
 
+/// Identity of a resolved message sender: only the fields every lookup
+/// source (local replica, remote user-service) can genuinely provide.
+///
+/// Kept separate from `User` so a resolver never has to invent data (e.g.
+/// timestamps) a source doesn't actually have.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedUser {
+    id: UserId,
+    username: Username,
+}
+
+impl ResolvedUser {
+    /// Construct a resolved user from its components.
+    pub fn new(id: UserId, username: Username) -> Self {
+        Self { id, username }
+    }
+
+    /// Get the user ID.
+    pub fn id(&self) -> UserId { self.id }
+
+    /// Get the username.
+    pub fn username(&self) -> &Username { &self.username }
+}
+
+impl From<User> for ResolvedUser {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id,
+            username: user.username,
+        }
+    }
+}
+
 /// User unique identifier value object.
 ///
 /// Wraps UUID v4 with type safety to prevent mixing with other IDs.

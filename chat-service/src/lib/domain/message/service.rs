@@ -110,7 +110,7 @@ mod tests {
     use crate::domain::channel::models::ChannelId;
     use crate::domain::message::events::MessageDeletedEvent;
     use crate::domain::user::errors::UserError;
-    use crate::domain::user::models::User;
+    use crate::domain::user::models::ResolvedUser;
     use crate::domain::user::models::UserId;
     use crate::domain::user::models::Username;
 
@@ -139,7 +139,7 @@ mod tests {
 
         #[async_trait]
         impl UserResolver for TestUserResolver {
-            async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError>;
+            async fn resolve(&self, user_id: UserId) -> Result<Option<ResolvedUser>, UserError>;
         }
     }
 
@@ -160,13 +160,8 @@ mod tests {
         }
     }
 
-    fn known_user(user_id: UserId) -> User {
-        User::new(
-            user_id,
-            Username::new("nina-simone".to_string()).unwrap(),
-            Utc::now(),
-            Utc::now(),
-        )
+    fn known_user(user_id: UserId) -> ResolvedUser {
+        ResolvedUser::new(user_id, Username::new("nina-simone".to_string()).unwrap())
     }
 
     #[tokio::test]
