@@ -57,16 +57,23 @@ impl EventConsumer {
         config: &Config,
         broadcaster: Arc<dyn MessageBroadcaster>,
     ) -> Result<Self, anyhow::Error> {
+        // Every instance must observe every message event to broadcast to its own
+        // locally-connected WebSocket clients, so the group id must be unique per
+        // instance rather than shared: a shared group id would turn the fan-out
+        // broadcast into a competing-consumer queue, silently dropping delivery to
+        // whichever instance loses the partition assignment.
+        let group_id = format!("{}-{}", config.kafka.group_id, uuid::Uuid::new_v4());
+
         tracing::info!(
             "Initializing Kafka consumer with brokers: {}, group_id: {}, shards: {}",
             &config.kafka.brokers,
-            &config.kafka.group_id,
+            &group_id,
             &config.kafka.num_shards
         );
 
         let consumer: StreamConsumer = ClientConfig::new()
             .set("bootstrap.servers", &config.kafka.brokers)
-            .set("group.id", &config.kafka.group_id)
+            .set("group.id", &group_id)
             .set("enable.auto.commit", "true")
             .set("auto.commit.interval.ms", "5000")
             .set("auto.offset.reset", "latest") // Only consume new messages

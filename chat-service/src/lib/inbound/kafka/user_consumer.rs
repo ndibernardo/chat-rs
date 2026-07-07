@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use futures::StreamExt;
+use rdkafka::consumer::CommitMode;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
@@ -58,15 +59,18 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         tracing::info!(
             "Initializing user events consumer: brokers={}, group_id={}, topic={}",
             &config.kafka.brokers,
-            &config.kafka.group_id,
+            &config.kafka.user_events.group_id,
             &config.kafka.user_events.topic
         );
 
         let consumer: StreamConsumer = ClientConfig::new()
             .set("bootstrap.servers", &config.kafka.brokers)
-            .set("group.id", &config.kafka.group_id)
-            .set("enable.auto.commit", "true")
-            .set("auto.commit.interval.ms", "5000")
+            .set("group.id", &config.kafka.user_events.group_id)
+            // Committed manually, only after a successful replica upsert/delete: this
+            // consumer maintains a consistency-sensitive replica, so auto-commit's
+            // at-most-once semantics (commit on a timer regardless of processing
+            // outcome) would let a failed or crashed handler permanently skip an event.
+            .set("enable.auto.commit", "false")
             .set("auto.offset.reset", "earliest") // Process all user events from beginning
             .set("session.timeout.ms", "30000")
             .set("enable.partition.eof", "false")
@@ -130,7 +134,16 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
 
         self.handle_event(event)
             .await
-            .map_err(|e| MessageProcessingError::HandlingError(e.to_string()))
+            .map_err(|e| MessageProcessingError::HandlingError(e.to_string()))?;
+
+        // Commit only now that the replica has actually been updated, so a crash
+        // or handling error before this point causes the event to be redelivered
+        // instead of silently skipped.
+        self.consumer
+            .commit_message(&message, CommitMode::Async)
+            .map_err(MessageProcessingError::KafkaError)?;
+
+        Ok(())
     }
 
     /// Handle a user event by updating the local replica

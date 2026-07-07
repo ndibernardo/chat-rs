@@ -1,7 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
-
 use thiserror::Error;
 
 use crate::domain::channel::models::ChannelId;
@@ -89,10 +85,12 @@ impl TopicSharder {
     }
 
     /// Compute the shard index for a channel_id
+    ///
+    /// Uses the UUID's own bits directly rather than `DefaultHasher`, whose
+    /// algorithm is explicitly not guaranteed stable across Rust releases —
+    /// a toolchain change could silently remap a channel to a different shard.
     fn compute_shard_index(&self, channel_id: ChannelId) -> u32 {
-        let mut hasher = DefaultHasher::new();
-        channel_id.hash(&mut hasher);
-        let hash = hasher.finish();
+        let hash = channel_id.into_uuid().as_u128();
 
         // Use modulo to get shard index
         // Since num_shards is power of 2, we can use bitwise AND for better performance
