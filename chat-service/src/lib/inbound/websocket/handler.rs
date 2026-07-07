@@ -30,12 +30,16 @@ pub struct WebsocketParameters {
 }
 
 /// WebSocket upgrade handler
-pub async fn websocket_handler(
+pub async fn websocket_handler<CS, MS>(
     ws: WebSocketUpgrade,
     Path(channel_id): Path<String>,
     Query(params): Query<WebsocketParameters>,
-    State(state): State<AppState>,
-) -> Response {
+    State(state): State<AppState<CS, MS>>,
+) -> Response
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
     // Validate JWT token and extract user ID
     let claims: auth::Claims = match state.authenticator.validate_token(&params.token) {
         Ok(claims) => claims,
@@ -118,7 +122,11 @@ pub async fn websocket_handler(
 }
 
 /// Handle an individual WebSocket connection
-async fn handle_socket(socket: WebSocket, membership: Membership, state: AppState) {
+async fn handle_socket<CS, MS>(socket: WebSocket, membership: Membership, state: AppState<CS, MS>)
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
     let connection_id = Uuid::new_v4();
     let channel_id = membership.channel_id();
     let user_id = membership.user_id();
@@ -193,10 +201,10 @@ async fn handle_socket(socket: WebSocket, membership: Membership, state: AppStat
 }
 
 /// Process a message received from a client
-async fn process_client_message(
+async fn process_client_message<MS: MessageService>(
     msg: WebSocketMessage,
     membership: Membership,
-    message_service: &dyn MessageService,
+    message_service: &MS,
     tx: &tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
 ) -> Result<(), String> {
     match msg {

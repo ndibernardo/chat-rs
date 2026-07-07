@@ -18,47 +18,55 @@ use super::handlers::health;
 use super::handlers::get_channel;
 use super::handlers::get_channel_messages;
 use super::handlers::list_public_channels;
-use crate::domain::channel::service::Service as ChannelService;
-use crate::domain::message::service::Service as MessageService;
+use crate::domain::channel::ports::ChannelService;
+use crate::domain::message::ports::MessageService;
 use crate::inbound::middleware as auth_middleware;
 use crate::inbound::websocket::handler::websocket_handler;
 use crate::inbound::websocket::registry::ConnectionRegistry;
-use crate::outbound::grpc;
-use crate::outbound::kafka;
-use crate::outbound::postgres;
-use crate::outbound::resolver;
-use crate::outbound::scylla;
 
 /// Unified application state for both HTTP and WebSocket handlers.
 ///
-/// Contains all service dependencies needed across the application.
-#[derive(Clone)]
-pub struct AppState {
-    pub channel_service:
-        Arc<ChannelService<postgres::ChannelRepository, kafka::ChannelEventPublisher>>,
-    pub message_service: Arc<
-        MessageService<
-            scylla::MessageRepository,
-            resolver::ReplicaWithFallback<postgres::UserReplicaRepository, grpc::UserServiceClient>,
-            kafka::MessageEventPublisher,
-        >,
-    >,
+/// Contains all service dependencies needed across the application. Generic
+/// over the driving ports rather than naming concrete adapter stacks, so this
+/// inbound layer never has to import `outbound` to wire up the router.
+pub struct AppState<CS, MS>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    pub channel_service: Arc<CS>,
+    pub message_service: Arc<MS>,
     pub connection_registry: Arc<ConnectionRegistry>,
     pub authenticator: Arc<Authenticator>,
 }
 
-pub fn create_router(
-    channel_service: Arc<ChannelService<postgres::ChannelRepository, kafka::ChannelEventPublisher>>,
-    message_service: Arc<
-        MessageService<
-            scylla::MessageRepository,
-            resolver::ReplicaWithFallback<postgres::UserReplicaRepository, grpc::UserServiceClient>,
-            kafka::MessageEventPublisher,
-        >,
-    >,
+// Manual impl: deriving would require `CS: Clone`/`MS: Clone`, but only the
+// `Arc` handles are cloned.
+impl<CS, MS> Clone for AppState<CS, MS>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    fn clone(&self) -> Self {
+        Self {
+            channel_service: self.channel_service.clone(),
+            message_service: self.message_service.clone(),
+            connection_registry: self.connection_registry.clone(),
+            authenticator: self.authenticator.clone(),
+        }
+    }
+}
+
+pub fn create_router<CS, MS>(
+    channel_service: Arc<CS>,
+    message_service: Arc<MS>,
     connection_registry: Arc<ConnectionRegistry>,
     authenticator: Arc<Authenticator>,
-) -> Router {
+) -> Router
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
     let state = AppState {
         channel_service,
         message_service,

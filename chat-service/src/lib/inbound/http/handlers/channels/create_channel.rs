@@ -6,6 +6,7 @@ use axum::Json;
 use crate::domain::channel::models::ChannelName;
 use crate::domain::channel::models::CreateChannelCommand;
 use crate::domain::channel::ports::ChannelService;
+use crate::domain::message::ports::MessageService;
 use crate::domain::user::models::UserId;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
@@ -14,11 +15,15 @@ use crate::inbound::http::handlers::ChannelResponseData;
 use crate::inbound::http::router::AppState;
 use crate::inbound::middleware::AuthenticatedUser;
 
-pub async fn create_channel(
-    State(state): State<AppState>,
+pub async fn create_channel<CS, MS>(
+    State(state): State<AppState<CS, MS>>,
     Extension(auth_user): Extension<AuthenticatedUser>,
     Json(req): Json<CreateChannelRequest>,
-) -> Result<ApiSuccess<ChannelResponseData>, ApiError> {
+) -> Result<ApiSuccess<ChannelResponseData>, ApiError>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
     let command = match req {
         CreateChannelRequest::Public { name, description } => {
             let channel_name =

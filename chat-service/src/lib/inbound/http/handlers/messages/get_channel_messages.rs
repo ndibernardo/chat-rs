@@ -21,12 +21,16 @@ pub struct MessageQuery {
     before: Option<String>, // ISO 8601 timestamp
 }
 
-pub async fn get_channel_messages(
-    State(state): State<AppState>,
+pub async fn get_channel_messages<CS, MS>(
+    State(state): State<AppState<CS, MS>>,
     Extension(auth_user): Extension<AuthenticatedUser>,
     Path(channel_id): Path<String>,
     Query(params): Query<MessageQuery>,
-) -> Result<ApiSuccess<Vec<MessageResponseData>>, ApiError> {
+) -> Result<ApiSuccess<Vec<MessageResponseData>>, ApiError>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
     let channel_id =
         ChannelId::from_string(&channel_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
