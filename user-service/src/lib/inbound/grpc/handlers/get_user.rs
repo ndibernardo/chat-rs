@@ -5,13 +5,14 @@ use tonic::Status;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserService;
 use crate::domain::user::service::Service;
+use crate::outbound::argon2::PasswordHasher;
 use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
 use crate::proto::GetUserRequest;
 use crate::proto::GetUserResponse;
 
 pub async fn get_user(
-    service: Arc<Service<UserRepository, EventProducer>>,
+    service: Arc<Service<UserRepository, EventProducer, PasswordHasher>>,
     request: GetUserRequest,
 ) -> Result<GetUserResponse, Status> {
     let user_id = UserId::from_string(&request.user_id)

@@ -9,6 +9,7 @@ use user_service::config::Config;
 use user_service::domain::user::service::Service as UserService;
 use user_service::inbound::grpc::UserGrpcService;
 use user_service::inbound::http::router::create_router;
+use user_service::outbound::argon2::PasswordHasher;
 use user_service::outbound::kafka::EventProducer;
 use user_service::outbound::postgres::UserRepository;
 use user_service::proto::user_service_server::UserServiceServer;
@@ -56,8 +57,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
     let user_repository = Arc::new(UserRepository::new(pg_pool));
     let event_producer = Arc::new(EventProducer::new(&config)?);
+    let password_hasher = Arc::new(PasswordHasher::new());
 
-    let user_service = Arc::new(UserService::new(user_repository, event_producer));
+    let user_service = Arc::new(UserService::new(
+        user_repository,
+        event_producer,
+        password_hasher,
+    ));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let http_listener = tokio::net::TcpListener::bind(&http_address).await?;

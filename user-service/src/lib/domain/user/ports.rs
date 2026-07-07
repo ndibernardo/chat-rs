@@ -8,6 +8,7 @@ use crate::domain::user::models::UpdateUserCommand;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::user::errors::EventPublisherError;
+use crate::user::errors::PasswordError;
 use crate::user::errors::UserError;
 use crate::user::models::Username;
 
@@ -198,6 +199,35 @@ pub trait UserRepository: Send + Sync + 'static {
     /// * `NotFound` - User does not exist
     /// * `DatabaseError` - Database operation failed
     async fn delete(&self, id: &UserId) -> Result<(), UserError>;
+}
+
+/// Password hashing operations for user credentials.
+#[async_trait]
+pub trait PasswordHasher: Send + Sync + 'static {
+    /// Hash a plaintext password securely.
+    ///
+    /// # Arguments
+    /// * `password` - Plaintext password to hash
+    ///
+    /// # Returns
+    /// Password hash, opaque to callers
+    ///
+    /// # Errors
+    /// * `HashingFailed` - Hashing operation failed
+    async fn hash(&self, password: &str) -> Result<String, PasswordError>;
+
+    /// Verify a plaintext password against a stored hash.
+    ///
+    /// # Arguments
+    /// * `password` - Plaintext password to verify
+    /// * `hash` - Previously stored password hash
+    ///
+    /// # Returns
+    /// True if password matches, false otherwise
+    ///
+    /// # Errors
+    /// * `VerificationFailed` - Hash format is invalid or verification failed
+    async fn verify(&self, password: &str, hash: &str) -> Result<bool, PasswordError>;
 }
 
 /// Event publishing for domain events.
