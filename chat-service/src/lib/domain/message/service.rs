@@ -36,7 +36,7 @@ where
     ///
     /// # Arguments
     /// * `message_repository` - Message persistence implementation
-    /// * `user_resolver` - Resolver for sender identity (replica-first with gRPC fallback)
+    /// * `user_resolver` - Resolver for sender identity (replica-first with remote fallback)
     /// * `event_publisher` - Event publisher implementation
     ///
     /// # Returns

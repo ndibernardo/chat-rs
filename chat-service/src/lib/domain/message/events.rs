@@ -51,7 +51,7 @@ impl MessageEvent {
 
 /// Domain event published when a new message is sent.
 ///
-/// Contains snapshot of message data for downstream consumers (WebSocket broadcast, notifications, etc.).
+/// Contains a snapshot of message data for downstream consumers (broadcast, notifications, etc.).
 #[derive(Debug, Clone)]
 pub struct MessageSentEvent {
     pub event_id: String,

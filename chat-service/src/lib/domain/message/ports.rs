@@ -18,8 +18,8 @@ use crate::domain::user::models::UserId;
 pub trait MessageService: Send + Sync + 'static {
     /// Send a message to a channel.
     ///
-    /// Publishes MessageSentEvent to Kafka if event producer is configured.
-    /// Broadcasts to WebSocket clients if broadcaster is configured.
+    /// Publishes a message-sent event and broadcasts the message to connected
+    /// clients.
     ///
     /// # Arguments
     /// * `membership` - Proof the sender was verified as a member of the target channel
@@ -156,10 +156,10 @@ pub trait MessageEventPublisher: Send + Sync + 'static {
 
 /// Port for broadcasting a sent message to clients connected to its channel.
 ///
-/// Implemented by the delivery-mechanism adapter (the WebSocket connection
-/// registry). Inbound Kafka consumers depend on this domain port instead of
-/// the concrete registry, so event consumption stays decoupled from the
-/// delivery transport.
+/// Implemented by the delivery-mechanism adapter that manages live client
+/// connections. Inbound event consumers depend on this domain port instead
+/// of the concrete connection registry, so event consumption stays decoupled
+/// from the delivery transport.
 #[async_trait]
 pub trait MessageBroadcaster: Send + Sync + 'static {
     /// Broadcast a message to clients connected to its channel on this instance.

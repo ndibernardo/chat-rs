@@ -25,7 +25,7 @@ pub trait UserResolver: Send + Sync + 'static {
     async fn resolve(&self, user_id: UserId) -> Result<Option<User>, UserError>;
 }
 
-/// Port for looking up a user from the remote user-service (via gRPC).
+/// Port for looking up a user from the remote user-service.
 #[async_trait]
 pub trait RemoteUserLookup: Send + Sync + 'static {
     /// Get user by ID from user-service.
@@ -37,14 +37,14 @@ pub trait RemoteUserLookup: Send + Sync + 'static {
     /// User if found, None if not found
     ///
     /// # Errors
-    /// Returns `UserError` if the gRPC call fails
+    /// Returns `UserError` if the remote call fails
     async fn get_user(&self, user_id: UserId) -> Result<Option<User>, UserError>;
 }
 
 /// Port for local user replica repository.
 ///
 /// Maintains a denormalized copy of user data from user-service events.
-/// Updated via UserEventConsumer when user events arrive from Kafka.
+/// Updated via UserEventConsumer when user events arrive.
 #[async_trait]
 pub trait UserReplicaRepository: Send + Sync + 'static {
     /// Upsert user in replica (insert or update).

@@ -2,7 +2,7 @@ use thiserror::Error;
 
 /// Error for event publishing operations.
 ///
-/// Represents failures that can occur when publishing domain events to the event bus (Kafka).
+/// Represents failures that can occur when publishing domain events to the event bus.
 #[derive(Debug, Clone, Error)]
 pub enum EventPublisherError {
     #[error("Failed to serialize event: {0}")]
