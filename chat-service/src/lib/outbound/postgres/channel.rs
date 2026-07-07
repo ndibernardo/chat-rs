@@ -42,26 +42,26 @@ impl ChannelRepository {
         Ok(rows.into_iter().map(|r| UserId::from_uuid(r.user_id)).collect())
     }
 
-    async fn load_participants(
+    /// Load a direct channel's participant pair from `channel_members` — the
+    /// same table private channels use, since membership for every channel
+    /// type lives in one place — reconstructing the domain's
+    /// `[created_by, other]` ordering.
+    async fn load_direct_participants(
         &self,
         channel_id: ChannelId,
+        created_by: UserId,
     ) -> Result<[UserId; 2], ChannelError> {
-        let rows = sqlx::query!(
-            "SELECT user_id FROM channel_participants WHERE channel_id = $1",
-            channel_id.as_uuid(),
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
+        let members = self.load_members(channel_id).await?;
 
-        let ids: Vec<UserId> = rows.into_iter().map(|r| UserId::from_uuid(r.user_id)).collect();
-
-        match ids.as_slice() {
-            [a, b] => Ok([*a, *b]),
+        match members.as_slice() {
+            [a, b] if *a == created_by || *b == created_by => {
+                let other = if *a == created_by { *b } else { *a };
+                Ok([created_by, other])
+            }
             _ => Err(ChannelError::DatabaseError(format!(
-                "direct channel {} has {} participant(s), expected 2",
+                "direct channel {} has {} member row(s), expected 2 including created_by",
                 channel_id,
-                ids.len()
+                members.len()
             ))),
         }
     }
@@ -94,7 +94,7 @@ impl ChannelRepository {
                 ))
             }
             ChannelType::Direct => {
-                let participants = self.load_participants(channel_id).await?;
+                let participants = self.load_direct_participants(channel_id, user_id).await?;
                 Ok(Channel::from_direct_parts(
                     channel_id,
                     user_id,
@@ -116,11 +116,19 @@ impl ports::ChannelRepository for ChannelRepository {
         let created_at = channel.created_at();
         let channel_type = channel.channel_type().as_str();
 
-        let member_ids: Vec<uuid::Uuid> = channel.members().iter().map(|&m| m.into_uuid()).collect();
-        let participant_ids: Vec<uuid::Uuid> = channel
-            .participants()
-            .map(|ps| ps.iter().map(|&p| p.into_uuid()).collect())
-            .unwrap_or_default();
+        // Direct participants become channel_members rows too, exactly like
+        // private members: membership for every channel type lives in one place.
+        let mut member_ids: Vec<uuid::Uuid> = channel.members().iter().map(|&m| m.into_uuid()).collect();
+        if let Some(participants) = channel.participants() {
+            member_ids.extend(participants.iter().map(|&p| p.into_uuid()));
+        }
+
+        // Ordered pair so [a, b] and [b, a] hit the same unique constraint entry,
+        // regardless of who initiated the direct channel.
+        let direct_pair = channel.participants().map(|[a, b]| {
+            let (a, b) = (a.into_uuid(), b.into_uuid());
+            if a <= b { (a, b) } else { (b, a) }
+        });
 
         let mut tx = self
             .pool
@@ -143,14 +151,12 @@ impl ports::ChannelRepository for ChannelRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            if let Some(db_err) = e.as_database_error() {
-                if db_err.is_unique_violation() {
-                    if db_err.constraint() == Some("channels_name_key") {
-                        if let Some(ref n) = name {
-                            return ChannelError::NameAlreadyExists(n.clone());
-                        }
-                    }
-                }
+            if let Some(db_err) = e.as_database_error()
+                && db_err.is_unique_violation()
+                && db_err.constraint() == Some("channels_name_key")
+                && let Some(ref n) = name
+            {
+                return ChannelError::NameAlreadyExists(n.clone());
             }
             ChannelError::DatabaseError(e.to_string())
         })?;
@@ -166,15 +172,24 @@ impl ports::ChannelRepository for ChannelRepository {
             .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
         }
 
-        for participant_id in &participant_ids {
+        if let Some((low, high)) = direct_pair {
             sqlx::query!(
-                "INSERT INTO channel_participants (channel_id, user_id) VALUES ($1, $2)",
+                "INSERT INTO direct_channel_keys (channel_id, user_id_low, user_id_high) VALUES ($1, $2, $3)",
                 id,
-                participant_id,
+                low,
+                high,
             )
             .execute(&mut *tx)
             .await
-            .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
+            .map_err(|e| {
+                if let Some(db_err) = e.as_database_error()
+                    && db_err.is_unique_violation()
+                    && db_err.constraint() == Some("direct_channel_keys_unique_pair")
+                {
+                    return ChannelError::DirectChannelAlreadyExists;
+                }
+                ChannelError::DatabaseError(e.to_string())
+            })?;
         }
 
         tx.commit()
@@ -232,11 +247,9 @@ impl ports::ChannelRepository for ChannelRepository {
             r#"
             SELECT DISTINCT c.id, c.name, c.description, c.created_by, c.created_at, c.channel_type
             FROM channels c
-            LEFT JOIN channel_members     cm ON cm.channel_id = c.id
-            LEFT JOIN channel_participants cp ON cp.channel_id = c.id
+            LEFT JOIN channel_members cm ON cm.channel_id = c.id
             WHERE c.created_by = $1
                OR cm.user_id   = $1
-               OR cp.user_id   = $1
             ORDER BY c.created_at DESC
             "#,
             uuid,

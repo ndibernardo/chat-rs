@@ -106,6 +106,66 @@ async fn test_create_direct_channel_success() {
 }
 
 #[tokio::test]
+async fn test_create_direct_channel_rejects_self_dm() {
+    let app = TestApp::spawn().await;
+    let (token, user_id) = app.create_test_token();
+
+    let response = app
+        .post_authenticated("/api/channels", &token)
+        .json(&json!({
+            "channel_type": "direct",
+            "participant_id": user_id.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn test_create_direct_channel_rejects_duplicate_pair_in_either_order() {
+    let app = TestApp::spawn().await;
+    let (token_a, user_a) = app.create_test_token();
+    let (token_b, user_b) = app.create_test_token();
+
+    let first = app
+        .post_authenticated("/api/channels", &token_a)
+        .json(&json!({
+            "channel_type": "direct",
+            "participant_id": user_b.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(first.status(), StatusCode::OK);
+
+    // Same pair, same direction: already exists.
+    let second = app
+        .post_authenticated("/api/channels", &token_a)
+        .json(&json!({
+            "channel_type": "direct",
+            "participant_id": user_b.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(second.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Same pair, reversed direction: still already exists.
+    let third = app
+        .post_authenticated("/api/channels", &token_b)
+        .json(&json!({
+            "channel_type": "direct",
+            "participant_id": user_a.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+    assert_eq!(third.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
 async fn test_create_channel_with_empty_name() {
     let app = TestApp::spawn().await;
     let (token, _user_id) = app.create_test_token();

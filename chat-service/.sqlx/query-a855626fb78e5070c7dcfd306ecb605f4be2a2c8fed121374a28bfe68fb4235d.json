@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO direct_channel_keys (channel_id, user_id_low, user_id_high) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a855626fb78e5070c7dcfd306ecb605f4be2a2c8fed121374a28bfe68fb4235d"
+}

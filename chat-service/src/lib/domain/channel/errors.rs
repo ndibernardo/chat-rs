@@ -49,6 +49,12 @@ pub enum ChannelError {
     #[error("Channel name already exists: {0}")]
     NameAlreadyExists(String),
 
+    #[error("A direct channel between these participants already exists")]
+    DirectChannelAlreadyExists,
+
+    #[error("User {0} cannot open a direct channel with themselves")]
+    SelfDirectChannel(UserId),
+
     #[error("User {user_id} is not a member of channel {channel_id}")]
     NotMember {
         user_id: UserId,

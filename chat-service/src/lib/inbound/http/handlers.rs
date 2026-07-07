@@ -115,6 +115,10 @@ impl From<ChannelError> for ApiError {
             ChannelError::NameAlreadyExists(name) => {
                 ApiError::UnprocessableEntity(format!("Channel name already exists: {}", name))
             }
+            ChannelError::DirectChannelAlreadyExists => {
+                ApiError::UnprocessableEntity(err.to_string())
+            }
+            ChannelError::SelfDirectChannel(_) => ApiError::UnprocessableEntity(err.to_string()),
             ChannelError::InvalidChannelId(_)
             | ChannelError::InvalidChannelName(_)
             | ChannelError::InvalidUserId(_)

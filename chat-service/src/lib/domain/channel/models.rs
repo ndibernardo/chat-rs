@@ -225,13 +225,21 @@ impl Channel {
     }
 
     /// Create a direct channel between the creator and `participant_id`, with a freshly generated ID.
-    pub fn new_direct(created_by: UserId, participant_id: UserId) -> Self {
-        Channel::Direct(DirectChannel {
+    ///
+    /// # Errors
+    /// Returns `ChannelError::SelfDirectChannel` if `participant_id == created_by`
+    /// — a direct channel requires two distinct participants.
+    pub fn new_direct(created_by: UserId, participant_id: UserId) -> Result<Self, ChannelError> {
+        if participant_id == created_by {
+            return Err(ChannelError::SelfDirectChannel(created_by));
+        }
+
+        Ok(Channel::Direct(DirectChannel {
             id: ChannelId::new(),
             created_by,
             created_at: Utc::now(),
             participants: [created_by, participant_id],
-        })
+        }))
     }
 
     /// Reconstruct a public channel from persisted parts — for use within the
@@ -483,5 +491,20 @@ mod tests {
     fn channel_type_from_str_returns_error_for_unknown_value() {
         let result = ChannelType::from_str("group");
         assert!(matches!(result, Err(ChannelTypeError::Unknown(ref s)) if s == "group"));
+    }
+
+    #[test]
+    fn new_direct_rejects_self_dm() {
+        let user_id = UserId::new();
+        let result = Channel::new_direct(user_id, user_id);
+        assert!(matches!(result, Err(ChannelError::SelfDirectChannel(id)) if id == user_id));
+    }
+
+    #[test]
+    fn new_direct_accepts_two_distinct_participants() {
+        let creator = UserId::new();
+        let other = UserId::new();
+        let channel = Channel::new_direct(creator, other).unwrap();
+        assert_eq!(channel.participants(), Some(&[creator, other]));
     }
 }

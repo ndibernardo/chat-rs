@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT DISTINCT c.id, c.name, c.description, c.created_by, c.created_at, c.channel_type\n            FROM channels c\n            LEFT JOIN channel_members     cm ON cm.channel_id = c.id\n            LEFT JOIN channel_participants cp ON cp.channel_id = c.id\n            WHERE c.created_by = $1\n               OR cm.user_id   = $1\n               OR cp.user_id   = $1\n            ORDER BY c.created_at DESC\n            ",
+  "query": "\n            SELECT DISTINCT c.id, c.name, c.description, c.created_by, c.created_at, c.channel_type\n            FROM channels c\n            LEFT JOIN channel_members cm ON cm.channel_id = c.id\n            WHERE c.created_by = $1\n               OR cm.user_id   = $1\n            ORDER BY c.created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -84,5 +84,5 @@
       false
     ]
   },
-  "hash": "32fbe5bfc827a3316b5448ea13f5fd7019756669b4154a34486c6d73fe0d4df7"
+  "hash": "bf674da15a3deb67bfaaa165162312dad99119b8d05aa387a91d77f910770013"
 }

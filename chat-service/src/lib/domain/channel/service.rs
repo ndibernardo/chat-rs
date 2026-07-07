@@ -55,7 +55,7 @@ where
                 members,
             } => Channel::new_private(name, description, members, created_by),
             CreateChannelCommand::Direct { participant_id } => {
-                Channel::new_direct(created_by, participant_id)
+                Channel::new_direct(created_by, participant_id)?
             }
         };
 
