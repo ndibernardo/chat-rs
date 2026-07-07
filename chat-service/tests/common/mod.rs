@@ -259,61 +259,23 @@ impl TestDb {
             .map(|s| s.trim().to_string())
             .collect::<Vec<String>>();
 
+        chat_scylla::migrations::run(&CassandraConfig {
+            nodes: cassandra_nodes.clone(),
+            keyspace: cassandra_keyspace.clone(),
+        })
+        .await
+        .expect("Failed to run Cassandra migrations");
+
         let cassandra_session = SessionBuilder::new()
             .known_nodes(&cassandra_nodes)
             .build()
             .await
             .expect("Failed to connect to Cassandra");
 
-        // Create keyspace
-        cassandra_session
-            .query_unpaged(
-                format!(
-                    "CREATE KEYSPACE IF NOT EXISTS {} WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}",
-                    cassandra_keyspace
-                ),
-                &[],
-            )
-            .await
-            .expect("Failed to create Cassandra keyspace");
-
-        // Use keyspace
         cassandra_session
             .use_keyspace(&cassandra_keyspace, false)
             .await
             .expect("Failed to use Cassandra keyspace");
-
-        // Create messages_by_channel table
-        cassandra_session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS messages_by_channel (
-                    channel_id uuid,
-                    message_id timeuuid,
-                    user_id uuid,
-                    content text,
-                    timestamp timestamp,
-                    PRIMARY KEY (channel_id, message_id)
-                ) WITH CLUSTERING ORDER BY (message_id DESC)",
-                &[],
-            )
-            .await
-            .expect("Failed to create messages_by_channel table");
-
-        // Create messages_by_user table
-        cassandra_session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS messages_by_user (
-                    user_id uuid,
-                    message_id timeuuid,
-                    channel_id uuid,
-                    content text,
-                    timestamp timestamp,
-                    PRIMARY KEY (user_id, message_id)
-                ) WITH CLUSTERING ORDER BY (message_id DESC)",
-                &[],
-            )
-            .await
-            .expect("Failed to create messages_by_user table");
 
         Self {
             pg_pool,

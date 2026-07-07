@@ -65,6 +65,9 @@ async fn main() -> Result<(), Error> {
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
     let connection_registry = Arc::new(ConnectionRegistry::new());
 
+    scylla::migrations::run(&config.cassandra).await?;
+    tracing::info!(database = "cassandra", "Cassandra migrations completed");
+
     let channel_repository = Arc::new(postgres::ChannelRepository::new(pg_pool.clone()));
     let message_repository = Arc::new(scylla::MessageRepository::new(&config).await?);
     let user_repository = Arc::new(postgres::UserReplicaRepository::new(pg_pool));

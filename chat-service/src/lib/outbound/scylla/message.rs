@@ -44,59 +44,19 @@ pub struct MessageRepository {
 }
 
 impl MessageRepository {
+    /// Open a session against an already-provisioned keyspace.
+    ///
+    /// Schema creation is not this constructor's job — run
+    /// [`super::migrations::run`] once at startup before constructing this
+    /// repository.
     pub async fn new(config: &Config) -> Result<Self, anyhow::Error> {
         let session = SessionBuilder::new()
             .known_nodes(&config.cassandra.nodes)
             .build()
             .await?;
 
-        // Create keyspace if not exists
-        session
-            .query_unpaged(
-                format!(
-                    "CREATE KEYSPACE IF NOT EXISTS {}
-                    WITH REPLICATION = {{
-                        'class': 'SimpleStrategy',
-                        'replication_factor': 1
-                    }}",
-                    &config.cassandra.keyspace
-                ),
-                &[],
-            )
-            .await?;
-
         session
             .use_keyspace(&config.cassandra.keyspace, false)
-            .await?;
-
-        // Create a messages_by_channel table
-        session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS messages_by_channel (
-                    channel_id uuid,
-                    message_id timeuuid,
-                    user_id uuid,
-                    content text,
-                    timestamp timestamp,
-                    PRIMARY KEY (channel_id, message_id)
-                ) WITH CLUSTERING ORDER BY (message_id DESC)",
-                &[],
-            )
-            .await?;
-
-        // Create a messages_by_user table
-        session
-            .query_unpaged(
-                "CREATE TABLE IF NOT EXISTS messages_by_user (
-                    user_id uuid,
-                    message_id timeuuid,
-                    channel_id uuid,
-                    content text,
-                    timestamp timestamp,
-                    PRIMARY KEY (user_id, message_id)
-                ) WITH CLUSTERING ORDER BY (message_id DESC)",
-                &[],
-            )
             .await?;
 
         Ok(Self {
