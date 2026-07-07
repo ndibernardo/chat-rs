@@ -179,13 +179,8 @@ async fn test_get_messages_with_before_parameter() {
     // Get messages with before parameter
     let before_time = chrono::Utc::now().to_rfc3339();
     let response = app
-        .get_authenticated(
-            &format!(
-                "/api/channels/{}/messages?before={}",
-                channel_id, before_time
-            ),
-            &token,
-        )
+        .get_authenticated(&format!("/api/channels/{}/messages", channel_id), &token)
+        .query(&[("before", &before_time)])
         .send()
         .await
         .expect("Failed to execute request");
@@ -293,13 +288,8 @@ async fn test_get_messages_with_limit_and_before() {
     // Get messages with both limit and before parameters
     let before_time = chrono::Utc::now().to_rfc3339();
     let response = app
-        .get_authenticated(
-            &format!(
-                "/api/channels/{}/messages?limit=20&before={}",
-                channel_id, before_time
-            ),
-            &token,
-        )
+        .get_authenticated(&format!("/api/channels/{}/messages", channel_id), &token)
+        .query(&[("limit", "20"), ("before", &before_time)])
         .send()
         .await
         .expect("Failed to execute request");
@@ -367,10 +357,8 @@ async fn test_message_retrieval_workflow() {
 
     let before = chrono::Utc::now().to_rfc3339();
     let before_response = app
-        .get_authenticated(
-            &format!("/api/channels/{}/messages?before={}", channel_id, before),
-            &token,
-        )
+        .get_authenticated(&format!("/api/channels/{}/messages", channel_id), &token)
+        .query(&[("before", &before)])
         .send()
         .await
         .expect("Failed to execute request");
