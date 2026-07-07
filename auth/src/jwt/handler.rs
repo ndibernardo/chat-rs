@@ -1,6 +1,7 @@
 use jsonwebtoken::dangerous::insecure_decode;
 use jsonwebtoken::decode;
 use jsonwebtoken::encode;
+use jsonwebtoken::errors::ErrorKind;
 use jsonwebtoken::Algorithm;
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::EncodingKey;
@@ -69,18 +70,19 @@ impl JwtHandler {
     ///
     /// # Errors
     /// * `DecodingFailed` - Token decoding failed
-    /// * `TokenExpired` - Token has expired (if exp claim is present)
+    /// * `TokenExpired` - Token has expired, or has no `exp` claim
     /// * `InvalidToken` - Token signature is invalid or malformed
     pub fn decode<T: for<'de> Deserialize<'de>>(&self, token: &str) -> Result<T, JwtError> {
-        let mut validation = Validation::new(self.algorithm);
-        // Allow tokens without 'exp' claim for flexibility
-        validation.required_spec_claims.clear();
+        // `Validation::new` defaults to requiring `exp`; keep that default so a
+        // token without an expiration is rejected instead of granted a permanent
+        // credential.
+        let validation = Validation::new(self.algorithm);
 
         let token_data = decode::<T>(token, &self.decoding_key, &validation).map_err(|e| {
-            if e.to_string().contains("ExpiredSignature") {
-                JwtError::TokenExpired
-            } else {
-                JwtError::DecodingFailed(e.to_string())
+            match e.kind() {
+                ErrorKind::ExpiredSignature => JwtError::TokenExpired,
+                ErrorKind::MissingRequiredClaim(claim) if claim == "exp" => JwtError::TokenExpired,
+                _ => JwtError::DecodingFailed(e.to_string()),
             }
         })?;
 
@@ -122,6 +124,11 @@ mod tests {
     struct TestClaims {
         sub: String,
         role: String,
+        exp: i64,
+    }
+
+    fn future_exp() -> i64 {
+        chrono::Utc::now().timestamp() + 3600
     }
 
     #[test]
@@ -131,6 +138,7 @@ mod tests {
         let claims = TestClaims {
             sub: "miles-davis".to_string(),
             role: "platform-engineer".to_string(),
+            exp: future_exp(),
         };
 
         // Encode
@@ -158,6 +166,7 @@ mod tests {
         let claims = TestClaims {
             sub: "miles-davis".to_string(),
             role: "platform-engineer".to_string(),
+            exp: future_exp(),
         };
 
         let token = handler1.encode(&claims).expect("Failed to encode token");
@@ -175,6 +184,7 @@ mod tests {
         let claims = TestClaims {
             sub: "miles-davis".to_string(),
             role: "platform-engineer".to_string(),
+            exp: future_exp(),
         };
 
         let token = handler1.encode(&claims).expect("Failed to encode token");
