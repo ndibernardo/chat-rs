@@ -28,24 +28,19 @@ impl RemoteUserLookup for UserServiceClient {
         });
 
         let mut client = self.client.clone();
-        let response = client
-            .get_user(request)
-            .await
-            .map_err(|e| UserError::RemoteError(format!("gRPC error: {}", e)))?;
+        let response = match client.get_user(request).await {
+            Ok(response) => response,
+            Err(status) if status.code() == tonic::Code::NotFound => return Ok(None),
+            Err(status) => return Err(UserError::RemoteError(format!("gRPC error: {}", status))),
+        };
 
-        let result = response.into_inner();
+        let user = response.into_inner().user.ok_or_else(|| {
+            UserError::RemoteError("gRPC response missing user".to_string())
+        })?;
 
-        match result.result {
-            Some(crate::proto::get_user_response::Result::User(user)) => {
-                let user_id = UserId::from_string(&user.id)?;
-                let username = Username::new(user.username)?;
+        let user_id = UserId::from_string(&user.id)?;
+        let username = Username::new(user.username)?;
 
-                Ok(Some(ResolvedUser::new(user_id, username)))
-            }
-            Some(crate::proto::get_user_response::Result::Error(err)) => {
-                Err(UserError::RemoteError(err))
-            }
-            None => Ok(None),
-        }
+        Ok(Some(ResolvedUser::new(user_id, username)))
     }
 }

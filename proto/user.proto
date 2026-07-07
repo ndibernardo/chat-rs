@@ -4,8 +4,10 @@ package user;
 
 // Internal User service RPC for inter-service communication
 service UserService {
-  // Get user by ID (used by chat-service for internal user data)
-  // Returns error in response if user not found - use this to verify single user existence
+  // Get user by ID (used by chat-service for internal user data).
+  // Absence and failure are distinguished via gRPC status codes: NOT_FOUND
+  // means the user genuinely does not exist; any other error status means
+  // the call itself failed (retryable).
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
 }
 
@@ -23,8 +25,5 @@ message GetUserRequest {
 }
 
 message GetUserResponse {
-  oneof result {
-    User user = 1;
-    string error = 2;
-  }
+  User user = 1;
 }

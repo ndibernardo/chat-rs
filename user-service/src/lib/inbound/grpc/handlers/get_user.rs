@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tonic::Status;
 
+use crate::domain::user::errors::UserError;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserService;
 use crate::domain::user::service::Service;
@@ -22,11 +23,10 @@ pub async fn get_user(
         Ok(user) => {
             let proto_user: crate::proto::User = user.into();
             Ok(GetUserResponse {
-                result: Some(crate::proto::get_user_response::Result::User(proto_user)),
+                user: Some(proto_user),
             })
         }
-        Err(e) => Ok(GetUserResponse {
-            result: Some(crate::proto::get_user_response::Result::Error(e.to_string())),
-        }),
+        Err(UserError::NotFound(id)) => Err(Status::not_found(format!("User not found: {}", id))),
+        Err(e) => Err(Status::internal(e.to_string())),
     }
 }
