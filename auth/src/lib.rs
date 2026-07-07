@@ -25,7 +25,9 @@
 //! use auth::{JwtHandler, Claims};
 //!
 //! let handler = JwtHandler::new(b"secret_key_at_least_32_bytes_long!");
-//! let claims = Claims::new().with_subject("user123");
+//! let claims = Claims::new()
+//!     .with_subject("user123")
+//!     .with_expiration(chrono::Utc::now().timestamp() + 3600);
 //! let token = handler.encode(&claims).unwrap();
 //! let decoded: Claims = handler.decode(&token).unwrap();
 //! ```

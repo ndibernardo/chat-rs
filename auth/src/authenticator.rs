@@ -146,7 +146,9 @@ mod tests {
             .expect("Failed to hash password");
 
         // Authenticate with correct password
-        let claims = Claims::new().with_subject("miles-davis");
+        let claims = Claims::new()
+            .with_subject("miles-davis")
+            .with_expiration(chrono::Utc::now().timestamp() + 3600);
         let result = authenticator
             .authenticate(password, &hash, &claims)
             .expect("Authentication failed");
@@ -185,7 +187,8 @@ mod tests {
 
         let claims = Claims::new()
             .with_subject("miles-davis")
-            .with_issuer("chat-rs".to_string());
+            .with_issuer("chat-rs".to_string())
+            .with_expiration(chrono::Utc::now().timestamp() + 3600);
 
         // Generate token
         let token = authenticator
