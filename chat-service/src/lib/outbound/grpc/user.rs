@@ -14,8 +14,13 @@ pub struct UserServiceClient {
 }
 
 impl UserServiceClient {
+    /// Builds the channel lazily: the actual TCP/HTTP2 connection is deferred
+    /// to the first RPC call, so chat-service can start even if user-service
+    /// is temporarily down (the replica-first design already tolerates a
+    /// stale/missing row via `ReplicaWithFallback`) instead of failing to boot.
     pub async fn new(url: &str) -> Result<Self, Error> {
-        let client = ProtoUserServiceClient::connect(url.to_string()).await?;
+        let endpoint = tonic::transport::Endpoint::from_shared(url.to_string())?;
+        let client = ProtoUserServiceClient::new(endpoint.connect_lazy());
         Ok(Self { client })
     }
 }

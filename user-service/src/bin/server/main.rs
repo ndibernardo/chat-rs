@@ -79,8 +79,11 @@ async fn main() -> Result<(), anyhow::Error> {
         Arc::clone(&authenticator),
         config.jwt.expiration_hours,
     );
-    let http_server =
-        tokio::spawn(async move { axum::serve(http_listener, http_application).await });
+    let http_server = tokio::spawn(async move {
+        axum::serve(http_listener, http_application)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+    });
 
     let grpc_address = format!("0.0.0.0:{}", config.server.grpc_port).parse()?;
     let grpc_service = UserGrpcService::new(Arc::clone(&user_service));
@@ -94,7 +97,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let grpc_server = tokio::spawn(async move {
         Server::builder()
             .add_service(UserServiceServer::new(grpc_service))
-            .serve(grpc_address)
+            .serve_with_shutdown(grpc_address, shutdown_signal())
             .await
     });
 
@@ -104,6 +107,36 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     Ok(())
+}
+
+/// Resolves on SIGINT or SIGTERM, so both servers stop accepting new
+/// connections and drain in-flight requests instead of the process being
+/// killed mid-request. Each server task calls this independently; tokio's
+/// signal listeners broadcast to every registered receiver of the same kind.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("shutdown signal received, starting graceful shutdown");
 }
 
 /// Strip `user:password@` credentials from a connection URL before logging it.

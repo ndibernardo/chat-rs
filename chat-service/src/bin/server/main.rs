@@ -91,7 +91,7 @@ async fn main() -> Result<(), Error> {
     let grpc_user_client = Arc::new(
         grpc::UserServiceClient::new(&config.user_service.grpc_url)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to connect to user-service: {}", e))?,
+            .map_err(|e| anyhow::anyhow!("Failed to build user-service gRPC client: {}", e))?,
     );
     let user_resolver = Arc::new(resolver::ReplicaWithFallback::new(
         user_repository,
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Error> {
         topics = "chat.messages.*",
         "Starting Kafka message event consumer"
     );
-    tokio::spawn(async move {
+    let message_consumer_handle = tokio::spawn(async move {
         message_event_consumer.start_consuming().await;
     });
 
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Error> {
         topic = %config.kafka.user_events.topic,
         "Starting Kafka user event consumer"
     );
-    tokio::spawn(async move {
+    let user_consumer_handle = tokio::spawn(async move {
         user_events_consumer.start_consuming().await;
     });
 
@@ -138,9 +138,44 @@ async fn main() -> Result<(), Error> {
         authenticator,
     );
 
-    axum::serve(listener, application).await?;
+    axum::serve(listener, application)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    tracing::info!("HTTP server stopped, shutting down Kafka consumers");
+    message_consumer_handle.abort();
+    user_consumer_handle.abort();
 
     Ok(())
+}
+
+/// Resolves on SIGINT or SIGTERM, so `axum::serve` can stop accepting new
+/// connections and drain in-flight requests/WS connections instead of the
+/// process being killed mid-request.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("shutdown signal received, starting graceful shutdown");
 }
 
 /// Strip `user:password@` credentials from a connection URL before logging it.
