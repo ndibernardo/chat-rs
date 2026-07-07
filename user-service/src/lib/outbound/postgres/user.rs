@@ -103,56 +103,6 @@ impl ports::UserRepository for UserRepository {
         }
     }
 
-    async fn find_by_email(&self, email: &str) -> Result<Option<User>, UserError> {
-        let row = sqlx::query!(
-            r#"
-            SELECT id, username, email, password_hash, created_at
-            FROM users
-            WHERE email = $1
-            "#,
-            email,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| UserError::DatabaseError(e.to_string()))?;
-
-        match row {
-            Some(r) => Ok(Some(User::new(
-                UserId::from_uuid(r.id),
-                Username::new(r.username)?,
-                EmailAddress::new(r.email)?,
-                r.password_hash,
-                r.created_at,
-            ))),
-            None => Ok(None),
-        }
-    }
-
-    async fn list_all(&self) -> Result<Vec<User>, UserError> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT id, username, email, password_hash, created_at
-            FROM users
-            ORDER BY created_at DESC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| UserError::DatabaseError(e.to_string()))?;
-
-        rows.into_iter()
-            .map(|r| {
-                Ok(User::new(
-                    UserId::from_uuid(r.id),
-                    Username::new(r.username)?,
-                    EmailAddress::new(r.email)?,
-                    r.password_hash,
-                    r.created_at,
-                ))
-            })
-            .collect()
-    }
-
     async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError> {
         let uuids: Vec<_> = ids.iter().map(|id| id.value()).collect();
 

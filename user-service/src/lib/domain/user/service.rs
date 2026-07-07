@@ -167,8 +167,6 @@ mod tests {
             async fn create(&self, user: User) -> Result<User, UserError>;
             async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, UserError>;
             async fn find_by_username(&self, username: &Username) -> Result<Option<User>, UserError>;
-            async fn find_by_email(&self, email: &str) -> Result<Option<User>, UserError>;
-            async fn list_all(&self) -> Result<Vec<User>, UserError>;
             async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError>;
             async fn update(&self, user: User) -> Result<User, UserError>;
             async fn delete(&self, id: &UserId) -> Result<(), UserError>;

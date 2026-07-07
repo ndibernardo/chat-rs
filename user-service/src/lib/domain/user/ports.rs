@@ -139,27 +139,6 @@ pub trait UserRepository: Send + Sync + 'static {
     /// * `DatabaseError` - Database operation failed
     async fn find_by_username(&self, username: &Username) -> Result<Option<User>, UserError>;
 
-    /// Retrieve user by email address.
-    ///
-    /// # Arguments
-    /// * `email` - Email address string
-    ///
-    /// # Returns
-    /// Optional user entity (None if not found)
-    ///
-    /// # Errors
-    /// * `DatabaseError` - Database operation failed
-    async fn find_by_email(&self, email: &str) -> Result<Option<User>, UserError>;
-
-    /// Retrieve all users from storage.
-    ///
-    /// # Returns
-    /// Vector of all users
-    ///
-    /// # Errors
-    /// * `DatabaseError` - Database operation failed
-    async fn list_all(&self) -> Result<Vec<User>, UserError>;
-
     /// Retrieve multiple users by identifiers.
     ///
     /// # Arguments
