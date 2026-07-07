@@ -33,8 +33,8 @@ async fn direct_channel_participants_round_trip_through_channel_members() {
     assert!(participants.contains(&creator));
     assert!(participants.contains(&other));
 
-    // find_by_user (backed by a single channel_members join, per §12.5) finds
-    // the channel for both the creator and the other participant.
+    // find_by_user (backed by a single channel_members join) finds the
+    // channel for both the creator and the other participant.
     let creator_channels = repository
         .find_by_user(creator)
         .await

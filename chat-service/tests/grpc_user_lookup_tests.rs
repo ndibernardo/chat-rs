@@ -1,7 +1,7 @@
 //! Exercises chat-service's `RemoteUserLookup` gRPC client directly against a
 //! real user-service instance, verifying that NotFound and success are
 //! distinguished at the gRPC status level rather than conflated into a
-//! generic error (see architecture-audit.md §5.3).
+//! generic error.
 
 use chat_service::domain::user::ports::RemoteUserLookup;
 use chat_service::outbound::grpc::UserServiceClient;
