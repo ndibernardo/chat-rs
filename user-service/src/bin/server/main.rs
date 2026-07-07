@@ -33,7 +33,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = Config::load()?;
 
     tracing::info!(
-        database_url = %config.database.url,
+        database_url = %redact_credentials(&config.database.url),
         http_port = config.server.http_port,
         grpc_port = config.server.grpc_port,
         kafka_brokers = %config.kafka.brokers,
@@ -104,4 +104,16 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     Ok(())
+}
+
+/// Strip `user:password@` credentials from a connection URL before logging it.
+fn redact_credentials(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let after_scheme = &url[scheme_end + 3..];
+    match after_scheme.find('@') {
+        Some(at_pos) => format!("{}://***@{}", &url[..scheme_end], &after_scheme[at_pos + 1..]),
+        None => url.to_string(),
+    }
 }

@@ -59,20 +59,22 @@ pub fn create_router(
             auth_middleware,
         ));
 
+    // Logs the path only, never the query string or headers: `Authorization`
+    // travels as a header, so logging headers (or a query string that might
+    // carry a token) would put credentials in logs/proxies.
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|request: &Request<Body>| {
             tracing::info_span!(
                 "http_request",
                 method = %request.method(),
-                uri = %request.uri(),
+                path = %request.uri().path(),
                 version = ?request.version(),
-                headers = ?request.headers(),
             )
         })
         .on_request(|request: &Request<Body>, _span: &Span| {
             tracing::info!(
                 method = %request.method(),
-                uri = %request.uri(),
+                path = %request.uri().path(),
                 "Request started"
             );
         })

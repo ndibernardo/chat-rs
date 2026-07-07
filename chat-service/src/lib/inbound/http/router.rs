@@ -92,20 +92,22 @@ where
 
     let ws_routes = Router::new().route("/ws/channels/{channel_id}", get(websocket_handler));
 
+    // Logs the path only, never the query string or headers: the WebSocket
+    // upgrade token travels as a `?token=...` query parameter and `Authorization`
+    // travels as a header, so logging either would put credentials in logs/proxies.
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|request: &Request<Body>| {
             tracing::info_span!(
                 "http_request",
                 method = %request.method(),
-                uri = %request.uri(),
+                path = %request.uri().path(),
                 version = ?request.version(),
-                headers = ?request.headers(),
             )
         })
         .on_request(|request: &Request<Body>, _span: &Span| {
             tracing::info!(
                 method = %request.method(),
-                uri = %request.uri(),
+                path = %request.uri().path(),
                 "Request started"
             );
         })

@@ -38,7 +38,7 @@ async fn main() -> Result<(), Error> {
     let config = Config::load()?;
 
     tracing::info!(
-        database_url = %config.database.url,
+        database_url = %redact_credentials(&config.database.url),
         cassandra_nodes = ?config.cassandra.nodes,
         cassandra_keyspace = %config.cassandra.keyspace,
         http_port = config.server.http_port,
@@ -141,4 +141,16 @@ async fn main() -> Result<(), Error> {
     axum::serve(listener, application).await?;
 
     Ok(())
+}
+
+/// Strip `user:password@` credentials from a connection URL before logging it.
+fn redact_credentials(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let after_scheme = &url[scheme_end + 3..];
+    match after_scheme.find('@') {
+        Some(at_pos) => format!("{}://***@{}", &url[..scheme_end], &after_scheme[at_pos + 1..]),
+        None => url.to_string(),
+    }
 }
