@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["auth", "user-service", "chat-service"]
+members = ["crates/auth", "crates/web", "services/user-service", "services/chat-service"]
 
 [workspace.package]
 version = "0.1.0"

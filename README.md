@@ -32,7 +32,7 @@ docker-compose up --build
 docker-compose up postgres cassandra kafka
 
 # Run service locally
-cd user-service
+cd services/user-service
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/user cargo run
 ```
 
@@ -86,7 +86,7 @@ chat-service maintains a denormalized `user_replica` table for fast username loo
 - Enables message enrichment with username data on read path
 - gRPC fallback available for cache misses (user not yet in replica)
 
-For detailed interaction flows, see the [sequence diagrams](./sequence).
+For detailed interaction flows, see the [sequence diagrams](./docs/sequence).
 
 **Practices:** 
 
@@ -99,11 +99,11 @@ For detailed interaction flows, see the [sequence diagrams](./sequence).
 
 ## API
 
-See [OpenAPI contracts](./openapi) for complete specifications.
+See [OpenAPI contracts](./contracts/openapi) for complete specifications.
 
 ## Testing
 ```bash
-./test.sh              # Full integration tests
+./scripts/test.sh       # Full integration tests
 cargo test --all       # With infrastructure running
 ```
 

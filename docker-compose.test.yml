@@ -2,7 +2,7 @@ services:
   user-service-test:
     build:
       context: .
-      dockerfile: user-service/Dockerfile
+      dockerfile: services/user-service/Dockerfile
     container_name: user-service-test
     depends_on:
       postgres-test:

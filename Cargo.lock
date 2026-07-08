@@ -342,6 +342,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "web",
 ]
 
 [[package]]
@@ -3908,6 +3909,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "web",
  "zeroize",
 ]
 
@@ -4028,6 +4030,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76f218a38c84bcb33c25ec7059b07847d465ce0e0a76b995e134a45adcb6af76"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "web"
+version = "0.1.0"
+dependencies = [
+ "auth",
+ "axum",
+ "serde_json",
+ "tower-http 0.7.0",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

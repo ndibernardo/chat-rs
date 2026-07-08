@@ -157,7 +157,7 @@ services:
   user-service:
     build:
       context: .
-      dockerfile: user-service/Dockerfile
+      dockerfile: services/user-service/Dockerfile
     container_name: chat-user-service
     ports:
       - "3001:3001"  # HTTP REST API
@@ -179,7 +179,7 @@ services:
   chat-service:
     build:
       context: .
-      dockerfile: chat-service/Dockerfile
+      dockerfile: services/chat-service/Dockerfile
     container_name: chat-chat-service
     ports:
       - "3002:3002"
