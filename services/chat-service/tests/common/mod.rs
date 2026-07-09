@@ -11,6 +11,7 @@ use chat_service::config::KafkaConfig;
 use chat_service::config::ServerConfig;
 use chat_service::config::UserEventsConfig;
 use chat_service::config::UserServiceConfig;
+use chat_service::config::WebsocketConfig;
 use chat_service::domain::channel::service::Service as ChannelService;
 use chat_service::domain::message::service::Service as MessageService;
 use chat_service::inbound::http::router::create_router;
@@ -80,7 +81,10 @@ impl TestApp {
         });
 
         let config = Config {
-            database: DatabaseConfig { url: database_url },
+            database: DatabaseConfig {
+                url: database_url,
+                max_connections: 5,
+            },
             cassandra: CassandraConfig {
                 nodes: cassandra_nodes.clone(),
                 keyspace: db.cassandra_keyspace.clone(),
@@ -105,6 +109,7 @@ impl TestApp {
                     group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),
                 },
             },
+            websocket: WebsocketConfig::default(),
         };
 
         // Create adapters
@@ -160,6 +165,7 @@ impl TestApp {
             message_service,
             connection_registry,
             authenticator,
+            256,
         );
 
         // Spawn server in background

@@ -32,6 +32,8 @@ where
     pub message_service: Arc<MS>,
     pub connection_registry: Arc<ConnectionRegistry>,
     pub authenticator: Arc<Authenticator>,
+    /// Bound on each WebSocket connection's outbound send queue.
+    pub ws_send_queue_capacity: usize,
 }
 
 // Manual impl: deriving would require `CS: Clone`/`MS: Clone`, but only the
@@ -47,6 +49,7 @@ where
             message_service: self.message_service.clone(),
             connection_registry: self.connection_registry.clone(),
             authenticator: self.authenticator.clone(),
+            ws_send_queue_capacity: self.ws_send_queue_capacity,
         }
     }
 }
@@ -110,6 +113,7 @@ pub fn create_router<CS, MS>(
     message_service: Arc<MS>,
     connection_registry: Arc<ConnectionRegistry>,
     authenticator: Arc<Authenticator>,
+    ws_send_queue_capacity: usize,
 ) -> Router
 where
     CS: ChannelService,
@@ -120,6 +124,7 @@ where
         message_service,
         connection_registry,
         authenticator: authenticator.clone(),
+        ws_send_queue_capacity,
     };
 
     let router = Router::new()

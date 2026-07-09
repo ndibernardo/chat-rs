@@ -17,12 +17,43 @@ pub struct Config {
     pub user_service: UserServiceConfig,
     pub kafka: KafkaConfig,
     pub jwt: JwtConfig,
+    #[serde(default)]
+    pub websocket: WebsocketConfig,
 }
 
 /// PostgreSQL database configuration.
 #[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseConfig {
     pub url: String,
+    #[serde(default = "default_max_connections")]
+    pub max_connections: u32,
+}
+
+fn default_max_connections() -> u32 {
+    5
+}
+
+/// WebSocket gateway configuration.
+#[derive(Debug, Deserialize, Clone)]
+pub struct WebsocketConfig {
+    /// Bound on each connection's outbound send queue. A connection that
+    /// can't keep up gets disconnected rather than let the queue grow
+    /// without limit — unbounded per-connection queues are a memory-DoS
+    /// vector under a slow or stalled client.
+    #[serde(default = "default_send_queue_capacity")]
+    pub send_queue_capacity: usize,
+}
+
+impl Default for WebsocketConfig {
+    fn default() -> Self {
+        Self {
+            send_queue_capacity: default_send_queue_capacity(),
+        }
+    }
+}
+
+fn default_send_queue_capacity() -> usize {
+    256
 }
 
 /// Cassandra database configuration.

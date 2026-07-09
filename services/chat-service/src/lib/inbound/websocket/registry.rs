@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 use async_trait::async_trait;
 use axum::extract::ws::Message as WsMessage;
@@ -20,7 +22,7 @@ use crate::domain::user::models::UserId;
 pub struct Connection {
     pub user_id: UserId,
     pub channel_id: ChannelId,
-    pub sender: mpsc::UnboundedSender<WsMessage>,
+    pub sender: mpsc::Sender<WsMessage>,
 }
 
 /// Manages all active WebSocket connections
@@ -30,6 +32,8 @@ pub struct ConnectionRegistry {
     connections: Arc<RwLock<HashMap<Uuid, Connection>>>,
     /// Map of channel_id -> Vec<connection_id> for efficient broadcasting
     channel_connections: Arc<RwLock<HashMap<ChannelId, Vec<Uuid>>>>,
+    /// Count of connections dropped because their send queue was full.
+    queue_full_disconnects: Arc<AtomicU64>,
 }
 
 impl ConnectionRegistry {
@@ -37,7 +41,14 @@ impl ConnectionRegistry {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
             channel_connections: Arc::new(RwLock::new(HashMap::new())),
+            queue_full_disconnects: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Number of connections dropped so far because their send queue filled
+    /// up (the client wasn't draining fast enough).
+    pub fn queue_full_disconnects(&self) -> u64 {
+        self.queue_full_disconnects.load(Ordering::Relaxed)
     }
 
     /// Add a new connection
@@ -46,7 +57,7 @@ impl ConnectionRegistry {
         connection_id: Uuid,
         user_id: UserId,
         channel_id: ChannelId,
-        sender: mpsc::UnboundedSender<WsMessage>,
+        sender: mpsc::Sender<WsMessage>,
     ) {
         let connection = Connection {
             user_id,
@@ -102,32 +113,62 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Broadcast a message to all connections in a channel
+    /// Broadcast a message to all connections in a channel.
+    ///
+    /// A connection whose send queue is full (the client isn't draining
+    /// fast enough) is disconnected rather than blocked on or buffered
+    /// without limit — an unbounded queue behind a stalled client is a
+    /// memory-DoS vector.
     pub async fn broadcast_to_channel(&self, channel_id: ChannelId, message: WsMessage) {
-        let channel_conns = self.channel_connections.read().await;
-        let connections = self.connections.read().await;
+        let mut to_disconnect = Vec::new();
+        let mut queue_full = 0u64;
 
-        if let Some(conn_ids) = channel_conns.get(&channel_id) {
-            let mut sent_count = 0;
-            let mut failed_count = 0;
+        {
+            let channel_conns = self.channel_connections.read().await;
+            let connections = self.connections.read().await;
 
-            for conn_id in conn_ids {
-                if let Some(conn) = connections.get(conn_id) {
-                    if conn.sender.send(message.clone()).is_ok() {
-                        sent_count += 1;
-                    } else {
-                        failed_count += 1;
-                        tracing::warn!("Failed to send message to connection {}", conn_id);
+            if let Some(conn_ids) = channel_conns.get(&channel_id) {
+                let mut sent_count = 0;
+                let mut failed_count = 0;
+
+                for conn_id in conn_ids {
+                    if let Some(conn) = connections.get(conn_id) {
+                        match conn.sender.try_send(message.clone()) {
+                            Ok(()) => sent_count += 1,
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                failed_count += 1;
+                                queue_full += 1;
+                                tracing::warn!(
+                                    "Send queue full for connection {} in channel {}, disconnecting",
+                                    conn_id,
+                                    channel_id
+                                );
+                                to_disconnect.push(*conn_id);
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                failed_count += 1;
+                                to_disconnect.push(*conn_id);
+                            }
+                        }
                     }
                 }
-            }
 
-            tracing::debug!(
-                "Broadcast to channel {}: sent={}, failed={}",
-                channel_id,
-                sent_count,
-                failed_count
-            );
+                tracing::debug!(
+                    "Broadcast to channel {}: sent={}, failed={}",
+                    channel_id,
+                    sent_count,
+                    failed_count
+                );
+            }
+        }
+
+        if queue_full > 0 {
+            self.queue_full_disconnects
+                .fetch_add(queue_full, Ordering::Relaxed);
+        }
+
+        for conn_id in to_disconnect {
+            self.remove_connection(conn_id).await;
         }
     }
 
@@ -195,5 +236,38 @@ impl MessageBroadcaster for ConnectionRegistry {
         );
 
         self.broadcast_to_channel(channel_id, ws_message).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::channel::models::ChannelId;
+    use crate::domain::user::models::UserId;
+
+    #[tokio::test]
+    async fn broadcast_disconnects_connection_once_its_send_queue_is_full() {
+        let registry = ConnectionRegistry::new();
+        let channel_id = ChannelId::new();
+        let connection_id = Uuid::new_v4();
+
+        let (sender, _receiver) = mpsc::channel::<WsMessage>(1);
+        registry
+            .add_connection(connection_id, UserId::new(), channel_id, sender)
+            .await;
+
+        // First broadcast fills the capacity-1 queue (nobody is draining it).
+        registry
+            .broadcast_to_channel(channel_id, WsMessage::Text("first".into()))
+            .await;
+        assert_eq!(registry.get_total_connections().await, 1);
+        assert_eq!(registry.queue_full_disconnects(), 0);
+
+        // Second broadcast finds the queue full and disconnects the connection.
+        registry
+            .broadcast_to_channel(channel_id, WsMessage::Text("second".into()))
+            .await;
+        assert_eq!(registry.get_total_connections().await, 0);
+        assert_eq!(registry.queue_full_disconnects(), 1);
     }
 }

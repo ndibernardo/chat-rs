@@ -2,6 +2,7 @@
 
 [database]
 url = "postgresql://postgres:postgres@localhost:5432/chat"
+max_connections = 5
 
 [jwt]
 secret = "dev-secret-key-not-for-production"
@@ -26,3 +27,6 @@ delivery_timeout_ms = 10000
 [kafka.user_events]
 topic = "user-events"
 group_id = "chat-service-user-events"
+
+[websocket]
+send_queue_capacity = 256

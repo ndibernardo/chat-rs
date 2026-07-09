@@ -46,6 +46,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         message_service: adapters.message_service,
         connection_registry: adapters.connection_registry,
         authenticator: adapters.authenticator,
+        ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
     let routes = health_routes().merge(ws_routes());

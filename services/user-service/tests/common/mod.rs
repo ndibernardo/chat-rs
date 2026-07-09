@@ -62,6 +62,7 @@ impl TestApp {
                     "postgresql://postgres:postgres@localhost:5433/{}",
                     db.db_name
                 ),
+                max_connections: 5,
             },
             server: ServerConfig {
                 http_port: port,
