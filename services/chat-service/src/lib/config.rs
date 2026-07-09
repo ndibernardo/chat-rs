@@ -52,7 +52,15 @@ pub struct KafkaConfig {
     pub brokers: String,
     pub group_id: String,
     pub num_shards: u32,
+    /// Upper bound (ms) on how long the producer buffers and retries a
+    /// message before giving up (`message.timeout.ms`).
+    #[serde(default = "default_delivery_timeout_ms")]
+    pub delivery_timeout_ms: u64,
     pub user_events: UserEventsConfig,
+}
+
+fn default_delivery_timeout_ms() -> u64 {
+    10_000
 }
 
 /// User events Kafka consumer configuration.

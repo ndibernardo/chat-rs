@@ -98,6 +98,7 @@ impl TestApp {
                 brokers: kafka_brokers,
                 group_id: format!("test-group-{}", uuid::Uuid::new_v4()),
                 num_shards: 16,
+                delivery_timeout_ms: 10_000,
                 user_events: UserEventsConfig {
                     topic: "user-events-test".to_string(),
                     group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),

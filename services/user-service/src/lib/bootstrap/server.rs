@@ -1,0 +1,84 @@
+use std::sync::Arc;
+
+use auth::Authenticator;
+use tonic::transport::Server;
+
+use super::common;
+use crate::config::Config;
+use crate::domain::user::service::Service as UserService;
+use crate::inbound::grpc::UserGrpcService;
+use crate::inbound::grpc::proto::user_service_server::UserServiceServer;
+use crate::inbound::http::router::create_router;
+use crate::outbound::argon2::PasswordHasher;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::postgres::UserRepository;
+
+/// `user-service --role server`: HTTP + gRPC API. Today's single-binary
+/// behavior and the local-dev default.
+pub async fn run(config: Config) -> Result<(), anyhow::Error> {
+    tracing::info!(
+        database_url = %common::redact_credentials(&config.database.url),
+        http_port = config.server.http_port,
+        grpc_port = config.server.grpc_port,
+        kafka_brokers = %config.kafka.brokers,
+        kafka_topic = %config.kafka.topic,
+        "Configuration loaded"
+    );
+
+    let pg_pool = common::connect_pg_pool(&config).await?;
+    common::run_pg_migrations(&pg_pool).await?;
+
+    let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
+    let user_repository = Arc::new(UserRepository::new(pg_pool));
+    let event_producer = Arc::new(EventProducer::new(&config)?);
+    let password_hasher = Arc::new(PasswordHasher::new());
+
+    let user_service = Arc::new(UserService::new(
+        user_repository,
+        event_producer,
+        password_hasher,
+    ));
+
+    let http_address = format!("0.0.0.0:{}", config.server.http_port);
+    let http_listener = tokio::net::TcpListener::bind(&http_address).await?;
+    tracing::info!(
+        address = %http_address,
+        port = config.server.http_port,
+        protocol = "http",
+        "Http server listening"
+    );
+
+    let http_application = create_router(
+        Arc::clone(&user_service),
+        Arc::clone(&authenticator),
+        config.jwt.expiration_hours,
+    );
+    let http_server = tokio::spawn(async move {
+        axum::serve(http_listener, http_application)
+            .with_graceful_shutdown(common::shutdown_signal())
+            .await
+    });
+
+    let grpc_address = format!("0.0.0.0:{}", config.server.grpc_port).parse()?;
+    let grpc_service = UserGrpcService::new(Arc::clone(&user_service));
+    tracing::info!(
+        address = %grpc_address,
+        port = config.server.grpc_port,
+        protocol = "grpc",
+        "gRpc server listening"
+    );
+
+    let grpc_server = tokio::spawn(async move {
+        Server::builder()
+            .add_service(UserServiceServer::new(grpc_service))
+            .serve_with_shutdown(grpc_address, common::shutdown_signal())
+            .await
+    });
+
+    match tokio::try_join!(http_server, grpc_server) {
+        Ok((_, _)) => tracing::info!("Servers exited successfully"),
+        Err(e) => tracing::error!(error = %e, "Server error"),
+    };
+
+    Ok(())
+}

@@ -68,3 +68,6 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
 # Kafka
 rdkafka = { version = "0.39", features = ["cmake-build"] }
+
+# CLI argument parsing (role selection, --migrate-only)
+clap = { version = "4", features = ["derive", "env"] }
