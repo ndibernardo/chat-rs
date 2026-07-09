@@ -7,6 +7,7 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use thiserror::Error;
 
+use super::context::AssignmentTracker;
 use super::instance::base_consumer_config;
 use super::instance::resolve_instance_id;
 use crate::config::Config;
@@ -44,8 +45,9 @@ enum MessageProcessingError {
 /// instance. This allows horizontal scaling while minimizing unnecessary
 /// network traffic.
 pub struct EventConsumer {
-    consumer: StreamConsumer,
+    consumer: StreamConsumer<AssignmentTracker>,
     broadcaster: Arc<dyn MessageBroadcaster>,
+    assignment_tracker: AssignmentTracker,
 }
 
 impl EventConsumer {
@@ -76,13 +78,15 @@ impl EventConsumer {
             &config.kafka.messages_topic
         );
 
-        let consumer: StreamConsumer = base_consumer_config(config, &instance_id)
-            .set("group.id", &group_id)
-            .set("enable.auto.commit", "true")
-            .set("auto.commit.interval.ms", "5000")
-            .set("auto.offset.reset", "latest") // Only consume new messages
-            .set("session.timeout.ms", "30000")
-            .create()?;
+        let assignment_tracker = AssignmentTracker::new();
+        let consumer: StreamConsumer<AssignmentTracker> =
+            base_consumer_config(config, &instance_id)
+                .set("group.id", &group_id)
+                .set("enable.auto.commit", "true")
+                .set("auto.commit.interval.ms", "5000")
+                .set("auto.offset.reset", "latest") // Only consume new messages
+                .set("session.timeout.ms", "30000")
+                .create_with_context(assignment_tracker.clone())?;
 
         consumer.subscribe(&[&config.kafka.messages_topic])?;
 
@@ -94,7 +98,14 @@ impl EventConsumer {
         Ok(Self {
             consumer,
             broadcaster,
+            assignment_tracker,
         })
+    }
+
+    /// Handle for the readiness check: whether this consumer currently holds
+    /// a partition assignment.
+    pub fn assignment_tracker(&self) -> AssignmentTracker {
+        self.assignment_tracker.clone()
     }
 
     /// Start consuming events from Kafka

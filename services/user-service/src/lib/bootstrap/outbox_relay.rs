@@ -1,6 +1,12 @@
+use std::sync::Arc;
+
+use web::HealthState;
+use web::PgReadyCheck;
+use web::ReadyCheck;
+use web::health_router;
+
 use super::common;
 use crate::config::Config;
-use crate::inbound::http::handlers::health::health;
 
 /// `user-service --role outbox-relay`: drains the Postgres outbox table into
 /// Kafka. The relay loop itself lands separately; until then this role
@@ -10,7 +16,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let pg_pool = common::connect_pg_pool(&config).await?;
     common::run_pg_migrations(&pg_pool).await?;
 
-    let health_router = axum::Router::new().route("/health", axum::routing::get(health));
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![Arc::new(PgReadyCheck::new(pg_pool))];
+    let application = health_router(HealthState::new(checks));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -21,7 +28,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         "Health listener serving"
     );
 
-    axum::serve(listener, health_router)
+    axum::serve(listener, application)
         .with_graceful_shutdown(common::shutdown_signal())
         .await?;
 

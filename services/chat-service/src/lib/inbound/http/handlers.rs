@@ -1,5 +1,4 @@
 pub mod channels;
-pub mod health;
 pub mod messages;
 
 // Re-export handlers for easy access
@@ -12,7 +11,6 @@ pub use channels::get_channel;
 pub use channels::list_public_channels;
 use chrono::DateTime;
 use chrono::Utc;
-pub use health::health;
 pub use messages::get_channel_messages;
 use serde::Deserialize;
 use serde::Serialize;

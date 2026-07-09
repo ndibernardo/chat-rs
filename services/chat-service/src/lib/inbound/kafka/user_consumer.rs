@@ -9,6 +9,7 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use thiserror::Error;
 
+use super::context::AssignmentTracker;
 use super::instance::base_consumer_config;
 use super::instance::resolve_instance_id;
 use crate::config::Config;
@@ -46,8 +47,9 @@ enum MessageProcessingError {
 /// This consumer maintains a local denormalized copy of user data
 /// by subscribing to user-events topic and updating the user_replica table
 pub struct UserEventsConsumer<R: UserReplicaRepository> {
-    consumer: StreamConsumer,
+    consumer: StreamConsumer<AssignmentTracker>,
     user_replica_repository: Arc<R>,
+    assignment_tracker: AssignmentTracker,
 }
 
 impl<R: UserReplicaRepository> UserEventsConsumer<R> {
@@ -70,17 +72,19 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         // partitions without the coordinator rebalancing the rest of the group
         // out from under it during a rolling deploy.
         let instance_id = resolve_instance_id(config);
+        let assignment_tracker = AssignmentTracker::new();
 
-        let consumer: StreamConsumer = base_consumer_config(config, &instance_id)
-            .set("group.id", &config.kafka.user_events.group_id)
-            // Committed manually, only after a successful replica upsert/delete: this
-            // consumer maintains a consistency-sensitive replica, so auto-commit's
-            // at-most-once semantics (commit on a timer regardless of processing
-            // outcome) would let a failed or crashed handler permanently skip an event.
-            .set("enable.auto.commit", "false")
-            .set("auto.offset.reset", "earliest") // Process all user events from beginning
-            .set("session.timeout.ms", "45000")
-            .create()?;
+        let consumer: StreamConsumer<AssignmentTracker> =
+            base_consumer_config(config, &instance_id)
+                .set("group.id", &config.kafka.user_events.group_id)
+                // Committed manually, only after a successful replica upsert/delete: this
+                // consumer maintains a consistency-sensitive replica, so auto-commit's
+                // at-most-once semantics (commit on a timer regardless of processing
+                // outcome) would let a failed or crashed handler permanently skip an event.
+                .set("enable.auto.commit", "false")
+                .set("auto.offset.reset", "earliest") // Process all user events from beginning
+                .set("session.timeout.ms", "45000")
+                .create_with_context(assignment_tracker.clone())?;
 
         // Subscribe to user-events topic
         consumer.subscribe(&[&config.kafka.user_events.topic])?;
@@ -93,7 +97,14 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         Ok(Self {
             consumer,
             user_replica_repository,
+            assignment_tracker,
         })
+    }
+
+    /// Handle for the readiness check: whether this consumer currently holds
+    /// a partition assignment.
+    pub fn assignment_tracker(&self) -> AssignmentTracker {
+        self.assignment_tracker.clone()
     }
 
     /// Start consuming user events from Kafka

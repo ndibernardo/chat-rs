@@ -1,6 +1,7 @@
 mod api;
 mod common;
 mod gateway;
+mod health_checks;
 mod worker;
 
 use clap::Parser;

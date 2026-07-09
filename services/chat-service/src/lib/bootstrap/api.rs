@@ -1,10 +1,16 @@
+use std::sync::Arc;
+
+use web::HealthState;
+use web::PgReadyCheck;
+use web::ReadyCheck;
+use web::health_router;
+
+use super::common;
+use super::health_checks::ScyllaReadyCheck;
 use crate::config::Config;
 use crate::inbound::http::api_routes;
 use crate::inbound::http::build_router;
-use crate::inbound::http::health_routes;
 use crate::inbound::http::router::AppState;
-
-use super::common;
 
 /// `chat-api`: channel CRUD + message history over HTTP. No Kafka consumers,
 /// no WebSocket route.
@@ -17,6 +23,13 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
 
     let adapters = common::build_adapters(&config, pg_pool).await?;
 
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(ScyllaReadyCheck::new(Arc::clone(
+            &adapters.message_repository,
+        ))),
+    ];
+
     let state = AppState {
         channel_service: adapters.channel_service,
         message_service: adapters.message_service,
@@ -25,8 +38,8 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
         ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
-    let routes = health_routes().merge(api_routes(adapters.authenticator));
-    let application = build_router(routes, state);
+    let routes = api_routes(adapters.authenticator);
+    let application = build_router(routes, state).merge(health_router(HealthState::new(checks)));
 
     serve_http(&config, application).await
 }
@@ -52,6 +65,18 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         adapters.user_repository.clone(),
     )?;
 
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(ScyllaReadyCheck::new(Arc::clone(
+            &adapters.message_repository,
+        ))),
+        Arc::new(super::health_checks::ProducerReadyCheck::new(Arc::clone(
+            &adapters.event_producer,
+        ))),
+        Arc::new(message_event_consumer.assignment_tracker()),
+        Arc::new(user_events_consumer.assignment_tracker()),
+    ];
+
     tracing::info!(
         consumer = "message_events",
         topics = "chat.messages.*",
@@ -76,7 +101,8 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         adapters.connection_registry,
         adapters.authenticator,
         config.websocket.send_queue_capacity,
-    );
+    )
+    .merge(health_router(HealthState::new(checks)));
 
     serve_http(&config, application).await?;
 

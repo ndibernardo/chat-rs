@@ -1,7 +1,13 @@
-use crate::config::Config;
-use crate::inbound::kafka::user_consumer::UserEventsConsumer;
+use std::sync::Arc;
+
+use web::HealthState;
+use web::PgReadyCheck;
+use web::ReadyCheck;
+use web::health_router;
 
 use super::common;
+use crate::config::Config;
+use crate::inbound::kafka::user_consumer::UserEventsConsumer;
 
 /// `chat-worker`: background consumers only (user-replica today; persister,
 /// outbox-relay, and deleted-user cleanup join later). Serves a
@@ -17,11 +23,16 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     common::run_pg_migrations(&pg_pool).await?;
     common::run_scylla_migrations(&config).await?;
 
-    let user_repository = std::sync::Arc::new(
-        crate::outbound::postgres::UserReplicaRepository::new(pg_pool),
-    );
+    let user_repository = Arc::new(crate::outbound::postgres::UserReplicaRepository::new(
+        pg_pool.clone(),
+    ));
 
     let user_events_consumer = UserEventsConsumer::new(&config, user_repository)?;
+
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(pg_pool)),
+        Arc::new(user_events_consumer.assignment_tracker()),
+    ];
 
     tracing::info!(
         consumer = "user_events",
@@ -32,10 +43,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         user_events_consumer.start_consuming().await;
     });
 
-    let health_router = axum::Router::new().route(
-        "/health",
-        axum::routing::get(crate::inbound::http::handlers::health::health),
-    );
+    let application = health_router(HealthState::new(checks));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -46,7 +54,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         "Health listener serving"
     );
 
-    axum::serve(listener, health_router)
+    axum::serve(listener, application)
         .with_graceful_shutdown(common::shutdown_signal())
         .await?;
 

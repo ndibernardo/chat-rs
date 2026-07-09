@@ -11,7 +11,6 @@ use web::with_request_trace;
 use super::handlers::create_channel;
 use super::handlers::get_channel;
 use super::handlers::get_channel_messages;
-use super::handlers::health;
 use super::handlers::list_public_channels;
 use crate::domain::channel::ports::ChannelService;
 use crate::domain::message::ports::MessageService;
@@ -52,15 +51,6 @@ where
             ws_send_queue_capacity: self.ws_send_queue_capacity,
         }
     }
-}
-
-/// `/health` liveness route. Shared by every role.
-pub fn health_routes<CS, MS>() -> Router<AppState<CS, MS>>
-where
-    CS: ChannelService,
-    MS: MessageService,
-{
-    Router::new().route("/health", get(health))
 }
 
 /// Channel CRUD + message history routes. Mounted by the `api` role (and by
@@ -128,7 +118,6 @@ where
     };
 
     let router = Router::new()
-        .merge(health_routes())
         .merge(api_routes(authenticator))
         .merge(ws_routes());
 
