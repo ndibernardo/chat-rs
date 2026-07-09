@@ -30,6 +30,14 @@ pub struct Adapters {
         >,
     >,
     pub user_repository: Arc<postgres::UserReplicaRepository>,
+    /// Kept alongside `message_service` (which owns its own handle) so
+    /// readiness checks can ping Scylla without reaching through the
+    /// message service's domain-level API.
+    pub message_repository: Arc<scylla::MessageRepository>,
+    pub event_producer: Arc<kafka::EventProducer>,
+    /// A spare handle to the pool passed in, for readiness checks — the
+    /// repositories built from it each hold their own clone already.
+    pub pg_pool: PgPool,
 }
 
 pub async fn connect_pg_pool(config: &Config) -> Result<PgPool, anyhow::Error> {
@@ -67,7 +75,7 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
 
     let channel_repository = Arc::new(postgres::ChannelRepository::new(pg_pool.clone()));
     let message_repository = Arc::new(scylla::MessageRepository::new(config).await?);
-    let user_repository = Arc::new(postgres::UserReplicaRepository::new(pg_pool));
+    let user_repository = Arc::new(postgres::UserReplicaRepository::new(pg_pool.clone()));
 
     let event_producer = Arc::new(kafka::EventProducer::new(config)?);
     let channel_event_publisher = Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(
@@ -93,7 +101,7 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
     ));
 
     let message_service = Arc::new(MessageService::new(
-        message_repository,
+        Arc::clone(&message_repository),
         user_resolver,
         message_event_publisher,
     ));
@@ -104,6 +112,9 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
         channel_service,
         message_service,
         user_repository,
+        message_repository,
+        event_producer,
+        pg_pool,
     })
 }
 

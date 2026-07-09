@@ -1,4 +1,5 @@
 pub mod consumer;
+pub mod context;
 pub mod instance;
 pub mod user_consumer;
 

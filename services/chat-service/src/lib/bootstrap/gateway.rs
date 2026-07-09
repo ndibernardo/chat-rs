@@ -1,14 +1,19 @@
 use std::sync::Arc;
 
+use web::HealthState;
+use web::PgReadyCheck;
+use web::ReadyCheck;
+use web::health_router;
+
+use super::common;
+use super::health_checks::ProducerReadyCheck;
+use super::health_checks::ScyllaReadyCheck;
 use crate::config::Config;
 use crate::domain::message::ports::MessageBroadcaster;
 use crate::inbound::http::build_router;
-use crate::inbound::http::health_routes;
 use crate::inbound::http::router::AppState;
 use crate::inbound::http::ws_routes;
 use crate::inbound::kafka::consumer::EventConsumer;
-
-use super::common;
 
 /// `chat-ws-gateway`: WebSocket upgrades + broadcast fan-out + producer. No
 /// API routes, no user-replica consumer.
@@ -32,6 +37,17 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         adapters.connection_registry.clone() as Arc<dyn MessageBroadcaster>,
     )?;
 
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(ScyllaReadyCheck::new(Arc::clone(
+            &adapters.message_repository,
+        ))),
+        Arc::new(ProducerReadyCheck::new(Arc::clone(
+            &adapters.event_producer,
+        ))),
+        Arc::new(message_event_consumer.assignment_tracker()),
+    ];
+
     tracing::info!(
         consumer = "message_events",
         topics = "chat.messages.*",
@@ -49,8 +65,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
-    let routes = health_routes().merge(ws_routes());
-    let application = build_router(routes, state);
+    let application =
+        build_router(ws_routes(), state).merge(health_router(HealthState::new(checks)));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;

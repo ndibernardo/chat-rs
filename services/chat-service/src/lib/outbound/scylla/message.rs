@@ -63,6 +63,14 @@ impl MessageRepository {
             session: Arc::new(CachingSession::from(session, PREPARED_STATEMENT_CACHE_SIZE)),
         })
     }
+
+    /// Minimal round trip against the cluster, for readiness checks.
+    pub async fn ping(&self) -> Result<(), anyhow::Error> {
+        self.session
+            .execute_unpaged("SELECT key FROM system.local WHERE key = 'local'", &())
+            .await?;
+        Ok(())
+    }
 }
 
 #[async_trait]

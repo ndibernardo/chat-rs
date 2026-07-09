@@ -3,6 +3,7 @@ use std::time::Duration;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
+use rdkafka::producer::Producer;
 use rdkafka::util::Timeout;
 use serde::Serialize;
 use thiserror::Error;
@@ -105,5 +106,15 @@ impl EventProducer {
             channel_id
         );
         Ok(())
+    }
+
+    /// Blocking broker metadata fetch, for readiness checks only. Runs on a
+    /// blocking thread since librdkafka's metadata fetch is synchronous.
+    pub fn fetch_metadata_blocking(&self, timeout: Duration) -> Result<(), String> {
+        self.producer
+            .client()
+            .fetch_metadata(None, timeout)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 }

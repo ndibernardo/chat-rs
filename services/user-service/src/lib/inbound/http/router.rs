@@ -14,7 +14,6 @@ use super::handlers::authenticate::authenticate;
 use super::handlers::create_user::create_user;
 use super::handlers::delete_user::delete_user;
 use super::handlers::get_user::get_user;
-use super::handlers::health::health;
 use super::handlers::update_user::update_user;
 use crate::domain::user::service::Service as UserService;
 use crate::outbound::argon2::PasswordHasher;
@@ -40,7 +39,6 @@ pub fn create_router(
     };
 
     let public_routes = Router::new()
-        .route("/health", get(health))
         .route("/api/auth/login", post(authenticate))
         .route("/api/users", post(create_user));
 

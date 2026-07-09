@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use auth::Authenticator;
 use tonic::transport::Server;
+use web::HealthState;
+use web::PgReadyCheck;
+use web::ReadyCheck;
+use web::health_router;
 
 use super::common;
 use crate::config::Config;
@@ -29,7 +33,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     common::run_pg_migrations(&pg_pool).await?;
 
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
-    let user_repository = Arc::new(UserRepository::new(pg_pool));
+    let user_repository = Arc::new(UserRepository::new(pg_pool.clone()));
     let event_producer = Arc::new(EventProducer::new(&config)?);
     let password_hasher = Arc::new(PasswordHasher::new());
 
@@ -38,6 +42,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         event_producer,
         password_hasher,
     ));
+
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![Arc::new(PgReadyCheck::new(pg_pool))];
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let http_listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -52,7 +58,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Arc::clone(&user_service),
         Arc::clone(&authenticator),
         config.jwt.expiration_hours,
-    );
+    )
+    .merge(health_router(HealthState::new(checks)));
     let http_server = tokio::spawn(async move {
         axum::serve(http_listener, http_application)
             .with_graceful_shutdown(common::shutdown_signal())
