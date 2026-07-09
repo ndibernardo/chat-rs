@@ -73,7 +73,16 @@ pub async fn migrate_only(config: Config) -> Result<(), anyhow::Error> {
 /// (e.g. `chat-api` has no reason to hold a gRPC channel to itself via a
 /// consumer it never starts).
 pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters, anyhow::Error> {
-    let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
+    let public_key_pem = std::fs::read(&config.jwt.public_key_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read JWT public key at {}: {e}",
+            config.jwt.public_key_path
+        )
+    })?;
+    let authenticator = Arc::new(
+        Authenticator::verifier(&public_key_pem)
+            .map_err(|e| anyhow::anyhow!("Failed to build JWT verifier: {e}"))?,
+    );
     let connection_registry = Arc::new(ConnectionRegistry::new());
 
     let channel_repository = Arc::new(postgres::ChannelRepository::new(pg_pool.clone()));

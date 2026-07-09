@@ -10,6 +10,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
 use user_service::config::Config;
+use user_service::config::CorsConfig;
 use user_service::config::DatabaseConfig;
 use user_service::config::JwtConfig;
 use user_service::config::KafkaConfig;
@@ -19,6 +20,11 @@ use user_service::inbound::http::router::create_router;
 use user_service::outbound::argon2::PasswordHasher;
 use user_service::outbound::kafka::EventProducer;
 use user_service::outbound::postgres::user::UserRepository;
+
+// The repo's dev Ed25519 keypair (not a production secret): both services'
+// dev/docker/test configs point at these same files.
+const TEST_JWT_PRIVATE_KEY_PEM: &[u8] = include_bytes!("../../../../keys/dev/jwt_ed25519.pem");
+const TEST_JWT_PUBLIC_KEY_PEM: &[u8] = include_bytes!("../../../../keys/dev/jwt_ed25519.pub.pem");
 
 /// Test application that spawns a real server
 pub struct TestApp {
@@ -70,8 +76,12 @@ impl TestApp {
                 metrics_port: 0,
             },
             jwt: JwtConfig {
-                secret: "test-secret-key-for-jwt-signing-at-least-32-bytes".to_string(),
+                private_key_path: "../../keys/dev/jwt_ed25519.pem".to_string(),
+                public_key_path: "../../keys/dev/jwt_ed25519.pub.pem".to_string(),
                 expiration_hours: 24,
+            },
+            cors: CorsConfig {
+                allowed_origins: vec!["http://localhost:5173".to_string()],
             },
             kafka: KafkaConfig {
                 brokers: kafka_brokers,
@@ -91,18 +101,26 @@ impl TestApp {
         ));
 
         // Create authenticator
-        let authenticator = Arc::new(Authenticator::new(
-            b"test-secret-key-for-jwt-signing-at-least-32-bytes",
-        ));
+        let authenticator = Arc::new(
+            Authenticator::signer(TEST_JWT_PRIVATE_KEY_PEM, TEST_JWT_PUBLIC_KEY_PEM)
+                .expect("Valid Ed25519 dev keypair"),
+        );
 
-        let router = create_router(user_service, authenticator, 24);
+        let router = create_router(
+            user_service,
+            authenticator,
+            24,
+            &config.cors.allowed_origins,
+        )
+        .expect("Failed to build router");
 
         // Spawn server in background
         tokio::spawn(async move {
             axum::serve(listener, router).await.expect("Server error");
         });
 
-        let jwt_handler = JwtHandler::new(b"test-secret-key-for-jwt-signing-at-least-32-bytes");
+        let jwt_handler = JwtHandler::signer(TEST_JWT_PRIVATE_KEY_PEM, TEST_JWT_PUBLIC_KEY_PEM)
+            .expect("Valid Ed25519 dev keypair");
 
         Self {
             address,

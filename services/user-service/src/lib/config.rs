@@ -12,6 +12,15 @@ pub struct Config {
     pub server: ServerConfig,
     pub jwt: JwtConfig,
     pub kafka: KafkaConfig,
+    pub cors: CorsConfig,
+}
+
+/// Cross-origin resource sharing configuration.
+#[derive(Debug, Deserialize, Clone)]
+pub struct CorsConfig {
+    /// Origins allowed to call this service's HTTP API. No wildcard
+    /// support: every origin must be listed explicitly.
+    pub allowed_origins: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -40,9 +49,14 @@ fn default_metrics_port() -> u16 {
     9090
 }
 
+/// JWT authentication configuration.
+///
+/// user-service owns the Ed25519 keypair: it signs tokens on login and can
+/// also verify them (e.g. in the `authenticate` middleware).
 #[derive(Debug, Deserialize, Clone)]
 pub struct JwtConfig {
-    pub secret: String,
+    pub private_key_path: String,
+    pub public_key_path: String,
     pub expiration_hours: i64,
 }
 

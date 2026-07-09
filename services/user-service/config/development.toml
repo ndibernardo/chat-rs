@@ -10,8 +10,12 @@ grpc_port = 50051
 metrics_port = 9090
 
 [jwt]
-secret = "dev-secret-key-not-for-production"
+private_key_path = "../../keys/dev/jwt_ed25519.pem"
+public_key_path = "../../keys/dev/jwt_ed25519.pub.pem"
 expiration_hours = 24
+
+[cors]
+allowed_origins = ["http://localhost:5173"]
 
 [kafka]
 brokers = "localhost:9092"

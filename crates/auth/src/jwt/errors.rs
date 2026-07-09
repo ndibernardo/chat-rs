@@ -17,4 +17,10 @@ pub enum JwtError {
 
     #[error("Missing required claim: {0}")]
     MissingClaim(String),
+
+    #[error("No signing key configured: this handler can only verify tokens")]
+    SigningKeyUnavailable,
+
+    #[error("Invalid Ed25519 key material: {0}")]
+    InvalidKey(String),
 }

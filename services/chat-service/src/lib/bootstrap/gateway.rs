@@ -70,8 +70,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
-    let application =
-        build_router(ws_routes(), state).merge(health_router(HealthState::new(checks)));
+    let application = build_router(ws_routes(), state, &config.cors.allowed_origins)?
+        .merge(health_router(HealthState::new(checks)));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;

@@ -180,7 +180,6 @@ services:
       - RUN_MODE=docker
       - RUST_LOG=user_service=info,tower_http=info
       - SQLX_OFFLINE=true
-      - JWT__SECRET=${JWT_SECRET:-change-this-secret-in-production}
     depends_on:
       postgres:
         condition: service_healthy

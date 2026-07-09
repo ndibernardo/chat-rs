@@ -67,6 +67,10 @@ pub async fn authenticate(
     Ok(next.run(req).await)
 }
 
+// The `Response` error carries the exact rejection body/status for the
+// caller to return as-is; boxing it would just move the size complaint to
+// every call site's `?` conversion for no benefit on this cold path.
+#[allow(clippy::result_large_err)]
 fn extract_token_from_header(req: &Request) -> Result<&str, Response> {
     let auth_header = req
         .headers()

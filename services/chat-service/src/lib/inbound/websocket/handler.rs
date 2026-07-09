@@ -1,14 +1,14 @@
 use axum::extract::Path;
-use axum::extract::Query;
 use axum::extract::State;
 use axum::extract::WebSocketUpgrade;
 use axum::extract::ws::Message as WebSocketMessage;
 use axum::extract::ws::WebSocket;
+use axum::http::HeaderMap;
+use axum::http::header::SEC_WEBSOCKET_PROTOCOL;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use futures::SinkExt;
 use futures::StreamExt;
-use serde::Deserialize;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -23,25 +23,60 @@ use crate::domain::message::ports::MessageService;
 use crate::domain::user::models::UserId;
 use crate::inbound::http::router::AppState;
 
-/// WebSocket query parameters
-#[derive(Debug, Deserialize)]
-pub struct WebsocketParameters {
-    pub token: String,
+/// The subprotocol name a WebSocket client must offer alongside its bearer
+/// token: `Sec-WebSocket-Protocol: bearer, <jwt>`. Browsers can't set custom
+/// headers on the WS handshake, so the token rides in this header instead of
+/// a URL query string, which would otherwise land in server access logs.
+const BEARER_SUBPROTOCOL: &str = "bearer";
+
+/// Extracts the bearer token from `Sec-WebSocket-Protocol: bearer, <token>`.
+// The `Response` error carries the exact rejection body/status for the
+// caller to return as-is; boxing it would just move the size complaint to
+// the call site for no benefit on this cold path.
+#[allow(clippy::result_large_err)]
+fn extract_bearer_token(headers: &HeaderMap) -> Result<String, Response> {
+    let unauthorized = |message: &'static str| {
+        axum::http::Response::builder()
+            .status(axum::http::StatusCode::UNAUTHORIZED)
+            .body(axum::body::Body::from(message))
+            .expect("Static status and body always build a valid response")
+            .into_response()
+    };
+
+    let header_value = headers
+        .get(SEC_WEBSOCKET_PROTOCOL)
+        .ok_or_else(|| unauthorized("Missing Sec-WebSocket-Protocol header"))?;
+    let header_value = header_value
+        .to_str()
+        .map_err(|_| unauthorized("Invalid Sec-WebSocket-Protocol header"))?;
+
+    let mut parts = header_value.split(',').map(str::trim);
+    match (parts.next(), parts.next()) {
+        (Some(BEARER_SUBPROTOCOL), Some(token)) if !token.is_empty() => Ok(token.to_string()),
+        _ => Err(unauthorized(
+            "Expected Sec-WebSocket-Protocol: bearer, <token>",
+        )),
+    }
 }
 
 /// WebSocket upgrade handler
 pub async fn websocket_handler<CS, MS>(
     ws: WebSocketUpgrade,
     Path(channel_id): Path<String>,
-    Query(params): Query<WebsocketParameters>,
+    headers: HeaderMap,
     State(state): State<AppState<CS, MS>>,
 ) -> Response
 where
     CS: ChannelService,
     MS: MessageService,
 {
+    let token = match extract_bearer_token(&headers) {
+        Ok(token) => token,
+        Err(response) => return response,
+    };
+
     // Validate JWT token and extract user ID
-    let claims: auth::Claims = match state.authenticator.validate_token(&params.token) {
+    let claims: auth::Claims = match state.authenticator.validate_token(&token) {
         Ok(claims) => claims,
         Err(e) => {
             tracing::error!("Invalid JWT token: {}", e);
@@ -118,7 +153,8 @@ where
         }
     };
 
-    ws.on_upgrade(move |socket| handle_socket(socket, membership, state))
+    ws.protocols([BEARER_SUBPROTOCOL])
+        .on_upgrade(move |socket| handle_socket(socket, membership, state))
 }
 
 /// Handle an individual WebSocket connection

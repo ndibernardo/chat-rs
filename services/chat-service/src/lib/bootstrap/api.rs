@@ -44,7 +44,8 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
     };
 
     let routes = api_routes(adapters.authenticator);
-    let application = build_router(routes, state).merge(health_router(HealthState::new(checks)));
+    let application = build_router(routes, state, &config.cors.allowed_origins)?
+        .merge(health_router(HealthState::new(checks)));
 
     serve_http(&config, application).await
 }
@@ -109,7 +110,8 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         adapters.connection_registry,
         adapters.authenticator,
         config.websocket.send_queue_capacity,
-    )
+        &config.cors.allowed_origins,
+    )?
     .merge(health_router(HealthState::new(checks)));
 
     serve_http(&config, application).await?;

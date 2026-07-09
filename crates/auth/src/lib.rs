@@ -22,9 +22,15 @@
 //!
 //! ## JWT Tokens
 //! ```
+//! # const PRIVATE_KEY_PEM: &[u8] = b"-----BEGIN PRIVATE KEY-----\n\
+//! #     MC4CAQAwBQYDK2VwBCIEIP6JnME9bwmwbdD47xCxd3Sopbc/1L8s0jLUq4ecKox8\n\
+//! #     -----END PRIVATE KEY-----\n";
+//! # const PUBLIC_KEY_PEM: &[u8] = b"-----BEGIN PUBLIC KEY-----\n\
+//! #     MCowBQYDK2VwAyEAo2X2xe1SK4wTKPqRQk+27d5mkWyyxkcZAyRVbplPCmM=\n\
+//! #     -----END PUBLIC KEY-----\n";
 //! use auth::{JwtHandler, Claims};
 //!
-//! let handler = JwtHandler::new(b"secret_key_at_least_32_bytes_long!");
+//! let handler = JwtHandler::signer(PRIVATE_KEY_PEM, PUBLIC_KEY_PEM).unwrap();
 //! let claims = Claims::new()
 //!     .with_subject("user123")
 //!     .with_expiration(chrono::Utc::now().timestamp() + 3600);
@@ -34,9 +40,15 @@
 //!
 //! ## Complete Authentication Flow
 //! ```
+//! # const PRIVATE_KEY_PEM: &[u8] = b"-----BEGIN PRIVATE KEY-----\n\
+//! #     MC4CAQAwBQYDK2VwBCIEIP6JnME9bwmwbdD47xCxd3Sopbc/1L8s0jLUq4ecKox8\n\
+//! #     -----END PRIVATE KEY-----\n";
+//! # const PUBLIC_KEY_PEM: &[u8] = b"-----BEGIN PUBLIC KEY-----\n\
+//! #     MCowBQYDK2VwAyEAo2X2xe1SK4wTKPqRQk+27d5mkWyyxkcZAyRVbplPCmM=\n\
+//! #     -----END PUBLIC KEY-----\n";
 //! use auth::{Authenticator, Claims};
 //!
-//! let auth = Authenticator::new(b"secret_key_at_least_32_bytes_long!");
+//! let auth = Authenticator::signer(PRIVATE_KEY_PEM, PUBLIC_KEY_PEM).unwrap();
 //!
 //! // Register: hash password
 //! let hash = auth.hash_password("password123").unwrap();

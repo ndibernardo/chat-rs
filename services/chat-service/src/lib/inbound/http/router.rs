@@ -5,7 +5,6 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::get;
 use axum::routing::post;
-use tower_http::cors::CorsLayer;
 use web::with_request_trace;
 
 use super::handlers::create_channel;
@@ -86,29 +85,42 @@ where
 /// Assemble a router from the given route groups plus common middleware
 /// (request tracing, metrics, CORS) and application state. Each role
 /// composes only the route groups it needs.
-pub fn build_router<CS, MS>(routes: Router<AppState<CS, MS>>, state: AppState<CS, MS>) -> Router
+///
+/// # Errors
+/// Returns an error if any entry in `allowed_origins` is not a valid HTTP
+/// header value.
+pub fn build_router<CS, MS>(
+    routes: Router<AppState<CS, MS>>,
+    state: AppState<CS, MS>,
+    allowed_origins: &[String],
+) -> Result<Router, anyhow::Error>
 where
     CS: ChannelService,
     MS: MessageService,
 {
+    let cors = web::cors::cors_layer(allowed_origins)?;
+
     // route_layer, not layer: it must wrap already-matched routes so
     // `track_http_metrics` sees the `MatchedPath` extension.
     let routes = routes.route_layer(middleware::from_fn(web::metrics::track_http_metrics));
 
-    with_request_trace(routes)
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+    Ok(with_request_trace(routes).layer(cors).with_state(state))
 }
 
 /// Full router with every route group mounted. Used by the `all` role,
 /// which preserves today's single-binary behavior for local development.
+///
+/// # Errors
+/// Returns an error if any entry in `allowed_origins` is not a valid HTTP
+/// header value.
 pub fn create_router<CS, MS>(
     channel_service: Arc<CS>,
     message_service: Arc<MS>,
     connection_registry: Arc<ConnectionRegistry>,
     authenticator: Arc<Authenticator>,
     ws_send_queue_capacity: usize,
-) -> Router
+    allowed_origins: &[String],
+) -> Result<Router, anyhow::Error>
 where
     CS: ChannelService,
     MS: MessageService,
@@ -125,5 +137,5 @@ where
         .merge(api_routes(authenticator))
         .merge(ws_routes());
 
-    build_router(router, state)
+    build_router(router, state, allowed_origins)
 }
