@@ -25,8 +25,7 @@ use crate::outbound::scylla;
 pub struct Adapters {
     pub authenticator: Arc<Authenticator>,
     pub connection_registry: Arc<ConnectionRegistry>,
-    pub channel_service:
-        Arc<ChannelService<postgres::ChannelRepository, kafka::ChannelEventPublisher>>,
+    pub channel_service: Arc<ChannelService<postgres::ChannelRepository>>,
     pub message_service: Arc<
         MessageService<
             scylla::MessageRepository,
@@ -90,22 +89,19 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
     );
     let connection_registry = Arc::new(ConnectionRegistry::new());
 
-    let channel_repository = Arc::new(postgres::ChannelRepository::new(pg_pool.clone()));
+    let channel_repository = Arc::new(postgres::ChannelRepository::new(
+        pg_pool.clone(),
+        config.kafka.messages_topic.clone(),
+    ));
     let message_repository = Arc::new(scylla::MessageRepository::new(config).await?);
     let user_repository = Arc::new(postgres::UserReplicaRepository::new(pg_pool.clone()));
 
     let event_producer = Arc::new(kafka::EventProducer::new(config)?);
-    let channel_event_publisher = Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(
-        &event_producer,
-    )));
     let message_event_publisher = Arc::new(kafka::MessageEventPublisher::new(Arc::clone(
         &event_producer,
     )));
 
-    let channel_service = Arc::new(ChannelService::new(
-        channel_repository,
-        channel_event_publisher,
-    ));
+    let channel_service = Arc::new(ChannelService::new(channel_repository));
 
     let grpc_user_client = Arc::new(
         grpc::UserServiceClient::new(&config.user_service.grpc_url)

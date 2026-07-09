@@ -12,44 +12,38 @@ use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::user::errors::UserError;
-use crate::user::ports::EventPublisher;
 use crate::user::ports::PasswordHasher;
 use crate::user::ports::UserRepository;
 use crate::user::ports::UserService;
 
 /// Domain service for user operations.
-pub struct Service<UR, EP, PH>
+pub struct Service<UR, PH>
 where
     UR: UserRepository,
-    EP: EventPublisher,
     PH: PasswordHasher,
 {
     repository: Arc<UR>,
-    event_publisher: Arc<EP>,
     password_hasher: Arc<PH>,
 }
 
-impl<UR, EP, PH> Service<UR, EP, PH>
+impl<UR, PH> Service<UR, PH>
 where
     UR: UserRepository,
-    EP: EventPublisher,
     PH: PasswordHasher,
 {
     /// Create a new user service with injected dependencies.
-    pub fn new(repository: Arc<UR>, event_publisher: Arc<EP>, password_hasher: Arc<PH>) -> Self {
+    pub fn new(repository: Arc<UR>, password_hasher: Arc<PH>) -> Self {
         Self {
             repository,
-            event_publisher,
             password_hasher,
         }
     }
 }
 
 #[async_trait]
-impl<UR, EP, PH> UserService for Service<UR, EP, PH>
+impl<UR, PH> UserService for Service<UR, PH>
 where
     UR: UserRepository,
-    EP: EventPublisher,
     PH: PasswordHasher,
 {
     async fn create_user(&self, command: CreateUserCommand) -> Result<User, UserError> {
@@ -67,18 +61,8 @@ where
             Utc::now(),
         );
 
-        let created_user = self.repository.create(user).await?;
-
-        let event = UserCreatedEvent::new(&created_user);
-        if let Err(e) = self.event_publisher.publish_user_created(&event).await {
-            tracing::error!(
-                "Failed to publish UserCreated event for user {}: {}",
-                created_user.id(),
-                e
-            );
-        }
-
-        Ok(created_user)
+        let event = UserCreatedEvent::new(&user);
+        self.repository.create(user, &event).await
     }
 
     async fn get_user(&self, id: &UserId) -> Result<User, UserError> {
@@ -146,29 +130,13 @@ where
 
         user.apply_update(command.username, command.email, new_password_hash);
 
-        let updated_user = self.repository.update(user).await?;
-
-        let event = UserUpdatedEvent::new(&updated_user);
-        if let Err(e) = self.event_publisher.publish_user_updated(&event).await {
-            tracing::error!(
-                "Failed to publish UserUpdated event for user {}: {}",
-                updated_user.id(),
-                e
-            );
-        }
-
-        Ok(updated_user)
+        let event = UserUpdatedEvent::new(&user);
+        self.repository.update(user, &event).await
     }
 
     async fn delete_user(&self, id: &UserId) -> Result<(), UserError> {
-        self.repository.delete(id).await?;
-
         let event = UserDeletedEvent::new(id);
-        if let Err(e) = self.event_publisher.publish_user_deleted(&event).await {
-            tracing::error!("Failed to publish UserDeleted event for user {}: {}", id, e);
-        }
-
-        Ok(())
+        self.repository.delete(id, &event).await
     }
 }
 
@@ -181,30 +149,18 @@ mod tests {
     use crate::domain::user::models::EmailAddress;
     use crate::domain::user::models::Password;
     use crate::domain::user::models::Username;
-    use crate::user::errors::EventPublisherError;
 
     mock! {
         pub TestUserRepository {}
 
         #[async_trait]
         impl UserRepository for TestUserRepository {
-            async fn create(&self, user: User) -> Result<User, UserError>;
+            async fn create(&self, user: User, event: &UserCreatedEvent) -> Result<User, UserError>;
             async fn find_by_id(&self, id: &UserId) -> Result<Option<User>, UserError>;
             async fn find_by_username(&self, username: &Username) -> Result<Option<User>, UserError>;
             async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError>;
-            async fn update(&self, user: User) -> Result<User, UserError>;
-            async fn delete(&self, id: &UserId) -> Result<(), UserError>;
-        }
-    }
-
-    mock! {
-        pub TestEventPublisher {}
-
-        #[async_trait]
-        impl EventPublisher for TestEventPublisher {
-            async fn publish_user_created(&self, event: &UserCreatedEvent) -> Result<(), EventPublisherError>;
-            async fn publish_user_updated(&self, event: &UserUpdatedEvent) -> Result<(), EventPublisherError>;
-            async fn publish_user_deleted(&self, event: &UserDeletedEvent) -> Result<(), EventPublisherError>;
+            async fn update(&self, user: User, event: &UserUpdatedEvent) -> Result<User, UserError>;
+            async fn delete(&self, id: &UserId, event: &UserDeletedEvent) -> Result<(), UserError>;
         }
     }
 
@@ -239,28 +195,18 @@ mod tests {
     #[tokio::test]
     async fn create_user_returns_created_user() {
         let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
 
         repository
             .expect_create()
-            .withf(|user| {
+            .withf(|user, _event| {
                 user.username().as_str() == "miles-davis"
                     && user.email().as_str() == "miles.davis@example.com"
                     && user.password_hash().starts_with("$argon2")
             })
             .times(1)
-            .returning(|user| Ok(user));
+            .returning(|user, _event| Ok(user));
 
-        event_publisher
-            .expect_publish_user_created()
-            .times(1)
-            .returning(|_| Ok(()));
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(stub_password_hasher()),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
@@ -280,21 +226,17 @@ mod tests {
     #[tokio::test]
     async fn create_user_returns_error_for_duplicate_username() {
         let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
 
-        repository.expect_create().times(1).returning(|user| {
-            Err(UserError::UsernameAlreadyExists(
-                user.username().as_str().to_string(),
-            ))
-        });
+        repository
+            .expect_create()
+            .times(1)
+            .returning(|user, _event| {
+                Err(UserError::UsernameAlreadyExists(
+                    user.username().as_str().to_string(),
+                ))
+            });
 
-        event_publisher.expect_publish_user_created().times(0);
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(stub_password_hasher()),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
             username: Username::new("miles-davis").unwrap(),
@@ -313,21 +255,17 @@ mod tests {
     #[tokio::test]
     async fn create_user_returns_error_for_duplicate_email() {
         let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
 
-        repository.expect_create().times(1).returning(|user| {
-            Err(UserError::EmailAlreadyExists(
-                user.email().as_str().to_string(),
-            ))
-        });
+        repository
+            .expect_create()
+            .times(1)
+            .returning(|user, _event| {
+                Err(UserError::EmailAlreadyExists(
+                    user.email().as_str().to_string(),
+                ))
+            });
 
-        event_publisher.expect_publish_user_created().times(0);
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(stub_password_hasher()),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
             username: Username::new("john-coltrane").unwrap(),
@@ -346,7 +284,6 @@ mod tests {
     #[tokio::test]
     async fn get_user_returns_user_by_id() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         let user = miles_davis();
         let user_id = user.id();
@@ -360,7 +297,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -375,7 +311,6 @@ mod tests {
     #[tokio::test]
     async fn get_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         repository
             .expect_find_by_id()
@@ -384,7 +319,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -397,7 +331,6 @@ mod tests {
     #[tokio::test]
     async fn get_user_by_username_returns_user() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         let username = Username::new("miles-davis").unwrap();
         let user = miles_davis();
@@ -412,7 +345,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -424,7 +356,6 @@ mod tests {
     #[tokio::test]
     async fn get_user_by_username_returns_not_found() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         repository
             .expect_find_by_username()
@@ -433,7 +364,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -449,7 +379,6 @@ mod tests {
     #[tokio::test]
     async fn verify_credentials_returns_user_for_correct_password() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
         let username = Username::new("miles-davis").unwrap();
@@ -469,11 +398,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(true));
 
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(password_hasher),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(password_hasher));
 
         let result = service
             .verify_credentials(&username, "K1nd-0f-Blue_1959!")
@@ -485,7 +410,6 @@ mod tests {
     #[tokio::test]
     async fn verify_credentials_rejects_wrong_password() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
         let username = Username::new("miles-davis").unwrap();
@@ -501,11 +425,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(false));
 
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(password_hasher),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(password_hasher));
 
         let result = service
             .verify_credentials(&username, "wrong-password")
@@ -516,7 +436,6 @@ mod tests {
     #[tokio::test]
     async fn verify_credentials_rejects_unknown_username_without_calling_hasher() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
         repository
@@ -525,11 +444,7 @@ mod tests {
             .returning(|_| Ok(None));
         password_hasher.expect_verify().times(0);
 
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(password_hasher),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(password_hasher));
 
         let username = Username::new("ravi-shankar").unwrap();
         let result = service.verify_credentials(&username, "irrelevant").await;
@@ -539,7 +454,6 @@ mod tests {
     #[tokio::test]
     async fn get_users_by_ids_returns_all_matching_users() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         let user_ids: Vec<UserId> = vec![UserId::new(), UserId::new(), UserId::new()];
         let names = ["john-coltrane", "kim-gordon", "nina-simone"];
@@ -570,7 +484,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -582,7 +495,6 @@ mod tests {
     #[tokio::test]
     async fn get_users_by_ids_returns_only_found_users() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         let existing_user = User::new(
             UserId::new(),
@@ -601,7 +513,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
         let result = service
@@ -617,7 +528,6 @@ mod tests {
     #[tokio::test]
     async fn update_user_returns_updated_user() {
         let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
 
         let existing = User::new(
             UserId::new(),
@@ -637,24 +547,15 @@ mod tests {
 
         repository
             .expect_update()
-            .withf(|user| {
+            .withf(|user, _event| {
                 user.username().as_str() == "bird-parker"
                     && user.email().as_str() == "bird.parker@example.com"
                     && user.password_hash().starts_with("$argon2")
             })
             .times(1)
-            .returning(|user| Ok(user));
+            .returning(|user, _event| Ok(user));
 
-        event_publisher
-            .expect_publish_user_updated()
-            .times(1)
-            .returning(|_| Ok(()));
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(stub_password_hasher()),
-        );
+        let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = UpdateUserCommand {
             username: Some(Username::new("bird-parker").unwrap()),
@@ -673,7 +574,6 @@ mod tests {
     #[tokio::test]
     async fn update_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         repository
             .expect_find_by_id()
@@ -682,7 +582,6 @@ mod tests {
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -700,24 +599,17 @@ mod tests {
     #[tokio::test]
     async fn delete_user_succeeds_for_existing_user() {
         let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
 
         let user_id = UserId::new();
 
         repository
             .expect_delete()
-            .withf(move |id| *id == user_id)
+            .withf(move |id, _event| *id == user_id)
             .times(1)
-            .returning(|_| Ok(()));
-
-        event_publisher
-            .expect_publish_user_deleted()
-            .times(1)
-            .returning(|_| Ok(()));
+            .returning(|_, _event| Ok(()));
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
@@ -728,139 +620,21 @@ mod tests {
     #[tokio::test]
     async fn delete_user_returns_not_found_for_missing_id() {
         let mut repository = MockTestUserRepository::new();
-        let event_publisher = MockTestEventPublisher::new();
 
         let user_id = UserId::new();
 
         repository
             .expect_delete()
             .times(1)
-            .returning(move |_| Err(UserError::NotFound(user_id)));
+            .returning(move |_, _event| Err(UserError::NotFound(user_id)));
 
         let service = Service::new(
             Arc::new(repository),
-            Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
 
         let result = service.delete_user(&user_id).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), UserError::NotFound(_)));
-    }
-
-    #[tokio::test]
-    async fn create_user_still_returns_ok_when_event_publish_fails() {
-        let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
-
-        repository
-            .expect_create()
-            .times(1)
-            .returning(|user| Ok(user));
-
-        event_publisher
-            .expect_publish_user_created()
-            .times(1)
-            .returning(|_| {
-                Err(EventPublisherError::PublishFailed(
-                    "kafka unavailable".to_string(),
-                ))
-            });
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(stub_password_hasher()),
-        );
-
-        let command = CreateUserCommand {
-            username: Username::new("bill-evans").unwrap(),
-            email: EmailAddress::new("bill.evans@example.com").unwrap(),
-            password: Password::new("W@ltz-F0r-Debb1y_1961!"),
-        };
-
-        let result = service.create_user(command).await;
-        assert!(
-            result.is_ok(),
-            "create_user must succeed even when event publish fails"
-        );
-    }
-
-    #[tokio::test]
-    async fn update_user_still_returns_ok_when_event_publish_fails() {
-        let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
-
-        let existing = miles_davis();
-        let user_id = existing.id();
-
-        let returned = existing.clone();
-        repository
-            .expect_find_by_id()
-            .times(1)
-            .returning(move |_| Ok(Some(returned.clone())));
-
-        repository
-            .expect_update()
-            .times(1)
-            .returning(|user| Ok(user));
-
-        event_publisher
-            .expect_publish_user_updated()
-            .times(1)
-            .returning(|_| {
-                Err(EventPublisherError::PublishFailed(
-                    "kafka unavailable".to_string(),
-                ))
-            });
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(MockTestPasswordHasher::new()),
-        );
-
-        let command = UpdateUserCommand {
-            username: Some(Username::new("miles-dewey-davis").unwrap()),
-            email: None,
-            password: None,
-        };
-
-        let result = service.update_user(&user_id, command).await;
-        assert!(
-            result.is_ok(),
-            "update_user must succeed even when event publish fails"
-        );
-    }
-
-    #[tokio::test]
-    async fn delete_user_still_returns_ok_when_event_publish_fails() {
-        let mut repository = MockTestUserRepository::new();
-        let mut event_publisher = MockTestEventPublisher::new();
-
-        let user_id = UserId::new();
-
-        repository.expect_delete().times(1).returning(|_| Ok(()));
-
-        event_publisher
-            .expect_publish_user_deleted()
-            .times(1)
-            .returning(|_| {
-                Err(EventPublisherError::PublishFailed(
-                    "kafka unavailable".to_string(),
-                ))
-            });
-
-        let service = Service::new(
-            Arc::new(repository),
-            Arc::new(event_publisher),
-            Arc::new(MockTestPasswordHasher::new()),
-        );
-
-        let result = service.delete_user(&user_id).await;
-        assert!(
-            result.is_ok(),
-            "delete_user must succeed even when event publish fails"
-        );
     }
 }

@@ -1,5 +1,6 @@
 mod common;
 
+use chat_service::domain::channel::events::ChannelCreatedEvent;
 use chat_service::domain::channel::models::Channel;
 use chat_service::domain::channel::ports::ChannelRepository as _;
 use chat_service::domain::user::models::UserId;
@@ -13,13 +14,16 @@ use common::TestDb;
 #[tokio::test]
 async fn direct_channel_participants_round_trip_through_channel_members() {
     let test_database = TestDb::new().await;
-    let repository = ChannelRepository::new(test_database.pg_pool.clone());
+    let repository =
+        ChannelRepository::new(test_database.pg_pool.clone(), "chat.messages".to_string());
 
     let creator = UserId::new();
     let other = UserId::new();
 
+    let channel = Channel::new_direct(creator, other).unwrap();
+    let event = ChannelCreatedEvent::new(&channel);
     let created = repository
-        .create(Channel::new_direct(creator, other).unwrap())
+        .create(channel, &event)
         .await
         .expect("Failed to create direct channel");
 
@@ -48,19 +52,22 @@ async fn direct_channel_participants_round_trip_through_channel_members() {
 #[tokio::test]
 async fn duplicate_direct_channel_pair_is_rejected_at_the_repository() {
     let test_database = TestDb::new().await;
-    let repository = ChannelRepository::new(test_database.pg_pool.clone());
+    let repository =
+        ChannelRepository::new(test_database.pg_pool.clone(), "chat.messages".to_string());
 
     let creator = UserId::new();
     let other = UserId::new();
 
+    let first_channel = Channel::new_direct(creator, other).unwrap();
+    let first_event = ChannelCreatedEvent::new(&first_channel);
     repository
-        .create(Channel::new_direct(creator, other).unwrap())
+        .create(first_channel, &first_event)
         .await
         .expect("first direct channel should be created");
 
-    let result = repository
-        .create(Channel::new_direct(other, creator).unwrap())
-        .await;
+    let second_channel = Channel::new_direct(other, creator).unwrap();
+    let second_event = ChannelCreatedEvent::new(&second_channel);
+    let result = repository.create(second_channel, &second_event).await;
 
     assert!(
         matches!(

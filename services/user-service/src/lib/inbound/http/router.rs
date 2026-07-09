@@ -16,12 +16,11 @@ use super::handlers::get_user::get_user;
 use super::handlers::update_user::update_user;
 use crate::domain::user::service::Service as UserService;
 use crate::outbound::argon2::PasswordHasher;
-use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub user_service: Arc<UserService<UserRepository, EventProducer, PasswordHasher>>,
+    pub user_service: Arc<UserService<UserRepository, PasswordHasher>>,
     pub authenticator: Arc<Authenticator>,
     pub jwt_expiration_hours: i64,
 }
@@ -30,7 +29,7 @@ pub struct AppState {
 /// Returns an error if any entry in `allowed_origins` is not a valid HTTP
 /// header value.
 pub fn create_router(
-    user_service: Arc<UserService<UserRepository, EventProducer, PasswordHasher>>,
+    user_service: Arc<UserService<UserRepository, PasswordHasher>>,
     authenticator: Arc<Authenticator>,
     jwt_expiration_hours: i64,
     allowed_origins: &[String],

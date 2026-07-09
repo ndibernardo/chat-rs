@@ -23,3 +23,8 @@ topic = "user-events-test"
 
 [shutdown]
 readiness_delay_seconds = 1
+
+[outbox]
+poll_interval_ms = 500
+batch_size = 100
+retention_days = 7

@@ -41,3 +41,8 @@ send_queue_capacity = 256
 [shutdown]
 readiness_delay_seconds = 5
 drain_grace_seconds = 30
+
+[outbox]
+poll_interval_ms = 500
+batch_size = 100
+retention_days = 7

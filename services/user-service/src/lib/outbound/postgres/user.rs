@@ -1,15 +1,26 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
+use uuid::Uuid;
 
+use super::outbox;
+use super::outbox::OutboxEvent;
+use crate::domain::user::events::UserCreatedEvent;
+use crate::domain::user::events::UserDeletedEvent;
+use crate::domain::user::events::UserUpdatedEvent;
 use crate::domain::user::models::EmailAddress;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports;
+use crate::outbound::kafka::envelope::SCHEMA_USER_V1;
+use crate::outbound::kafka::messages::UserEventMessage;
 use crate::user::errors::UserError;
 
 pub struct UserRepository {
     pool: PgPool,
+    /// Topic stamped on every outbox row this repository enqueues, so the
+    /// row records where the relay will actually publish it.
+    outbox_topic: String,
 }
 
 /// Row shape shared by every query that selects a full `users` row.
@@ -36,14 +47,50 @@ impl TryFrom<UserRow> for User {
 }
 
 impl UserRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, outbox_topic: String) -> Self {
+        Self { pool, outbox_topic }
+    }
+
+    /// Serializes `event` as the tagged `UserEventMessage` wire shape and
+    /// enqueues it in the outbox within `tx`, aggregated under `user_id`.
+    async fn enqueue_outbox<E>(
+        &self,
+        tx: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        event: E,
+    ) -> Result<(), UserError>
+    where
+        E: Into<UserEventMessage>,
+    {
+        let message: UserEventMessage = event.into();
+        let payload = serde_json::to_value(&message).map_err(|e| {
+            UserError::DatabaseError(format!("Failed to serialize outbox event: {e}"))
+        })?;
+
+        outbox::enqueue(
+            tx,
+            OutboxEvent {
+                event_id: Uuid::new_v4(),
+                aggregate_id: user_id,
+                topic: self.outbox_topic.clone(),
+                schema: SCHEMA_USER_V1.to_string(),
+                payload,
+            },
+        )
+        .await
+        .map_err(|e| UserError::DatabaseError(e.to_string()))
     }
 }
 
 #[async_trait]
 impl ports::UserRepository for UserRepository {
-    async fn create(&self, user: User) -> Result<User, UserError> {
+    async fn create(&self, user: User, event: &UserCreatedEvent) -> Result<User, UserError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
+
         sqlx::query!(
             r#"
             INSERT INTO users (id, username, email, password_hash, created_at)
@@ -55,7 +102,7 @@ impl ports::UserRepository for UserRepository {
             user.password_hash(),
             user.created_at()
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| {
             if let Some(db_err) = e.as_database_error() {
@@ -72,6 +119,13 @@ impl ports::UserRepository for UserRepository {
             }
             UserError::DatabaseError(e.to_string())
         })?;
+
+        self.enqueue_outbox(&mut tx, user.id().value(), event.clone())
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         Ok(user)
     }
@@ -129,7 +183,13 @@ impl ports::UserRepository for UserRepository {
         rows.into_iter().map(User::try_from).collect()
     }
 
-    async fn update(&self, user: User) -> Result<User, UserError> {
+    async fn update(&self, user: User, event: &UserUpdatedEvent) -> Result<User, UserError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
+
         let result = sqlx::query!(
             r#"
             UPDATE users
@@ -141,7 +201,7 @@ impl ports::UserRepository for UserRepository {
             user.email().as_str(),
             user.password_hash()
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| {
             if let Some(db_err) = e.as_database_error() {
@@ -163,10 +223,23 @@ impl ports::UserRepository for UserRepository {
             return Err(UserError::NotFound(user.id()));
         }
 
+        self.enqueue_outbox(&mut tx, user.id().value(), event.clone())
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
+
         Ok(user)
     }
 
-    async fn delete(&self, id: &UserId) -> Result<(), UserError> {
+    async fn delete(&self, id: &UserId, event: &UserDeletedEvent) -> Result<(), UserError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
+
         let result = sqlx::query!(
             r#"
             DELETE FROM users
@@ -174,13 +247,20 @@ impl ports::UserRepository for UserRepository {
             "#,
             id.value(),
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(UserError::NotFound(*id));
         }
+
+        self.enqueue_outbox(&mut tx, id.value(), event.clone())
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| UserError::DatabaseError(e.to_string()))?;
 
         Ok(())
     }

@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
@@ -9,14 +8,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::config::Config;
-use crate::domain::user::events::UserCreatedEvent;
-use crate::domain::user::events::UserDeletedEvent;
-use crate::domain::user::events::UserUpdatedEvent;
 use crate::outbound::kafka::envelope::Envelope;
-use crate::outbound::kafka::envelope::SCHEMA_USER_V1;
-use crate::outbound::kafka::messages::UserEventMessage;
-use crate::user::errors::EventPublisherError;
-use crate::user::ports::EventPublisher;
 
 #[derive(Debug, Error)]
 pub enum ProducerError {
@@ -25,15 +17,6 @@ pub enum ProducerError {
 
     #[error("Failed to serialize message: {0}")]
     SerializationError(String),
-}
-
-impl From<ProducerError> for EventPublisherError {
-    fn from(err: ProducerError) -> Self {
-        match err {
-            ProducerError::SerializationError(msg) => EventPublisherError::SerializationFailed(msg),
-            ProducerError::SendError(msg) => EventPublisherError::PublishFailed(msg),
-        }
-    }
 }
 
 pub struct EventProducer {
@@ -83,38 +66,51 @@ impl EventProducer {
         })
     }
 
-    /// Publish a domain event to Kafka with at-least-once delivery semantics
+    /// Publish an already-serialized payload to Kafka, wrapped in an
+    /// envelope tagged `schema`, keyed by `key` for partition ordering.
     ///
-    /// The event will be partitioned by user_id to ensure ordering for the same user.
-    /// Kafka producer handles retries automatically based on configuration.
-    /// Wrapped in an envelope tagged `user.v1` so consumers can reject event
-    /// families they don't understand before attempting to deserialize the
-    /// payload.
-    async fn publish<T: Serialize>(&self, user_id: &str, event: T) -> Result<(), ProducerError> {
-        let envelope = Envelope::wrap(SCHEMA_USER_V1, event);
+    /// Used by the outbox relay, which has no compile-time event type to
+    /// hand a generic `T` — the payload already came out of Postgres as
+    /// `serde_json::Value`.
+    ///
+    /// # Errors
+    /// `SerializationError` — the envelope could not be serialized.
+    /// `SendError` — Kafka rejected the message after all retries.
+    pub async fn publish_raw(
+        &self,
+        key: &str,
+        schema: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), ProducerError> {
+        self.publish(key, schema, payload).await
+    }
+
+    /// Publishes `event` to Kafka with at-least-once delivery semantics,
+    /// keyed by `key` for per-aggregate ordering. Kafka producer handles
+    /// retries automatically based on configuration.
+    async fn publish<T: Serialize>(
+        &self,
+        key: &str,
+        schema: &str,
+        event: T,
+    ) -> Result<(), ProducerError> {
+        let envelope = Envelope::wrap(schema, event);
         let payload = serde_json::to_string(&envelope)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
-        tracing::debug!(
-            "Publishing event to topic '{}' (user_id: {})",
-            self.topic,
-            user_id
-        );
+        tracing::debug!("Publishing event to topic '{}' (key: {})", self.topic, key);
 
-        let record = FutureRecord::to(&self.topic)
-            .key(user_id) // Partition by user_id for ordering
-            .payload(&payload);
+        let record = FutureRecord::to(&self.topic).key(key).payload(&payload);
 
-        // Send to Kafka - producer will handle retries automatically with at-least-once semantics
         let result = self
             .producer
             .send(record, Timeout::After(self.timeout))
             .await
             .map(|_| {
                 tracing::debug!(
-                    "Event published successfully to topic '{}' for user {}",
+                    "Event published successfully to topic '{}' for key {}",
                     self.topic,
-                    user_id
+                    key
                 );
             })
             .map_err(|(err, _)| {
@@ -128,60 +124,5 @@ impl EventProducer {
         web::metrics::record_kafka_published(result.is_ok().into());
 
         result
-    }
-}
-
-#[async_trait]
-impl EventPublisher for EventProducer {
-    async fn publish_user_created(
-        &self,
-        event: &UserCreatedEvent,
-    ) -> Result<(), EventPublisherError> {
-        // Convert domain event to serializable message
-        let message: UserEventMessage = event.clone().into();
-
-        self.publish(&event.user_id, message).await.map_err(|e| {
-            // Log error but don't propagate - eventual consistency
-            tracing::error!(
-                "Failed to publish UserCreated event for user {}: {}",
-                event.user_id,
-                e
-            );
-            e.into()
-        })
-    }
-
-    async fn publish_user_updated(
-        &self,
-        event: &UserUpdatedEvent,
-    ) -> Result<(), EventPublisherError> {
-        // Convert domain event to serializable message
-        let message: UserEventMessage = event.clone().into();
-
-        self.publish(&event.user_id, message).await.map_err(|e| {
-            tracing::error!(
-                "Failed to publish UserUpdated event for user {}: {}",
-                event.user_id,
-                e
-            );
-            e.into()
-        })
-    }
-
-    async fn publish_user_deleted(
-        &self,
-        event: &UserDeletedEvent,
-    ) -> Result<(), EventPublisherError> {
-        // Convert domain event to serializable message
-        let message: UserEventMessage = event.clone().into();
-
-        self.publish(&event.user_id, message).await.map_err(|e| {
-            tracing::error!(
-                "Failed to publish UserDeleted event for user {}: {}",
-                event.user_id,
-                e
-            );
-            e.into()
-        })
     }
 }

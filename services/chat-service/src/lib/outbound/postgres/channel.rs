@@ -1,19 +1,29 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use super::outbox;
+use super::outbox::OutboxEvent;
 use crate::domain::channel::errors::ChannelError;
+use crate::domain::channel::events::ChannelCreatedEvent;
 use crate::domain::channel::models::Channel;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::models::ChannelName;
 use crate::domain::channel::models::ChannelType;
 use crate::domain::channel::ports;
 use crate::domain::user::models::UserId;
+use crate::outbound::kafka::envelope::SCHEMA_CHAT_V1;
+use crate::outbound::kafka::messages::ChannelCreatedMessage;
+use crate::outbound::kafka::messages::ChatEventMessage;
 
 pub struct ChannelRepository {
     pool: PgPool,
+    /// Topic stamped on every outbox row this repository enqueues, so the
+    /// row records where the relay will actually publish it.
+    outbox_topic: String,
 }
 
 /// Row shape shared by every query that selects a full `channels` row.
@@ -27,8 +37,35 @@ struct ChannelRow {
 }
 
 impl ChannelRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, outbox_topic: String) -> Self {
+        Self { pool, outbox_topic }
+    }
+
+    /// Serializes `event` as the tagged `ChatEventMessage` wire shape and
+    /// enqueues it in the outbox within `tx`, aggregated under `channel_id`.
+    async fn enqueue_outbox(
+        &self,
+        tx: &mut sqlx::PgConnection,
+        channel_id: Uuid,
+        event: &ChannelCreatedEvent,
+    ) -> Result<(), ChannelError> {
+        let message = ChatEventMessage::ChannelCreated(ChannelCreatedMessage::from(event));
+        let payload = serde_json::to_value(&message).map_err(|e| {
+            ChannelError::DatabaseError(format!("Failed to serialize outbox event: {e}"))
+        })?;
+
+        outbox::enqueue(
+            tx,
+            OutboxEvent {
+                event_id: Uuid::new_v4(),
+                aggregate_id: channel_id,
+                topic: self.outbox_topic.clone(),
+                schema: SCHEMA_CHAT_V1.to_string(),
+                payload,
+            },
+        )
+        .await
+        .map_err(|e| ChannelError::DatabaseError(e.to_string()))
     }
 
     async fn load_members(&self, channel_id: ChannelId) -> Result<Vec<UserId>, ChannelError> {
@@ -146,7 +183,11 @@ impl ChannelRepository {
 
 #[async_trait]
 impl ports::ChannelRepository for ChannelRepository {
-    async fn create(&self, channel: Channel) -> Result<Channel, ChannelError> {
+    async fn create(
+        &self,
+        channel: Channel,
+        event: &ChannelCreatedEvent,
+    ) -> Result<Channel, ChannelError> {
         let name = channel.name().map(|n| n.as_str().to_owned());
         let description = channel.description().map(str::to_owned);
         let id = channel.id().into_uuid();
@@ -233,6 +274,8 @@ impl ports::ChannelRepository for ChannelRepository {
                 ChannelError::DatabaseError(e.to_string())
             })?;
         }
+
+        self.enqueue_outbox(&mut tx, id, event).await?;
 
         tx.commit()
             .await

@@ -9,6 +9,7 @@ use chat_service::config::DatabaseConfig;
 use chat_service::config::DlqConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
+use chat_service::config::OutboxConfig;
 use chat_service::config::ServerConfig;
 use chat_service::config::ShutdownConfig;
 use chat_service::config::UserEventsConfig;
@@ -78,6 +79,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
         },
         websocket: WebsocketConfig::default(),
         shutdown: ShutdownConfig::default(),
+        outbox: OutboxConfig::default(),
     };
 
     EventProducer::new(&config).expect("Failed to create Kafka producer")

@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
 
@@ -70,6 +72,25 @@ pub async fn graceful_shutdown(draining: Arc<AtomicBool>, readiness_delay: Durat
     tokio::time::sleep(readiness_delay).await;
 
     tracing::info!("Starting graceful shutdown");
+}
+
+/// Upper bound on how long a cancelled background task gets to actually
+/// stop, so a stuck task can't block process exit indefinitely.
+const TASK_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Cancels a background task's cooperative-shutdown token and waits for its
+/// task to finish, bounded by [`TASK_JOIN_TIMEOUT`].
+pub async fn stop_consumer(name: &'static str, token: &CancellationToken, handle: JoinHandle<()>) {
+    token.cancel();
+    if tokio::time::timeout(TASK_JOIN_TIMEOUT, handle)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            task = name,
+            "Background task did not stop within the shutdown timeout"
+        );
+    }
 }
 
 /// Strip `user:password@` credentials from a connection URL before logging it.

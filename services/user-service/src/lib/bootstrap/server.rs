@@ -16,7 +16,6 @@ use crate::inbound::grpc::UserGrpcService;
 use crate::inbound::grpc::proto::user_service_server::UserServiceServer;
 use crate::inbound::http::router::create_router;
 use crate::outbound::argon2::PasswordHasher;
-use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
 
 /// `user-service --role server`: HTTP + gRPC API. Today's single-binary
@@ -50,15 +49,13 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Authenticator::signer(&private_key_pem, &public_key_pem)
             .map_err(|e| anyhow::anyhow!("Failed to build JWT signer: {e}"))?,
     );
-    let user_repository = Arc::new(UserRepository::new(pg_pool.clone()));
-    let event_producer = Arc::new(EventProducer::new(&config)?);
+    let user_repository = Arc::new(UserRepository::new(
+        pg_pool.clone(),
+        config.kafka.topic.clone(),
+    ));
     let password_hasher = Arc::new(PasswordHasher::new());
 
-    let user_service = Arc::new(UserService::new(
-        user_repository,
-        event_producer,
-        password_hasher,
-    ));
+    let user_service = Arc::new(UserService::new(user_repository, password_hasher));
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(pg_pool.clone())),

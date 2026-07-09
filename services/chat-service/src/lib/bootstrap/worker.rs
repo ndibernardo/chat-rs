@@ -9,13 +9,16 @@ use web::health::ReadyCheck;
 use web::health::health_router;
 
 use super::common;
+use super::health_checks::ProducerReadyCheck;
 use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
 use crate::inbound::kafka::user_consumer::UserEventsConsumer;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::relay::OutboxRelay;
 
-/// `chat-worker`: background consumers only (user-replica today; persister,
-/// outbox-relay, and deleted-user cleanup join later). Serves a
-/// health-only HTTP listener — no API routes, no WebSocket route.
+/// `chat-worker`: background consumers and the outbox relay (persister and
+/// deleted-user cleanup join later). Serves a health-only HTTP listener —
+/// no API routes, no WebSocket route.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     tracing::info!(
         cassandra_nodes = ?config.cassandra.nodes,
@@ -31,15 +34,17 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     ));
 
     let user_events_consumer = UserEventsConsumer::new(&config, user_repository)?;
+    let event_producer = Arc::new(EventProducer::new(&config)?);
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(pg_pool.clone())),
         Arc::new(PgSchemaReadyCheck::new(
-            pg_pool,
+            pg_pool.clone(),
             sqlx::migrate!("./migrations"),
         )),
         Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
         Arc::new(user_events_consumer.assignment_tracker()),
+        Arc::new(ProducerReadyCheck::new(Arc::clone(&event_producer))),
     ];
 
     let consumer_cancellation = CancellationToken::new();
@@ -54,6 +59,18 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         user_events_consumer
             .start_consuming(user_consumer_token)
             .await;
+    });
+
+    let relay = OutboxRelay::new(
+        pg_pool.clone(),
+        Arc::clone(&event_producer),
+        config.outbox.clone(),
+    );
+    let relay_cancellation = CancellationToken::new();
+    let relay_token = relay_cancellation.clone();
+    tracing::info!("Starting outbox relay");
+    let relay_handle = tokio::spawn(async move {
+        relay.run(relay_token).await;
     });
 
     let health_state = HealthState::new(checks);
@@ -76,8 +93,9 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         ))
         .await?;
 
-    tracing::info!("HTTP server stopped, shutting down Kafka consumer");
+    tracing::info!("HTTP server stopped, shutting down Kafka consumer and outbox relay");
     common::stop_consumer("user_events", &consumer_cancellation, user_consumer_handle).await;
+    common::stop_consumer("outbox_relay", &relay_cancellation, relay_handle).await;
 
     Ok(())
 }
