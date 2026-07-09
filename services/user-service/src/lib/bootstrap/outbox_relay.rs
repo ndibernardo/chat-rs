@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use web::HealthState;
 use web::PgReadyCheck;
+use web::PgSchemaReadyCheck;
 use web::ReadyCheck;
 use web::health_router;
 
@@ -14,9 +15,14 @@ use crate::config::Config;
 /// is already in place.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
 
-    let checks: Vec<Arc<dyn ReadyCheck>> = vec![Arc::new(PgReadyCheck::new(pg_pool))];
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            pg_pool,
+            sqlx::migrate!("./migrations"),
+        )),
+    ];
     let application = health_router(HealthState::new(checks));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);

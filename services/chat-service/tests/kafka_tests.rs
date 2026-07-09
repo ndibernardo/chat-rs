@@ -42,6 +42,9 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
         cassandra: CassandraConfig {
             nodes: vec!["unused".to_string()],
             keyspace: "unused".to_string(),
+            replication_strategy: "SimpleStrategy".to_string(),
+            replication_factor: 1,
+            datacenter: None,
         },
         server: ServerConfig { http_port: 0 },
         user_service: UserServiceConfig {

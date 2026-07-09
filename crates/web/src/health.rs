@@ -12,6 +12,8 @@ use axum::response::Response;
 use axum::routing::get;
 use serde::Serialize;
 use sqlx::PgPool;
+use sqlx::migrate::Migrate;
+use sqlx::migrate::Migrator;
 
 /// A dependency this process needs in order to serve traffic correctly.
 ///
@@ -140,5 +142,53 @@ impl ReadyCheck for PgReadyCheck {
             .await
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+}
+
+/// Readiness check that every migration in an embedded [`Migrator`] has
+/// actually been applied — the schema-version assertion a role's boot uses
+/// in place of running migrations itself. A missing migration means "some
+/// job/operator hasn't migrated this database yet", which should surface as
+/// not-ready, not a boot-time panic or crash-loop.
+pub struct PgSchemaReadyCheck {
+    pool: PgPool,
+    migrator: Migrator,
+}
+
+impl PgSchemaReadyCheck {
+    pub fn new(pool: PgPool, migrator: Migrator) -> Self {
+        Self { pool, migrator }
+    }
+}
+
+#[async_trait]
+impl ReadyCheck for PgSchemaReadyCheck {
+    fn name(&self) -> &str {
+        "postgres_schema"
+    }
+
+    async fn check(&self) -> Result<(), String> {
+        let mut conn = self.pool.acquire().await.map_err(|e| e.to_string())?;
+        let applied = conn
+            .list_applied_migrations(&self.migrator.table_name)
+            .await
+            .map_err(|e| format!("failed to read applied migrations: {e}"))?;
+
+        let applied_versions: std::collections::HashSet<i64> =
+            applied.iter().map(|m| m.version).collect();
+
+        let missing: Vec<i64> = self
+            .migrator
+            .iter()
+            .filter(|m| !m.migration_type.is_down_migration())
+            .filter(|m| !applied_versions.contains(&m.version))
+            .map(|m| m.version)
+            .collect();
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("pending migrations not applied: {:?}", missing))
+        }
     }
 }

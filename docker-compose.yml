@@ -152,6 +152,22 @@ services:
       retries: 10
       start_period: 40s
 
+  user-service-migrate:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    container_name: chat-user-service-migrate
+    command: [ "/app/user-service", "--migrate-only" ]
+    environment:
+      - RUN_MODE=docker
+      - RUST_LOG=user_service=info
+      - SQLX_OFFLINE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - chat-network
+
   user-service:
     build:
       context: .
@@ -170,9 +186,29 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      user-service-migrate:
+        condition: service_completed_successfully
     networks:
       - chat-network
     restart: unless-stopped
+
+  chat-service-migrate:
+    build:
+      context: .
+      dockerfile: services/chat-service/Dockerfile
+    container_name: chat-chat-service-migrate
+    command: [ "/app/chat-service", "--migrate-only" ]
+    environment:
+      - RUN_MODE=docker
+      - RUST_LOG=chat_service=info
+      - SQLX_OFFLINE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+    networks:
+      - chat-network
 
   chat-service:
     build:
@@ -194,6 +230,8 @@ services:
         condition: service_healthy
       user-service:
         condition: service_started
+      chat-service-migrate:
+        condition: service_completed_successfully
     networks:
       - chat-network
     restart: unless-stopped

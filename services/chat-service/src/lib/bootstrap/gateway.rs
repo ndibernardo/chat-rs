@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use web::HealthState;
 use web::PgReadyCheck;
+use web::PgSchemaReadyCheck;
 use web::ReadyCheck;
 use web::health_router;
 
 use super::common;
 use super::health_checks::ProducerReadyCheck;
 use super::health_checks::ScyllaReadyCheck;
+use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
 use crate::domain::message::ports::MessageBroadcaster;
 use crate::inbound::http::build_router;
@@ -15,8 +17,8 @@ use crate::inbound::http::router::AppState;
 use crate::inbound::http::ws_routes;
 use crate::inbound::kafka::consumer::EventConsumer;
 
-/// `chat-ws-gateway`: WebSocket upgrades + broadcast fan-out + producer. No
-/// API routes, no user-replica consumer.
+/// `chat-ws-gateway`: WebSocket upgrades, broadcast fan-out and producer. 
+/// No API routes, no user-replica consumer.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     tracing::info!(
         cassandra_nodes = ?config.cassandra.nodes,
@@ -27,9 +29,6 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
-    common::run_scylla_migrations(&config).await?;
-
     let adapters = common::build_adapters(&config, pg_pool).await?;
 
     let message_event_consumer = EventConsumer::new(
@@ -39,9 +38,14 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            adapters.pg_pool.clone(),
+            sqlx::migrate!("./migrations"),
+        )),
         Arc::new(ScyllaReadyCheck::new(Arc::clone(
             &adapters.message_repository,
         ))),
+        Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
         Arc::new(ProducerReadyCheck::new(Arc::clone(
             &adapters.event_producer,
         ))),
