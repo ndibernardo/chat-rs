@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use futures::StreamExt;
-use rdkafka::ClientConfig;
 use rdkafka::Message;
 use rdkafka::consumer::CommitMode;
 use rdkafka::consumer::Consumer;
@@ -10,6 +9,8 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use thiserror::Error;
 
+use super::instance::base_consumer_config;
+use super::instance::resolve_instance_id;
 use crate::config::Config;
 use crate::domain::user::errors::UserError;
 use crate::domain::user::events::UserCreatedEvent;
@@ -63,8 +64,14 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
             &config.kafka.user_events.topic
         );
 
-        let consumer: StreamConsumer = ClientConfig::new()
-            .set("bootstrap.servers", &config.kafka.brokers)
+        // This is a shared group: every member competes for the same partitions.
+        // Static membership (`group.instance.id`, set by `base_consumer_config`)
+        // plus a longer session timeout let a restarted pod reclaim its
+        // partitions without the coordinator rebalancing the rest of the group
+        // out from under it during a rolling deploy.
+        let instance_id = resolve_instance_id(config);
+
+        let consumer: StreamConsumer = base_consumer_config(config, &instance_id)
             .set("group.id", &config.kafka.user_events.group_id)
             // Committed manually, only after a successful replica upsert/delete: this
             // consumer maintains a consistency-sensitive replica, so auto-commit's
@@ -72,8 +79,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
             // outcome) would let a failed or crashed handler permanently skip an event.
             .set("enable.auto.commit", "false")
             .set("auto.offset.reset", "earliest") // Process all user events from beginning
-            .set("session.timeout.ms", "30000")
-            .set("enable.partition.eof", "false")
+            .set("session.timeout.ms", "45000")
             .create()?;
 
         // Subscribe to user-events topic

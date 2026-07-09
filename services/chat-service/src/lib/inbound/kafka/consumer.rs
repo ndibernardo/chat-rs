@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use rdkafka::ClientConfig;
 use rdkafka::Message as _;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use thiserror::Error;
 
+use super::instance::base_consumer_config;
+use super::instance::resolve_instance_id;
 use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::message::models::Message;
@@ -61,8 +62,12 @@ impl EventConsumer {
         // locally-connected WebSocket clients, so the group id must be unique per
         // instance rather than shared: a shared group id would turn the fan-out
         // broadcast into a competing-consumer queue, silently dropping delivery to
-        // whichever instance loses the partition assignment.
-        let group_id = format!("{}-{}", config.kafka.group_id, uuid::Uuid::new_v4());
+        // whichever instance loses the partition assignment. Naming it from this
+        // instance's stable identity (rather than a random UUID minted fresh on
+        // every restart) keeps the broker's group list from accumulating dead
+        // entries and lets `group.instance.id` do its job on restart.
+        let instance_id = resolve_instance_id(config);
+        let group_id = format!("chat-broadcast-{}", instance_id);
 
         tracing::info!(
             "Initializing Kafka consumer with brokers: {}, group_id: {}, topic: {}",
@@ -71,14 +76,12 @@ impl EventConsumer {
             &config.kafka.messages_topic
         );
 
-        let consumer: StreamConsumer = ClientConfig::new()
-            .set("bootstrap.servers", &config.kafka.brokers)
+        let consumer: StreamConsumer = base_consumer_config(config, &instance_id)
             .set("group.id", &group_id)
             .set("enable.auto.commit", "true")
             .set("auto.commit.interval.ms", "5000")
             .set("auto.offset.reset", "latest") // Only consume new messages
             .set("session.timeout.ms", "30000")
-            .set("enable.partition.eof", "false")
             .create()?;
 
         consumer.subscribe(&[&config.kafka.messages_topic])?;
