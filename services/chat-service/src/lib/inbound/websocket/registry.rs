@@ -79,6 +79,8 @@ impl ConnectionRegistry {
             .or_insert_with(Vec::new)
             .push(connection_id);
 
+        web::metrics::record_ws_connection_opened();
+
         tracing::info!(
             "Connection added: {} (user: {}, channel: {})",
             connection_id,
@@ -103,6 +105,8 @@ impl ConnectionRegistry {
                     channel_conns.remove(&conn.channel_id);
                 }
             }
+
+            web::metrics::record_ws_connection_closed();
 
             tracing::info!(
                 "Connection removed: {} (user: {}, channel: {})",

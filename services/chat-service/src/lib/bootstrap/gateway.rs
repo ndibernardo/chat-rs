@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use web::HealthState;
-use web::PgReadyCheck;
-use web::PgSchemaReadyCheck;
-use web::ReadyCheck;
-use web::health_router;
+use web::health::HealthState;
+use web::health::PgReadyCheck;
+use web::health::PgSchemaReadyCheck;
+use web::health::ReadyCheck;
+use web::health::health_router;
 
 use super::common;
 use super::health_checks::ProducerReadyCheck;
@@ -17,7 +17,7 @@ use crate::inbound::http::router::AppState;
 use crate::inbound::http::ws_routes;
 use crate::inbound::kafka::consumer::EventConsumer;
 
-/// `chat-ws-gateway`: WebSocket upgrades, broadcast fan-out and producer. 
+/// `chat-ws-gateway`: WebSocket upgrades, broadcast fan-out and producer.
 /// No API routes, no user-replica consumer.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     tracing::info!(
@@ -27,6 +27,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         kafka_group_id = %config.kafka.group_id,
         "Configuration loaded"
     );
+    web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
     let pg_pool = common::connect_pg_pool(&config).await?;
     let adapters = common::build_adapters(&config, pg_pool).await?;

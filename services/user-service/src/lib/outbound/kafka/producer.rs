@@ -100,7 +100,8 @@ impl EventProducer {
             .payload(&payload);
 
         // Send to Kafka - producer will handle retries automatically with at-least-once semantics
-        self.producer
+        let result = self
+            .producer
             .send(record, Timeout::After(self.timeout))
             .await
             .map(|_| {
@@ -116,7 +117,11 @@ impl EventProducer {
                     err
                 );
                 ProducerError::SendError(err.to_string())
-            })
+            });
+
+        web::metrics::record_kafka_published(result.is_ok().into());
+
+        result
     }
 }
 

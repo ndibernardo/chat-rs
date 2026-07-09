@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use web::HealthState;
-use web::PgReadyCheck;
-use web::PgSchemaReadyCheck;
-use web::ReadyCheck;
-use web::health_router;
+use web::health::HealthState;
+use web::health::PgReadyCheck;
+use web::health::PgSchemaReadyCheck;
+use web::health::ReadyCheck;
+use web::health::health_router;
 
 use super::common;
 use super::health_checks::ScyllaReadyCheck;
@@ -18,6 +18,7 @@ use crate::inbound::http::router::AppState;
 /// no WebSocket route.
 pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
     log_config(&config);
+    web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
     let pg_pool = common::connect_pg_pool(&config).await?;
     let adapters = common::build_adapters(&config, pg_pool).await?;
@@ -52,6 +53,7 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
 /// consumers in one process.
 pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
     log_config(&config);
+    web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
     let pg_pool = common::connect_pg_pool(&config).await?;
     let adapters = common::build_adapters(&config, pg_pool).await?;

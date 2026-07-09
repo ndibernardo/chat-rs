@@ -18,7 +18,7 @@ pub async fn connect_pg_pool(config: &Config) -> Result<PgPool, anyhow::Error> {
 
 /// `--migrate-only`: apply pending Postgres schema changes, then return.
 /// The Kubernetes Job entrypoint; normal server boot never calls this — it
-/// only asserts the schema is already current (see `web::PgSchemaReadyCheck`).
+/// only asserts the schema is already current (see `web::health::PgSchemaReadyCheck`).
 pub async fn migrate_only(config: Config) -> Result<(), anyhow::Error> {
     let pg_pool = connect_pg_pool(&config).await?;
     sqlx::migrate!("./migrations").run(&pg_pool).await?;

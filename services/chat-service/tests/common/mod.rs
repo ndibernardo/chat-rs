@@ -92,7 +92,10 @@ impl TestApp {
                 replication_factor: 1,
                 datacenter: None,
             },
-            server: ServerConfig { http_port: port },
+            server: ServerConfig {
+                http_port: port,
+                metrics_port: 0,
+            },
             user_service: UserServiceConfig {
                 grpc_url: std::env::var("USER_SERVICE_GRPC_URL")
                     .unwrap_or_else(|_| "http://localhost:50052".to_string()),

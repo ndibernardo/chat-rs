@@ -51,7 +51,12 @@ pub fn create_router(
             web::authenticate,
         ));
 
-    let router = Router::new().merge(public_routes).merge(protected_routes);
+    let router = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        // route_layer, not layer: it must wrap already-matched routes so
+        // `track_http_metrics` sees the `MatchedPath` extension.
+        .route_layer(middleware::from_fn(web::metrics::track_http_metrics));
 
     with_request_trace(router)
         .layer(CorsLayer::permissive())

@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use web::ReadyCheck;
+use web::health::ReadyCheck;
 
 use crate::config::CassandraConfig;
 use crate::outbound::kafka::EventProducer;

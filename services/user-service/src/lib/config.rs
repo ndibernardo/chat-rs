@@ -29,6 +29,15 @@ fn default_max_connections() -> u32 {
 pub struct ServerConfig {
     pub http_port: u16,
     pub grpc_port: u16,
+    /// Port for the Prometheus exporter (`/metrics`), separate from
+    /// `http_port`/`grpc_port` — every role runs one regardless of what
+    /// other HTTP routes it serves.
+    #[serde(default = "default_metrics_port")]
+    pub metrics_port: u16,
+}
+
+fn default_metrics_port() -> u16 {
+    9090
 }
 
 #[derive(Debug, Deserialize, Clone)]

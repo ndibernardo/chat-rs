@@ -14,6 +14,7 @@ keyspace = "chat"
 
 [server]
 http_port = 3002
+metrics_port = 9090
 
 [user_service]
 grpc_url = "http://localhost:50051"

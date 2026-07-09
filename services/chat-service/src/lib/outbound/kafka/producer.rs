@@ -92,13 +92,18 @@ impl EventProducer {
 
         let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
-        self.producer
+        let result = self
+            .producer
             .send(record, Timeout::After(self.timeout))
             .await
             .map_err(|(err, _)| {
                 tracing::error!("Failed to send message to Kafka: {}", err);
                 ProducerError::SendError(err.to_string())
-            })?;
+            });
+
+        web::metrics::record_kafka_published(result.is_ok().into());
+
+        result?;
 
         tracing::debug!(
             "Event published successfully to topic '{}' for channel {}",

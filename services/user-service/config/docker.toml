@@ -8,6 +8,7 @@ max_connections = 5
 [server]
 http_port = 3001
 grpc_port = 50051
+metrics_port = 9090
 
 [jwt]
 secret = "dev-secret-key-not-for-production"

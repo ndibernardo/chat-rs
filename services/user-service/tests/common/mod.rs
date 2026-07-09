@@ -67,6 +67,7 @@ impl TestApp {
             server: ServerConfig {
                 http_port: port,
                 grpc_port: 50051,
+                metrics_port: 0,
             },
             jwt: JwtConfig {
                 secret: "test-secret-key-for-jwt-signing-at-least-32-bytes".to_string(),
