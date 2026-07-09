@@ -10,6 +10,7 @@ use chat_service::config::KafkaConfig;
 use chat_service::config::ServerConfig;
 use chat_service::config::UserEventsConfig;
 use chat_service::config::UserServiceConfig;
+use chat_service::config::WebsocketConfig;
 use chat_service::domain::channel::events::ChannelCreatedEvent;
 use chat_service::domain::channel::models::Channel;
 use chat_service::domain::channel::models::ChannelId;
@@ -36,6 +37,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
     let config = Config {
         database: DatabaseConfig {
             url: "postgresql://unused".to_string(),
+            max_connections: 5,
         },
         cassandra: CassandraConfig {
             nodes: vec!["unused".to_string()],
@@ -60,6 +62,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
                 group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),
             },
         },
+        websocket: WebsocketConfig::default(),
     };
 
     EventProducer::new(&config).expect("Failed to create Kafka producer")

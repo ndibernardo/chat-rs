@@ -22,6 +22,7 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
         message_service: adapters.message_service,
         connection_registry: adapters.connection_registry,
         authenticator: adapters.authenticator.clone(),
+        ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
     let routes = health_routes().merge(api_routes(adapters.authenticator));
@@ -74,6 +75,7 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         adapters.message_service,
         adapters.connection_registry,
         adapters.authenticator,
+        config.websocket.send_queue_capacity,
     );
 
     serve_http(&config, application).await?;

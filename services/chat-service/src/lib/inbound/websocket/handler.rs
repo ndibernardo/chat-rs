@@ -134,8 +134,10 @@ where
     // Split the socket into sender and receiver
     let (mut sender, mut receiver) = socket.split();
 
-    // Create a channel for outgoing messages
-    let (tx, mut rx) = mpsc::unbounded_channel::<WebSocketMessage>();
+    // Create a bounded channel for outgoing messages: a client that isn't
+    // draining fast enough gets disconnected (see registry::broadcast_to_channel)
+    // instead of letting this queue grow without limit.
+    let (tx, mut rx) = mpsc::channel::<WebSocketMessage>(state.ws_send_queue_capacity);
 
     // Add connection to manager
     state
@@ -143,12 +145,13 @@ where
         .add_connection(connection_id, user_id, channel_id, tx.clone())
         .await;
 
-    // Send connection confirmation using type-safe message
+    // Send connection confirmation using type-safe message. Best-effort: a
+    // full queue at this point means the connection is already unhealthy.
     let connected_msg = ServerMessage::Connected {
         channel_id: WsChannelId::from(channel_id),
     };
     if let Ok(json) = serde_json::to_string(&connected_msg) {
-        let _ = tx.send(WebSocketMessage::Text(json.into()));
+        let _ = tx.try_send(WebSocketMessage::Text(json.into()));
     }
 
     // Task to send messages to the WebSocket
@@ -174,7 +177,7 @@ where
                     message: e.to_string(),
                 };
                 if let Ok(json) = serde_json::to_string(&error_msg) {
-                    let _ = tx_clone.send(WebSocketMessage::Text(json.into()));
+                    let _ = tx_clone.try_send(WebSocketMessage::Text(json.into()));
                 }
             }
         }
@@ -205,7 +208,7 @@ async fn process_client_message<MS: MessageService>(
     msg: WebSocketMessage,
     membership: Membership,
     message_service: &MS,
-    tx: &tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
+    tx: &tokio::sync::mpsc::Sender<WebSocketMessage>,
 ) -> Result<(), String> {
     match msg {
         WebSocketMessage::Text(text) => {
@@ -238,11 +241,15 @@ async fn process_client_message<MS: MessageService>(
                     Ok(())
                 }
                 ClientMessage::Ping => {
-                    // Respond with pong
+                    // Respond with pong. Best-effort: a full queue here means
+                    // the connection is already falling behind on delivery,
+                    // which broadcast_to_channel's disconnect-on-full policy
+                    // will resolve on the next broadcast.
                     let pong_msg = ServerMessage::Pong;
-                    if let Ok(json) = serde_json::to_string(&pong_msg) {
-                        tx.send(WebSocketMessage::Text(json.into()))
-                            .map_err(|_| "Failed to send pong response".to_string())?;
+                    if let Ok(json) = serde_json::to_string(&pong_msg)
+                        && tx.try_send(WebSocketMessage::Text(json.into())).is_err()
+                    {
+                        tracing::warn!("Send queue full or closed, dropping pong response");
                     }
                     Ok(())
                 }

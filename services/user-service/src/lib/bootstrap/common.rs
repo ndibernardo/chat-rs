@@ -5,11 +5,11 @@ use crate::config::Config;
 
 pub async fn connect_pg_pool(config: &Config) -> Result<PgPool, anyhow::Error> {
     let pg_pool = PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(config.database.max_connections)
         .connect(&config.database.url)
         .await?;
     tracing::info!(
-        max_connections = 5,
+        max_connections = config.database.max_connections,
         database = "postgresql",
         "Database connection pool created"
     );
