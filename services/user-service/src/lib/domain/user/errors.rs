@@ -42,22 +42,6 @@ pub enum PasswordError {
     VerificationFailed(String),
 }
 
-/// Error for event publishing operations.
-#[derive(Debug, Clone, Error)]
-pub enum EventPublisherError {
-    #[error("Failed to serialize event: {0}")]
-    SerializationFailed(String),
-
-    #[error("Failed to publish event to broker: {0}")]
-    PublishFailed(String),
-
-    #[error("Connection to event broker failed: {0}")]
-    ConnectionFailed(String),
-
-    #[error("Event publishing timeout: {0}")]
-    Timeout(String),
-}
-
 /// Top-level error for all user-related operations.
 #[derive(Debug, Clone, Error)]
 pub enum UserError {

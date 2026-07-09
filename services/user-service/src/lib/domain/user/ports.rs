@@ -7,7 +7,6 @@ use crate::domain::user::models::CreateUserCommand;
 use crate::domain::user::models::UpdateUserCommand;
 use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
-use crate::user::errors::EventPublisherError;
 use crate::user::errors::PasswordError;
 use crate::user::errors::UserError;
 use crate::user::models::Username;
@@ -123,10 +122,12 @@ pub trait UserService: Send + Sync + 'static {
 /// Persistence operations for user aggregate.
 #[async_trait]
 pub trait UserRepository: Send + Sync + 'static {
-    /// Persist new user to storage.
+    /// Persist new user to storage and enqueue its outbox event in the same
+    /// transaction.
     ///
     /// # Arguments
     /// * `user` - User entity to create
+    /// * `event` - UserCreated event to enqueue for the outbox relay
     ///
     /// # Returns
     /// Created user entity
@@ -135,7 +136,7 @@ pub trait UserRepository: Send + Sync + 'static {
     /// * `UsernameAlreadyExists` - Username is already taken
     /// * `EmailAlreadyExists` - Email is already registered
     /// * `DatabaseError` - Database operation failed
-    async fn create(&self, user: User) -> Result<User, UserError>;
+    async fn create(&self, user: User, event: &UserCreatedEvent) -> Result<User, UserError>;
 
     /// Retrieve user by identifier.
     ///
@@ -173,10 +174,12 @@ pub trait UserRepository: Send + Sync + 'static {
     /// * `DatabaseError` - Database operation failed
     async fn find_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>, UserError>;
 
-    /// Update existing user in storage.
+    /// Update existing user in storage and enqueue its outbox event in the
+    /// same transaction.
     ///
     /// # Arguments
     /// * `user` - User entity with updated fields
+    /// * `event` - UserUpdated event to enqueue for the outbox relay
     ///
     /// # Returns
     /// Updated user entity
@@ -186,12 +189,14 @@ pub trait UserRepository: Send + Sync + 'static {
     /// * `UsernameAlreadyExists` - New username is already taken
     /// * `EmailAlreadyExists` - New email is already registered
     /// * `DatabaseError` - Database operation failed
-    async fn update(&self, user: User) -> Result<User, UserError>;
+    async fn update(&self, user: User, event: &UserUpdatedEvent) -> Result<User, UserError>;
 
-    /// Remove user from storage.
+    /// Remove user from storage and enqueue its outbox event in the same
+    /// transaction.
     ///
     /// # Arguments
     /// * `id` - User ID to delete
+    /// * `event` - UserDeleted event to enqueue for the outbox relay
     ///
     /// # Returns
     /// Unit on success
@@ -199,7 +204,7 @@ pub trait UserRepository: Send + Sync + 'static {
     /// # Errors
     /// * `NotFound` - User does not exist
     /// * `DatabaseError` - Database operation failed
-    async fn delete(&self, id: &UserId) -> Result<(), UserError>;
+    async fn delete(&self, id: &UserId, event: &UserDeletedEvent) -> Result<(), UserError>;
 }
 
 /// Password hashing operations for user credentials.
@@ -229,62 +234,4 @@ pub trait PasswordHasher: Send + Sync + 'static {
     /// # Errors
     /// * `VerificationFailed` - Hash format is invalid or verification failed
     async fn verify(&self, password: &str, hash: &str) -> Result<bool, PasswordError>;
-}
-
-/// Event publishing for domain events.
-#[async_trait]
-pub trait EventPublisher: Send + Sync + 'static {
-    /// Publish user creation event.
-    ///
-    /// # Arguments
-    /// * `event` - UserCreated event
-    ///
-    /// # Returns
-    /// Unit on success
-    ///
-    /// # Errors
-    /// * `SerializationFailed` - Event serialization failed
-    /// * `PublishFailed` - Failed to publish to broker
-    /// * `ConnectionFailed` - Broker connection failed
-    /// * `Timeout` - Publishing timed out
-    async fn publish_user_created(
-        &self,
-        event: &UserCreatedEvent,
-    ) -> Result<(), EventPublisherError>;
-
-    /// Publish user update event.
-    ///
-    /// # Arguments
-    /// * `event` - UserUpdated event
-    ///
-    /// # Returns
-    /// Unit on success
-    ///
-    /// # Errors
-    /// * `SerializationFailed` - Event serialization failed
-    /// * `PublishFailed` - Failed to publish to broker
-    /// * `ConnectionFailed` - Broker connection failed
-    /// * `Timeout` - Publishing timed out
-    async fn publish_user_updated(
-        &self,
-        event: &UserUpdatedEvent,
-    ) -> Result<(), EventPublisherError>;
-
-    /// Publish user deletion event.
-    ///
-    /// # Arguments
-    /// * `event` - UserDeleted event
-    ///
-    /// # Returns
-    /// Unit on success
-    ///
-    /// # Errors
-    /// * `SerializationFailed` - Event serialization failed
-    /// * `PublishFailed` - Failed to publish to broker
-    /// * `ConnectionFailed` - Broker connection failed
-    /// * `Timeout` - Publishing timed out
-    async fn publish_user_deleted(
-        &self,
-        event: &UserDeletedEvent,
-    ) -> Result<(), EventPublisherError>;
 }

@@ -83,19 +83,42 @@ impl EventProducer {
         schema: &str,
         event: T,
     ) -> Result<(), ProducerError> {
+        self.publish_keyed(&channel_id.to_string(), schema, event)
+            .await
+    }
+
+    /// Publish an already-serialized payload to Kafka, wrapped in an
+    /// envelope tagged `schema`, keyed by `key` for partition ordering.
+    ///
+    /// Used by the outbox relay, which has no compile-time event type to
+    /// hand a generic `T` — the payload already came out of Postgres as
+    /// `serde_json::Value`.
+    ///
+    /// # Errors
+    /// `SerializationError` — the envelope could not be serialized.
+    /// `SendError` — Kafka rejected the message after all retries.
+    pub async fn publish_raw(
+        &self,
+        key: &str,
+        schema: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), ProducerError> {
+        self.publish_keyed(key, schema, payload).await
+    }
+
+    async fn publish_keyed<T: Serialize>(
+        &self,
+        key: &str,
+        schema: &str,
+        event: T,
+    ) -> Result<(), ProducerError> {
         let envelope = Envelope::wrap(schema, event);
         let payload = serde_json::to_string(&envelope)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
-        let key = channel_id.to_string();
+        tracing::debug!("Publishing event to topic '{}' (key: {})", self.topic, key);
 
-        tracing::debug!(
-            "Publishing event to topic '{}' (channel: {})",
-            self.topic,
-            channel_id
-        );
-
-        let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
+        let record = FutureRecord::to(&self.topic).key(key).payload(&payload);
 
         let result = self
             .producer
@@ -111,9 +134,9 @@ impl EventProducer {
         result?;
 
         tracing::debug!(
-            "Event published successfully to topic '{}' for channel {}",
+            "Event published successfully to topic '{}' for key {}",
             self.topic,
-            channel_id
+            key
         );
         Ok(())
     }

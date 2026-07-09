@@ -14,12 +14,12 @@ use user_service::config::CorsConfig;
 use user_service::config::DatabaseConfig;
 use user_service::config::JwtConfig;
 use user_service::config::KafkaConfig;
+use user_service::config::OutboxConfig;
 use user_service::config::ServerConfig;
 use user_service::config::ShutdownConfig;
 use user_service::domain::user::service::Service as UserService;
 use user_service::inbound::http::router::create_router;
 use user_service::outbound::argon2::PasswordHasher;
-use user_service::outbound::kafka::EventProducer;
 use user_service::outbound::postgres::user::UserRepository;
 
 // The repo's dev Ed25519 keypair (not a production secret): both services'
@@ -54,14 +54,14 @@ impl TestApp {
         let port = listener.local_addr().unwrap().port();
         let address = format!("http://127.0.0.1:{}", port);
 
-        // Create repository
-        let user_repo = Arc::new(UserRepository::new(db.pool.clone()));
-
         // Get configuration from environment
         let kafka_brokers =
             std::env::var("KAFKA__BROKERS").unwrap_or_else(|_| "localhost:9093".to_string());
         let kafka_topic =
             std::env::var("KAFKA__TOPIC").unwrap_or_else(|_| "user-events-test".to_string());
+
+        // Create repository
+        let user_repo = Arc::new(UserRepository::new(db.pool.clone(), kafka_topic.clone()));
 
         let config = Config {
             database: DatabaseConfig {
@@ -89,18 +89,11 @@ impl TestApp {
                 topic: kafka_topic,
             },
             shutdown: ShutdownConfig::default(),
+            outbox: OutboxConfig::default(),
         };
 
-        let event_publisher = Arc::new(
-            EventProducer::new(&config).expect("Failed to create Kafka event producer for tests"),
-        );
-
         let password_hasher = Arc::new(PasswordHasher::new());
-        let user_service = Arc::new(UserService::new(
-            user_repo,
-            event_publisher,
-            password_hasher,
-        ));
+        let user_service = Arc::new(UserService::new(user_repo, password_hasher));
 
         // Create authenticator
         let authenticator = Arc::new(

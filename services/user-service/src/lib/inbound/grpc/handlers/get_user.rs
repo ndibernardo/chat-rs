@@ -9,11 +9,10 @@ use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserService;
 use crate::domain::user::service::Service;
 use crate::outbound::argon2::PasswordHasher;
-use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
 
 pub async fn get_user(
-    service: Arc<Service<UserRepository, EventProducer, PasswordHasher>>,
+    service: Arc<Service<UserRepository, PasswordHasher>>,
     request: GetUserRequest,
 ) -> Result<GetUserResponse, Status> {
     let user_id = UserId::from_string(&request.user_id)

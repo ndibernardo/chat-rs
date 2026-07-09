@@ -8,10 +8,6 @@ use axum::middleware::Next;
 use axum::response::Response;
 use metrics_exporter_prometheus::PrometheusBuilder;
 
-// Reserved for pattern work landing later, so nothing else claims these
-// names in the meantime: the outbox relay's `outbox_pending` /
-// `outbox_oldest_pending_seconds` gauges.
-
 /// Outcome of a fallible operation, used to label metrics instead of raw
 /// string literals at each call site (which invite typos that split a
 /// metric into two accidental series instead of one).
@@ -75,6 +71,17 @@ pub fn record_kafka_consumed(consumer: ConsumerKind, outcome: Outcome) {
 /// Records a message sent to a dead-letter topic (`kafka_dlq_total`).
 pub fn record_kafka_dlq(consumer: ConsumerKind) {
     metrics::counter!("kafka_dlq_total", "consumer" => consumer.label()).increment(1);
+}
+
+/// Records the current count of unpublished outbox rows (`outbox_pending`).
+pub fn record_outbox_pending(count: i64) {
+    metrics::gauge!("outbox_pending").set(count as f64);
+}
+
+/// Records the age in seconds of the oldest unpublished outbox row
+/// (`outbox_oldest_pending_seconds`); zero when the outbox is empty.
+pub fn record_outbox_oldest_pending_seconds(seconds: f64) {
+    metrics::gauge!("outbox_oldest_pending_seconds").set(seconds);
 }
 
 /// Records a WebSocket connection being added to a registry (`ws_connections`).

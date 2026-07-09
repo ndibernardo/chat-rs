@@ -10,6 +10,7 @@ use chat_service::config::DatabaseConfig;
 use chat_service::config::DlqConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
+use chat_service::config::OutboxConfig;
 use chat_service::config::ServerConfig;
 use chat_service::config::ShutdownConfig;
 use chat_service::config::UserEventsConfig;
@@ -69,7 +70,10 @@ impl TestApp {
         let address = format!("http://127.0.0.1:{}", port);
 
         // Create repositories
-        let channel_repo = Arc::new(postgres::ChannelRepository::new(db.pg_pool.clone()));
+        let channel_repo = Arc::new(postgres::ChannelRepository::new(
+            db.pg_pool.clone(),
+            "chat.messages".to_string(),
+        ));
 
         // Get configuration from environment
         let cassandra_nodes = std::env::var("CASSANDRA_NODES")
@@ -128,6 +132,7 @@ impl TestApp {
             },
             websocket: WebsocketConfig::default(),
             shutdown: ShutdownConfig::default(),
+            outbox: OutboxConfig::default(),
         };
 
         // Create adapters
@@ -139,16 +144,10 @@ impl TestApp {
 
         let kafka_producer =
             Arc::new(kafka::EventProducer::new(&config).expect("Failed to create Kafka producer"));
-        let channel_event_publisher = Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(
-            &kafka_producer,
-        )));
         let event_publisher = Arc::new(kafka::MessageEventPublisher::new(kafka_producer));
 
         // Create services
-        let channel_service = Arc::new(ChannelService::new(
-            channel_repo.clone(),
-            channel_event_publisher,
-        ));
+        let channel_service = Arc::new(ChannelService::new(channel_repo.clone()));
 
         let user_replica_repo = Arc::new(postgres::UserReplicaRepository::new(db.pg_pool.clone()));
         let user_service_grpc_url = std::env::var("USER_SERVICE_GRPC_URL")

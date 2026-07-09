@@ -10,15 +10,14 @@ use super::proto::GetUserResponse;
 use super::proto::user_service_server::UserService as UserServiceProto;
 use crate::domain::user::service::Service;
 use crate::outbound::argon2::PasswordHasher;
-use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
 
 pub struct UserGrpcService {
-    service: Arc<Service<UserRepository, EventProducer, PasswordHasher>>,
+    service: Arc<Service<UserRepository, PasswordHasher>>,
 }
 
 impl UserGrpcService {
-    pub fn new(service: Arc<Service<UserRepository, EventProducer, PasswordHasher>>) -> Self {
+    pub fn new(service: Arc<Service<UserRepository, PasswordHasher>>) -> Self {
         Self { service }
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
 use web::health::HealthState;
 use web::health::PgReadyCheck;
 use web::health::PgSchemaReadyCheck;
@@ -9,15 +10,28 @@ use web::health::health_router;
 
 use super::common;
 use crate::config::Config;
+use crate::outbound::kafka::EventProducer;
+use crate::outbound::relay::OutboxRelay;
 
 /// `user-service --role outbox-relay`: drains the Postgres outbox table into
-/// Kafka. The relay loop itself lands separately; until then this role
-/// serves a health-only HTTP listener so the Deployment/health-probe shape
-/// is already in place.
+/// Kafka, alongside a health-only HTTP listener.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
     let pg_pool = common::connect_pg_pool(&config).await?;
+    let event_producer = Arc::new(EventProducer::new(&config)?);
+
+    let relay = OutboxRelay::new(
+        pg_pool.clone(),
+        Arc::clone(&event_producer),
+        config.outbox.clone(),
+    );
+    let relay_cancellation = CancellationToken::new();
+    let relay_token = relay_cancellation.clone();
+    tracing::info!("Starting outbox relay");
+    let relay_handle = tokio::spawn(async move {
+        relay.run(relay_token).await;
+    });
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(pg_pool.clone())),
@@ -45,6 +59,9 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
             Duration::from_secs(config.shutdown.readiness_delay_seconds),
         ))
         .await?;
+
+    tracing::info!("HTTP server stopped, shutting down outbox relay");
+    common::stop_consumer("outbox_relay", &relay_cancellation, relay_handle).await;
 
     Ok(())
 }
