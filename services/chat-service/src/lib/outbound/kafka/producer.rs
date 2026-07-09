@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use rdkafka::config::ClientConfig;
@@ -8,7 +7,6 @@ use rdkafka::util::Timeout;
 use serde::Serialize;
 use thiserror::Error;
 
-use super::topic::TopicSharder;
 use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
 
@@ -24,12 +22,12 @@ pub enum ProducerError {
 pub struct EventProducer {
     producer: FutureProducer,
     timeout: Duration,
-    sharder: Arc<TopicSharder>,
+    topic: String,
 }
 
 impl EventProducer {
-    /// Create a new Kafka event producer with topic sharding and
-    /// at-least-once delivery semantics.
+    /// Create a new Kafka event producer with at-least-once delivery
+    /// semantics.
     ///
     /// # Arguments
     /// * `config` - Application configuration
@@ -42,9 +40,9 @@ impl EventProducer {
     /// - `message.timeout.ms` comes from `kafka.delivery_timeout_ms`.
     pub fn new(config: &Config) -> Result<Self, anyhow::Error> {
         tracing::info!(
-            "Initializing Kafka producer with brokers: {}, shards: {}",
+            "Initializing Kafka producer with brokers: {}, topic: {}",
             &config.kafka.brokers,
-            config.kafka.num_shards
+            &config.kafka.messages_topic
         );
 
         let producer: FutureProducer = ClientConfig::new()
@@ -64,43 +62,34 @@ impl EventProducer {
             .set("retry.backoff.ms", "100")
             .create()?;
 
-        let sharder = Arc::new(TopicSharder::new(config.kafka.num_shards, "chat.messages")?);
-
-        tracing::info!(
-            "Kafka producer initialized successfully with {} shards",
-            config.kafka.num_shards
-        );
+        tracing::info!("Kafka producer initialized successfully");
 
         Ok(Self {
             producer,
             timeout: Duration::from_millis(config.kafka.delivery_timeout_ms),
-            sharder,
+            topic: config.kafka.messages_topic.clone(),
         })
     }
 
-    /// Publish a domain event to Kafka with channel-based sharding
-    ///
-    /// The event will be published to a topic shard determined by the channel_id.
-    /// This ensures all messages for the same channel go to the same shard.
+    /// Publish a domain event to Kafka, keyed by `channel_id` so Kafka's own
+    /// partitioning guarantees per-channel ordering.
     pub async fn publish_event<T: Serialize>(
         &self,
         channel_id: ChannelId,
-        key: &str,
         event: &T,
     ) -> Result<(), ProducerError> {
         let payload = serde_json::to_string(event)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
-        let topic = self.sharder.get_shard_for_channel(channel_id);
+        let key = channel_id.to_string();
 
         tracing::debug!(
-            "Publishing event to topic '{}' (channel: {}, key: '{}')",
-            topic,
-            channel_id,
-            key
+            "Publishing event to topic '{}' (channel: {})",
+            self.topic,
+            channel_id
         );
 
-        let record = FutureRecord::to(&topic).key(key).payload(&payload);
+        let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
         self.producer
             .send(record, Timeout::After(self.timeout))
@@ -112,7 +101,7 @@ impl EventProducer {
 
         tracing::debug!(
             "Event published successfully to topic '{}' for channel {}",
-            topic,
+            self.topic,
             channel_id
         );
         Ok(())

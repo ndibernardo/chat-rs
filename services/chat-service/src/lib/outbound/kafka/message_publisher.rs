@@ -40,11 +40,10 @@ impl ports::MessageEventPublisher for MessageEventPublisher {
         &self,
         event: &MessageSentEvent,
     ) -> Result<(), EventPublisherError> {
-        let message = MessageSentMessage::from(event);
-        let envelope = ChatEventMessage::MessageSent(message);
+        let envelope = ChatEventMessage::MessageSent(MessageSentMessage::from(event));
 
         self.producer
-            .publish_event(event.channel_id, &event.message_id.to_string(), &envelope)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }
@@ -53,10 +52,10 @@ impl ports::MessageEventPublisher for MessageEventPublisher {
         &self,
         event: &MessageDeletedEvent,
     ) -> Result<(), EventPublisherError> {
-        let message = MessageDeletedMessage::from(event);
+        let envelope = ChatEventMessage::MessageDeleted(MessageDeletedMessage::from(event));
 
         self.producer
-            .publish_event(event.channel_id, &event.message_id.to_string(), &message)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }

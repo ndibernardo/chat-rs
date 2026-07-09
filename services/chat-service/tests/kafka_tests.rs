@@ -29,6 +29,8 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::message::Message as KafkaMessage;
 use tokio::time::timeout;
 
+const TEST_MESSAGES_TOPIC: &str = "chat.messages";
+
 /// Helper to create Kafka producer for testing
 fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
     let config = Config {
@@ -50,7 +52,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
         kafka: KafkaConfig {
             brokers: kafka_brokers.to_string(),
             group_id: format!("test-group-{}", uuid::Uuid::new_v4()),
-            num_shards: 16,
+            messages_topic: TEST_MESSAGES_TOPIC.to_string(),
             delivery_timeout_ms: 10_000,
             user_events: UserEventsConfig {
                 topic: "user-events-test".to_string(),
@@ -62,7 +64,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
     EventProducer::new(&config).expect("Failed to create Kafka producer")
 }
 
-/// Test that Kafka producer can publish events to sharded topics
+/// Test that Kafka producer can publish message events
 #[tokio::test]
 async fn test_kafka_publish_message_event() {
     let kafka_brokers =
@@ -80,16 +82,12 @@ async fn test_kafka_publish_message_event() {
     );
 
     let event = MessageSentEvent::new(&message);
-    let key = event.message_id.to_string();
 
     // Wrap in serializable message envelope
     let message_envelope = MessageSentMessage::from(&event);
     let envelope = ChatEventMessage::MessageSent(message_envelope);
 
-    // Publish the event (will be sharded based on channel_id)
-    let result = kafka_producer
-        .publish_event(channel_id, &key, &envelope)
-        .await;
+    let result = kafka_producer.publish_event(channel_id, &envelope).await;
 
     assert!(
         result.is_ok(),
@@ -98,7 +96,7 @@ async fn test_kafka_publish_message_event() {
     );
 }
 
-/// Test that Kafka producer can publish channel events to sharded topics
+/// Test that Kafka producer can publish channel events
 #[tokio::test]
 async fn test_kafka_publish_channel_event() {
     let kafka_brokers =
@@ -116,16 +114,12 @@ async fn test_kafka_publish_channel_event() {
     let channel_id = channel.id();
 
     let event = ChannelCreatedEvent::new(&channel);
-    let key = event.channel_id.to_string();
 
     // Wrap in serializable message envelope
     let message_envelope = ChannelCreatedMessage::from(&event);
     let envelope = ChatEventMessage::ChannelCreated(message_envelope);
 
-    // Publish the event (will be sharded based on channel_id)
-    let result = kafka_producer
-        .publish_event(channel_id, &key, &envelope)
-        .await;
+    let result = kafka_producer.publish_event(channel_id, &envelope).await;
 
     assert!(
         result.is_ok(),
@@ -134,7 +128,7 @@ async fn test_kafka_publish_channel_event() {
     );
 }
 
-/// Test that published events can be consumed from sharded topics
+/// Test that published events can be consumed from the messages topic
 #[tokio::test]
 async fn test_kafka_publish_and_consume() {
     let kafka_brokers =
@@ -152,35 +146,30 @@ async fn test_kafka_publish_and_consume() {
     );
 
     let event = MessageSentEvent::new(&message);
-    let key = event.message_id.to_string();
     let message_id = event.message_id;
 
     // Wrap in serializable message envelope
     let message_envelope = MessageSentMessage::from(&event);
     let envelope = ChatEventMessage::MessageSent(message_envelope);
 
-    // Publish the event (will go to a sharded topic based on channel_id)
     kafka_producer
-        .publish_event(channel_id, &key, &envelope)
+        .publish_event(channel_id, &envelope)
         .await
         .expect("Failed to publish event");
 
-    // Calculate which shard this channel_id maps to
-    use chat_service::outbound::kafka::topic::TopicSharder;
-    let sharder = TopicSharder::new(16, "chat.messages").unwrap();
-    let topic = sharder.get_shard_for_channel(channel_id);
-
-    // Create a consumer for the specific shard
     let consumer: StreamConsumer = ClientConfig::new()
         .set("bootstrap.servers", &kafka_brokers)
-        .set("group.id", "test-consumer-group")
+        .set(
+            "group.id",
+            format!("test-consumer-group-{}", uuid::Uuid::new_v4()),
+        )
         .set("auto.offset.reset", "earliest")
         .set("enable.auto.commit", "true")
         .create()
         .expect("Failed to create consumer");
 
     consumer
-        .subscribe(&[&topic])
+        .subscribe(&[TEST_MESSAGES_TOPIC])
         .expect("Failed to subscribe to topic");
 
     // Try to consume the message with timeout
@@ -197,10 +186,10 @@ async fn test_kafka_publish_and_consume() {
                     // Try to deserialize as ChatEventMessage
                     if let Ok(received_envelope) =
                         serde_json::from_str::<ChatEventMessage>(payload_str)
+                        && let ChatEventMessage::MessageSent(received_msg) = received_envelope
+                        && received_msg.message_id == message_id.to_string()
                     {
-                        if let ChatEventMessage::MessageSent(received_msg) = received_envelope {
-                            return Some(received_msg);
-                        }
+                        return Some(received_msg);
                     }
                 }
                 Err(e) => {
@@ -222,7 +211,7 @@ async fn test_kafka_publish_and_consume() {
     assert_eq!(received_msg.content, "Test consume message");
 }
 
-/// Test publishing multiple events to sharded topics
+/// Test publishing multiple events for the same channel
 #[tokio::test]
 async fn test_kafka_publish_multiple_events() {
     let kafka_brokers =
@@ -231,7 +220,6 @@ async fn test_kafka_publish_multiple_events() {
     let _test_db = TestDb::new().await;
     let kafka_producer = create_kafka_producer(&kafka_brokers);
 
-    // Use the same channel for all messages (will go to same shard)
     let channel_id = ChannelId::new();
 
     // Publish multiple events
@@ -243,15 +231,12 @@ async fn test_kafka_publish_multiple_events() {
         );
 
         let event = MessageSentEvent::new(&message);
-        let key = event.message_id.to_string();
 
         // Wrap in serializable message envelope
         let message_envelope = MessageSentMessage::from(&event);
         let envelope = ChatEventMessage::MessageSent(message_envelope);
 
-        let result = kafka_producer
-            .publish_event(channel_id, &key, &envelope)
-            .await;
+        let result = kafka_producer.publish_event(channel_id, &envelope).await;
 
         assert!(
             result.is_ok(),
@@ -280,7 +265,6 @@ async fn test_kafka_error_handling() {
     );
 
     let event = MessageSentEvent::new(&message);
-    let key = event.message_id.to_string();
 
     // Wrap in serializable message envelope
     let message_envelope = MessageSentMessage::from(&event);
@@ -289,7 +273,7 @@ async fn test_kafka_error_handling() {
     // This should fail with timeout or connection error
     let result = timeout(
         Duration::from_secs(7),
-        kafka_producer.publish_event(channel_id, &key, &envelope),
+        kafka_producer.publish_event(channel_id, &envelope),
     )
     .await;
 
@@ -298,49 +282,4 @@ async fn test_kafka_error_handling() {
         result.is_err() || result.unwrap().is_err(),
         "Expected error when publishing to invalid broker"
     );
-}
-
-/// Test that different channels map to different shards
-#[tokio::test]
-async fn test_kafka_sharding_distribution() {
-    use std::collections::HashSet;
-
-    use chat_service::outbound::kafka::topic::TopicSharder;
-
-    let sharder = TopicSharder::new(16, "chat.messages").unwrap();
-
-    // Create 100 different channels and track which shards they map to
-    let mut shards_used = HashSet::new();
-    for _ in 0..100 {
-        let channel_id = ChannelId::new();
-        let shard = sharder.get_shard_for_channel(channel_id);
-        shards_used.insert(shard);
-    }
-
-    // With 100 random channels and 16 shards, we should use most shards
-    // (statistically very unlikely to use fewer than 10 shards)
-    assert!(
-        shards_used.len() >= 10,
-        "Expected to use at least 10 shards, but only used {}",
-        shards_used.len()
-    );
-}
-
-/// Test that the same channel always maps to the same shard (consistency)
-#[tokio::test]
-async fn test_kafka_sharding_consistency() {
-    use chat_service::outbound::kafka::topic::TopicSharder;
-
-    let sharder = TopicSharder::new(16, "chat.messages").unwrap();
-
-    let channel_id = ChannelId::new();
-
-    // Get the shard multiple times
-    let shard1 = sharder.get_shard_for_channel(channel_id);
-    let shard2 = sharder.get_shard_for_channel(channel_id);
-    let shard3 = sharder.get_shard_for_channel(channel_id);
-
-    // All should be the same
-    assert_eq!(shard1, shard2);
-    assert_eq!(shard2, shard3);
 }

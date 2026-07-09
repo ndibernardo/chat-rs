@@ -51,12 +51,19 @@ pub struct UserServiceConfig {
 pub struct KafkaConfig {
     pub brokers: String,
     pub group_id: String,
-    pub num_shards: u32,
+    /// The single topic all chat messages are produced to and consumed
+    /// from, keyed by `channel_id` for per-channel ordering.
+    #[serde(default = "default_messages_topic")]
+    pub messages_topic: String,
     /// Upper bound (ms) on how long the producer buffers and retries a
     /// message before giving up (`message.timeout.ms`).
     #[serde(default = "default_delivery_timeout_ms")]
     pub delivery_timeout_ms: u64,
     pub user_events: UserEventsConfig,
+}
+
+fn default_messages_topic() -> String {
+    "chat.messages".to_string()
 }
 
 fn default_delivery_timeout_ms() -> u64 {

@@ -152,17 +152,15 @@ services:
           --replication-factor 1
         echo "Created topic: user-events-test"
 
-        # Create chat message topic shards
-        echo "Creating chat message topic shards..."
-        for i in $$(seq 0 15); do
-          kafka-topics --bootstrap-server localhost:9092 \
-            --create \
-            --if-not-exists \
-            --topic chat.messages.$$i \
-            --partitions 3 \
-            --replication-factor 1
-          echo "Created topic: chat.messages.$$i"
-        done
+        # Create chat messages topic (single topic, keyed by channel_id)
+        echo "Creating chat messages topic..."
+        kafka-topics --bootstrap-server localhost:9092 \
+          --create \
+          --if-not-exists \
+          --topic chat.messages \
+          --partitions 8 \
+          --replication-factor 1
+        echo "Created topic: chat.messages"
 
         echo "All topics created successfully!"
 

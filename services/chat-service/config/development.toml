@@ -20,7 +20,7 @@ grpc_url = "http://localhost:50051"
 [kafka]
 brokers = "localhost:9092"
 group_id = "chat-service-group"
-num_shards = 16
+messages_topic = "chat.messages"
 delivery_timeout_ms = 10000
 
 [kafka.user_events]
