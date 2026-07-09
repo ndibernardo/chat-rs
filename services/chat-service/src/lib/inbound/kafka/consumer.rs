@@ -17,7 +17,6 @@ use crate::domain::message::ports::MessageBroadcaster;
 use crate::domain::user::models::UserId;
 use crate::outbound::kafka::messages::ChatEventMessage;
 use crate::outbound::kafka::messages::MessageSentMessage;
-use crate::outbound::kafka::topic::TopicSharder;
 
 #[derive(Debug, Error)]
 enum MessageProcessingError {
@@ -37,18 +36,19 @@ enum MessageProcessingError {
     HandlingError(String),
 }
 
-/// Kafka event consumer for handling chat events with sharding support
+/// Kafka event consumer for handling chat events.
 ///
-/// This consumer subscribes to ALL topic shards but only broadcasts messages
-/// to channels that have active WebSocket connections on this instance.
-/// This allows horizontal scaling while minimizing unnecessary network traffic.
+/// This consumer subscribes to the single messages topic but only broadcasts
+/// messages to channels that have active WebSocket connections on this
+/// instance. This allows horizontal scaling while minimizing unnecessary
+/// network traffic.
 pub struct EventConsumer {
     consumer: StreamConsumer,
     broadcaster: Arc<dyn MessageBroadcaster>,
 }
 
 impl EventConsumer {
-    /// Create a new Kafka event consumer with sharding support
+    /// Create a new Kafka event consumer.
     ///
     /// # Arguments
     /// * `config` - Application configuration
@@ -65,10 +65,10 @@ impl EventConsumer {
         let group_id = format!("{}-{}", config.kafka.group_id, uuid::Uuid::new_v4());
 
         tracing::info!(
-            "Initializing Kafka consumer with brokers: {}, group_id: {}, shards: {}",
+            "Initializing Kafka consumer with brokers: {}, group_id: {}, topic: {}",
             &config.kafka.brokers,
             &group_id,
-            &config.kafka.num_shards
+            &config.kafka.messages_topic
         );
 
         let consumer: StreamConsumer = ClientConfig::new()
@@ -81,20 +81,11 @@ impl EventConsumer {
             .set("enable.partition.eof", "false")
             .create()?;
 
-        // Create sharder to get all shard topics
-        let sharder = Arc::new(TopicSharder::new(config.kafka.num_shards, "chat.messages")?);
-        let topics = sharder.get_all_shards();
-
-        // Subscribe to ALL shards
-        // Each instance subscribes to all shards but only broadcasts to channels
-        // with active connections on THIS instance
-        let topic_refs: Vec<&str> = topics.iter().map(|s| s.as_str()).collect();
-        consumer.subscribe(&topic_refs)?;
+        consumer.subscribe(&[&config.kafka.messages_topic])?;
 
         tracing::info!(
-            "Kafka consumer initialized and subscribed to {} topic shards: {:?}",
-            topics.len(),
-            topics
+            "Kafka consumer initialized and subscribed to topic: {}",
+            &config.kafka.messages_topic
         );
 
         Ok(Self {
@@ -151,6 +142,14 @@ impl EventConsumer {
         match event {
             ChatEventMessage::MessageSent(msg_event) => {
                 self.broadcast_message(msg_event).await;
+                Ok(())
+            }
+            ChatEventMessage::MessageDeleted(deleted_event) => {
+                tracing::debug!(
+                    "Message {} deleted in channel {}",
+                    deleted_event.message_id,
+                    deleted_event.channel_id
+                );
                 Ok(())
             }
             ChatEventMessage::ChannelCreated(channel_event) => {

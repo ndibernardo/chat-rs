@@ -23,6 +23,7 @@ use crate::domain::user::events::UserUpdatedEvent;
 #[serde(tag = "event_type", rename_all = "snake_case")]
 pub enum ChatEventMessage {
     MessageSent(MessageSentMessage),
+    MessageDeleted(MessageDeletedMessage),
     ChannelCreated(ChannelCreatedMessage),
     ChannelDeleted(ChannelDeletedMessage),
     UserJoinedChannel(UserJoinedChannelMessage),
@@ -33,6 +34,7 @@ impl ChatEventMessage {
     pub fn event_id(&self) -> &str {
         match self {
             ChatEventMessage::MessageSent(e) => &e.event_id,
+            ChatEventMessage::MessageDeleted(e) => &e.event_id,
             ChatEventMessage::ChannelCreated(e) => &e.event_id,
             ChatEventMessage::ChannelDeleted(e) => &e.event_id,
             ChatEventMessage::UserJoinedChannel(e) => &e.event_id,
@@ -43,6 +45,7 @@ impl ChatEventMessage {
     pub fn event_type(&self) -> &str {
         match self {
             ChatEventMessage::MessageSent(_) => "message_sent",
+            ChatEventMessage::MessageDeleted(_) => "message_deleted",
             ChatEventMessage::ChannelCreated(_) => "channel_created",
             ChatEventMessage::ChannelDeleted(_) => "channel_deleted",
             ChatEventMessage::UserJoinedChannel(_) => "user_joined_channel",

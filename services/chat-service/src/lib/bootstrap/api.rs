@@ -111,7 +111,7 @@ fn log_config(config: &Config) {
         user_service_grpc_url = %config.user_service.grpc_url,
         kafka_brokers = %config.kafka.brokers,
         kafka_group_id = %config.kafka.group_id,
-        kafka_num_shards = config.kafka.num_shards,
+        kafka_messages_topic = %config.kafka.messages_topic,
         "Configuration loaded"
     );
 }

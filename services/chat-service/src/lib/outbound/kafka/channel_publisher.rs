@@ -41,7 +41,7 @@ impl ports::ChannelEventPublisher for ChannelEventPublisher {
     ) -> Result<(), EventPublisherError> {
         let envelope = ChatEventMessage::ChannelCreated(ChannelCreatedMessage::from(event));
         self.producer
-            .publish_event(event.channel_id, &event.event_id, &envelope)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }
@@ -52,7 +52,7 @@ impl ports::ChannelEventPublisher for ChannelEventPublisher {
     ) -> Result<(), EventPublisherError> {
         let envelope = ChatEventMessage::UserJoinedChannel(UserJoinedChannelMessage::from(event));
         self.producer
-            .publish_event(event.channel_id, &event.event_id, &envelope)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }
@@ -63,7 +63,7 @@ impl ports::ChannelEventPublisher for ChannelEventPublisher {
     ) -> Result<(), EventPublisherError> {
         let envelope = ChatEventMessage::UserLeftChannel(UserLeftChannelMessage::from(event));
         self.producer
-            .publish_event(event.channel_id, &event.event_id, &envelope)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }
@@ -74,7 +74,7 @@ impl ports::ChannelEventPublisher for ChannelEventPublisher {
     ) -> Result<(), EventPublisherError> {
         let envelope = ChatEventMessage::ChannelDeleted(ChannelDeletedMessage::from(event));
         self.producer
-            .publish_event(event.channel_id, &event.event_id, &envelope)
+            .publish_event(event.channel_id, &envelope)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }

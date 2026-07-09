@@ -21,7 +21,7 @@ grpc_url = "http://user-service:50051"
 [kafka]
 brokers = "kafka:29092"
 group_id = "chat-service-group"
-num_shards = 16
+messages_topic = "chat.messages"
 delivery_timeout_ms = 10000
 
 [kafka.user_events]
