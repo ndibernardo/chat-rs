@@ -50,8 +50,7 @@ impl ports::ChannelEventPublisher for ChannelEventPublisher {
         &self,
         event: &UserJoinedChannelEvent,
     ) -> Result<(), EventPublisherError> {
-        let envelope =
-            ChatEventMessage::UserJoinedChannel(UserJoinedChannelMessage::from(event));
+        let envelope = ChatEventMessage::UserJoinedChannel(UserJoinedChannelMessage::from(event));
         self.producer
             .publish_event(event.channel_id, &event.event_id, &envelope)
             .await

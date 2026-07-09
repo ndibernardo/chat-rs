@@ -24,7 +24,10 @@ async fn get_user_returns_none_for_nonexistent_user() {
     let result = client.get_user(random_id).await;
 
     assert!(result.is_ok(), "expected Ok(None), got {:?}", result);
-    assert!(result.unwrap().is_none(), "expected None for a user that was never created");
+    assert!(
+        result.unwrap().is_none(),
+        "expected None for a user that was never created"
+    );
 }
 
 #[tokio::test]
@@ -43,7 +46,10 @@ async fn get_user_returns_resolved_user_for_existing_user() {
         .expect("Failed to create test user via HTTP");
 
     assert_eq!(create_response.status(), reqwest::StatusCode::CREATED);
-    let created: serde_json::Value = create_response.json().await.expect("Failed to parse response");
+    let created: serde_json::Value = create_response
+        .json()
+        .await
+        .expect("Failed to parse response");
     let user_id_str = created["data"]["id"]
         .as_str()
         .expect("Missing data.id in response")
@@ -58,6 +64,8 @@ async fn get_user_returns_resolved_user_for_existing_user() {
     let result = grpc_client.get_user(user_id).await;
 
     assert!(result.is_ok(), "expected Ok(Some(..)), got {:?}", result);
-    let resolved = result.unwrap().expect("expected Some(ResolvedUser) for an existing user");
+    let resolved = result
+        .unwrap()
+        .expect("expected Some(ResolvedUser) for an existing user");
     assert_eq!(resolved.id(), user_id);
 }

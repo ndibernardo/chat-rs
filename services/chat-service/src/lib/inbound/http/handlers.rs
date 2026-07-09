@@ -3,16 +3,16 @@ pub mod health;
 pub mod messages;
 
 // Re-export handlers for easy access
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
-use axum::Json;
-pub use health::health;
 pub use channels::create_channel;
 pub use channels::get_channel;
 pub use channels::list_public_channels;
 use chrono::DateTime;
 use chrono::Utc;
+pub use health::health;
 pub use messages::get_channel_messages;
 use serde::Deserialize;
 use serde::Serialize;

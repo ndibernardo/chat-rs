@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use auth::Authenticator;
 use auth::JwtHandler;
-use sqlx::postgres::PgConnectOptions;
-use sqlx::postgres::PgPoolOptions;
 use sqlx::AssertSqlSafe;
 use sqlx::Connection;
 use sqlx::Executor;
 use sqlx::PgConnection;
 use sqlx::PgPool;
+use sqlx::postgres::PgConnectOptions;
+use sqlx::postgres::PgPoolOptions;
 use user_service::config::Config;
 use user_service::config::DatabaseConfig;
 use user_service::config::JwtConfig;
@@ -78,12 +78,15 @@ impl TestApp {
         };
 
         let event_publisher = Arc::new(
-            EventProducer::new(&config)
-                .expect("Failed to create Kafka event producer for tests"),
+            EventProducer::new(&config).expect("Failed to create Kafka event producer for tests"),
         );
 
         let password_hasher = Arc::new(PasswordHasher::new());
-        let user_service = Arc::new(UserService::new(user_repo, event_publisher, password_hasher));
+        let user_service = Arc::new(UserService::new(
+            user_repo,
+            event_publisher,
+            password_hasher,
+        ));
 
         // Create authenticator
         let authenticator = Arc::new(Authenticator::new(

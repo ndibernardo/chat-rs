@@ -41,10 +41,7 @@ async fn direct_channel_participants_round_trip_through_channel_members() {
         .expect("query failed");
     assert!(creator_channels.iter().any(|c| c.id() == created.id()));
 
-    let other_channels = repository
-        .find_by_user(other)
-        .await
-        .expect("query failed");
+    let other_channels = repository.find_by_user(other).await.expect("query failed");
     assert!(other_channels.iter().any(|c| c.id() == created.id()));
 }
 

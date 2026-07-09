@@ -28,9 +28,7 @@ pub enum ProducerError {
 impl From<ProducerError> for EventPublisherError {
     fn from(err: ProducerError) -> Self {
         match err {
-            ProducerError::SerializationError(msg) => {
-                EventPublisherError::SerializationFailed(msg)
-            }
+            ProducerError::SerializationError(msg) => EventPublisherError::SerializationFailed(msg),
             ProducerError::SendError(msg) => EventPublisherError::PublishFailed(msg),
         }
     }
@@ -87,11 +85,7 @@ impl EventProducer {
     ///
     /// The event will be partitioned by user_id to ensure ordering for the same user.
     /// Kafka producer handles retries automatically based on configuration.
-    async fn publish<T: Serialize>(
-        &self,
-        user_id: &str,
-        event: &T,
-    ) -> Result<(), ProducerError> {
+    async fn publish<T: Serialize>(&self, user_id: &str, event: &T) -> Result<(), ProducerError> {
         let payload = serde_json::to_string(event)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 

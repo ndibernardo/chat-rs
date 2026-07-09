@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
 use auth::Authenticator;
+use axum::Router;
 use axum::middleware;
 use axum::routing::get;
 use axum::routing::post;
-use axum::Router;
 use tower_http::cors::CorsLayer;
 use web::with_request_trace;
 
 use super::handlers::create_channel;
-use super::handlers::health;
 use super::handlers::get_channel;
 use super::handlers::get_channel_messages;
+use super::handlers::health;
 use super::handlers::list_public_channels;
 use crate::domain::channel::ports::ChannelService;
 use crate::domain::message::ports::MessageService;
@@ -68,8 +68,7 @@ where
         authenticator,
     };
 
-    let health_route = Router::new()
-        .route("/health", get(health));
+    let health_route = Router::new().route("/health", get(health));
 
     let api_routes = Router::new()
         .route("/api/channels", post(create_channel))

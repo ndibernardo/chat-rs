@@ -214,7 +214,10 @@ mod tests {
         let channel = result.unwrap();
         assert!(matches!(channel, Channel::Private(_)));
         assert_eq!(channel.name().unwrap().as_str(), "private-team");
-        assert!(channel.members().contains(&creator_id), "creator must be a member");
+        assert!(
+            channel.members().contains(&creator_id),
+            "creator must be a member"
+        );
         assert!(channel.members().contains(&member1_id));
         assert!(channel.members().contains(&member2_id));
     }
@@ -228,7 +231,12 @@ mod tests {
 
         repo.expect_create()
             .withf(move |channel| {
-                channel.members().iter().filter(|&&m| m == creator_id).count() == 1
+                channel
+                    .members()
+                    .iter()
+                    .filter(|&&m| m == creator_id)
+                    .count()
+                    == 1
             })
             .times(1)
             .returning(|channel| Ok(channel));
@@ -254,7 +262,14 @@ mod tests {
         assert!(result.is_ok());
         let channel = result.unwrap();
         assert!(matches!(channel, Channel::Private(_)));
-        assert_eq!(channel.members().iter().filter(|&&m| m == creator_id).count(), 1);
+        assert_eq!(
+            channel
+                .members()
+                .iter()
+                .filter(|&&m| m == creator_id)
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -326,9 +341,7 @@ mod tests {
         let mut repo = MockTestChannelRepository::new();
         let publisher = MockTestChannelEventPublisher::new();
 
-        repo.expect_find_by_id()
-            .times(1)
-            .returning(|_| Ok(None));
+        repo.expect_find_by_id().times(1).returning(|_| Ok(None));
 
         let service = make_service(repo, publisher);
 

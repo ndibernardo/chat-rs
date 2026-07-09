@@ -1,7 +1,7 @@
-use axum::extract::State;
-use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
 
 use crate::domain::channel::models::ChannelName;
 use crate::domain::channel::models::CreateChannelCommand;
@@ -10,8 +10,8 @@ use crate::domain::message::ports::MessageService;
 use crate::domain::user::models::UserId;
 use crate::inbound::http::handlers::ApiError;
 use crate::inbound::http::handlers::ApiSuccess;
-use crate::inbound::http::handlers::CreateChannelRequest;
 use crate::inbound::http::handlers::ChannelResponseData;
+use crate::inbound::http::handlers::CreateChannelRequest;
 use crate::inbound::http::router::AppState;
 use web::AuthenticatedUser;
 

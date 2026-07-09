@@ -21,21 +21,39 @@ pub struct User {
 
 impl User {
     /// Create a new user read-model entry.
-    pub fn new(id: UserId, username: Username, created_at: DateTime<Utc>, updated_at: DateTime<Utc>) -> Self {
-        Self { id, username, created_at, updated_at }
+    pub fn new(
+        id: UserId,
+        username: Username,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            username,
+            created_at,
+            updated_at,
+        }
     }
 
     /// Get the user ID.
-    pub fn id(&self) -> UserId { self.id }
+    pub fn id(&self) -> UserId {
+        self.id
+    }
 
     /// Get the username.
-    pub fn username(&self) -> &Username { &self.username }
+    pub fn username(&self) -> &Username {
+        &self.username
+    }
 
     /// Get the creation timestamp.
-    pub fn created_at(&self) -> DateTime<Utc> { self.created_at }
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 
     /// Get the last update timestamp.
-    pub fn updated_at(&self) -> DateTime<Utc> { self.updated_at }
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
 }
 
 /// Identity of a resolved message sender: only the fields every lookup
@@ -56,10 +74,14 @@ impl ResolvedUser {
     }
 
     /// Get the user ID.
-    pub fn id(&self) -> UserId { self.id }
+    pub fn id(&self) -> UserId {
+        self.id
+    }
 
     /// Get the username.
-    pub fn username(&self) -> &Username { &self.username }
+    pub fn username(&self) -> &Username {
+        &self.username
+    }
 }
 
 impl From<User> for ResolvedUser {

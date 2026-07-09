@@ -166,9 +166,21 @@ async fn test_get_many_users() {
         .expect("Failed to get users");
 
     assert_eq!(users.len(), 3);
-    assert!(users.iter().any(|user| user.username().as_str() == "john_coltrane"));
-    assert!(users.iter().any(|user| user.username().as_str() == "kim_gordon"));
-    assert!(users.iter().any(|user| user.username().as_str() == "thelonious_monk"));
+    assert!(
+        users
+            .iter()
+            .any(|user| user.username().as_str() == "john_coltrane")
+    );
+    assert!(
+        users
+            .iter()
+            .any(|user| user.username().as_str() == "kim_gordon")
+    );
+    assert!(
+        users
+            .iter()
+            .any(|user| user.username().as_str() == "thelonious_monk")
+    );
 }
 
 #[tokio::test]

@@ -1,12 +1,12 @@
-use jsonwebtoken::dangerous::insecure_decode;
-use jsonwebtoken::decode;
-use jsonwebtoken::encode;
-use jsonwebtoken::errors::ErrorKind;
 use jsonwebtoken::Algorithm;
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::EncodingKey;
 use jsonwebtoken::Header;
 use jsonwebtoken::Validation;
+use jsonwebtoken::dangerous::insecure_decode;
+use jsonwebtoken::decode;
+use jsonwebtoken::encode;
+use jsonwebtoken::errors::ErrorKind;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -78,13 +78,12 @@ impl JwtHandler {
         // credential.
         let validation = Validation::new(self.algorithm);
 
-        let token_data = decode::<T>(token, &self.decoding_key, &validation).map_err(|e| {
-            match e.kind() {
+        let token_data =
+            decode::<T>(token, &self.decoding_key, &validation).map_err(|e| match e.kind() {
                 ErrorKind::ExpiredSignature => JwtError::TokenExpired,
                 ErrorKind::MissingRequiredClaim(claim) if claim == "exp" => JwtError::TokenExpired,
                 _ => JwtError::DecodingFailed(e.to_string()),
-            }
-        })?;
+            })?;
 
         Ok(token_data.claims)
     }

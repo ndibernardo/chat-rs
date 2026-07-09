@@ -1,13 +1,13 @@
 use anyhow::Error;
 use tonic::transport::Channel;
 
+use super::proto::GetUserRequest;
+use super::proto::user_service_client::UserServiceClient as ProtoUserServiceClient;
 use crate::domain::user::errors::UserError;
 use crate::domain::user::models::ResolvedUser;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::RemoteUserLookup;
-use super::proto::user_service_client::UserServiceClient as ProtoUserServiceClient;
-use super::proto::GetUserRequest;
 
 pub struct UserServiceClient {
     client: ProtoUserServiceClient<Channel>,
@@ -39,9 +39,10 @@ impl RemoteUserLookup for UserServiceClient {
             Err(status) => return Err(UserError::RemoteError(format!("gRPC error: {}", status))),
         };
 
-        let user = response.into_inner().user.ok_or_else(|| {
-            UserError::RemoteError("gRPC response missing user".to_string())
-        })?;
+        let user = response
+            .into_inner()
+            .user
+            .ok_or_else(|| UserError::RemoteError("gRPC response missing user".to_string()))?;
 
         let user_id = UserId::from_string(&user.id)?;
         let username = Username::new(user.username)?;

@@ -78,10 +78,12 @@ async fn main() -> Result<(), Error> {
         Arc::clone(&connection_registry) as Arc<dyn MessageBroadcaster>,
     )?;
     let user_events_consumer = UserEventsConsumer::new(&config, Arc::clone(&user_repository))?;
-    let channel_event_publisher =
-        Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(&event_producer)));
-    let message_event_publisher =
-        Arc::new(kafka::MessageEventPublisher::new(Arc::clone(&event_producer)));
+    let channel_event_publisher = Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(
+        &event_producer,
+    )));
+    let message_event_publisher = Arc::new(kafka::MessageEventPublisher::new(Arc::clone(
+        &event_producer,
+    )));
 
     let channel_service = Arc::new(ChannelService::new(
         channel_repository,
@@ -185,7 +187,11 @@ fn redact_credentials(url: &str) -> String {
     };
     let after_scheme = &url[scheme_end + 3..];
     match after_scheme.find('@') {
-        Some(at_pos) => format!("{}://***@{}", &url[..scheme_end], &after_scheme[at_pos + 1..]),
+        Some(at_pos) => format!(
+            "{}://***@{}",
+            &url[..scheme_end],
+            &after_scheme[at_pos + 1..]
+        ),
         None => url.to_string(),
     }
 }

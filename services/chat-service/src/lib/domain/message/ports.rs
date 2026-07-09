@@ -110,8 +110,11 @@ pub trait MessageRepository: Send + Sync + 'static {
     ///
     /// # Errors
     /// * `DatabaseError` - Database operation failed
-    async fn find_by_user(&self, user_id: UserId, limit: Limit)
-        -> Result<Vec<Message>, MessageError>;
+    async fn find_by_user(
+        &self,
+        user_id: UserId,
+        limit: Limit,
+    ) -> Result<Vec<Message>, MessageError>;
 }
 
 /// Event publishing for message domain events.

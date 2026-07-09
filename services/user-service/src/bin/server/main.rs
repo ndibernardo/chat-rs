@@ -8,11 +8,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 use user_service::config::Config;
 use user_service::domain::user::service::Service as UserService;
 use user_service::inbound::grpc::UserGrpcService;
+use user_service::inbound::grpc::proto::user_service_server::UserServiceServer;
 use user_service::inbound::http::router::create_router;
 use user_service::outbound::argon2::PasswordHasher;
 use user_service::outbound::kafka::EventProducer;
 use user_service::outbound::postgres::UserRepository;
-use user_service::inbound::grpc::proto::user_service_server::UserServiceServer;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -146,7 +146,11 @@ fn redact_credentials(url: &str) -> String {
     };
     let after_scheme = &url[scheme_end + 3..];
     match after_scheme.find('@') {
-        Some(at_pos) => format!("{}://***@{}", &url[..scheme_end], &after_scheme[at_pos + 1..]),
+        Some(at_pos) => format!(
+            "{}://***@{}",
+            &url[..scheme_end],
+            &after_scheme[at_pos + 1..]
+        ),
         None => url.to_string(),
     }
 }

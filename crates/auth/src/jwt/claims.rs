@@ -183,7 +183,10 @@ mod tests {
         assert_eq!(claims.exp, Some(1234567890));
         assert_eq!(claims.iat, Some(1234567800));
         assert_eq!(claims.iss, Some("chat-rs".to_string()));
-        assert_eq!(claims.extra.get("role").unwrap().as_str(), Some("platform-engineer"));
+        assert_eq!(
+            claims.extra.get("role").unwrap().as_str(),
+            Some("platform-engineer")
+        );
     }
 
     #[test]

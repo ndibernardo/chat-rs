@@ -71,4 +71,3 @@ pub enum ChannelError {
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
-

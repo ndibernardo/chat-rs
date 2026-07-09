@@ -56,10 +56,12 @@ async fn create_user_returns_conflict_for_duplicate_username() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert!(body["data"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("already exists"));
+    assert!(
+        body["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("already exists")
+    );
 }
 
 #[tokio::test]
@@ -90,10 +92,12 @@ async fn create_user_returns_conflict_for_duplicate_email() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert!(body["data"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("already exists"));
+    assert!(
+        body["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("already exists")
+    );
 }
 
 #[tokio::test]
@@ -114,10 +118,12 @@ async fn create_user_returns_unprocessable_for_short_username() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert!(body["data"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("minimum 3 characters"));
+    assert!(
+        body["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("minimum 3 characters")
+    );
 }
 
 #[tokio::test]
@@ -138,11 +144,13 @@ async fn create_user_returns_unprocessable_for_invalid_email() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert!(body["data"]["message"]
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("email"));
+    assert!(
+        body["data"]["message"]
+            .as_str()
+            .unwrap()
+            .to_lowercase()
+            .contains("email")
+    );
 }
 
 #[tokio::test]
@@ -538,7 +546,10 @@ async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(update_body["data"]["email"], "miles.dewey.davis@example.com");
+    assert_eq!(
+        update_body["data"]["email"],
+        "miles.dewey.davis@example.com"
+    );
 
     let invalid_response = app
         .get_authenticated(&format!("/api/users/{}", user_id), "invalid-token")

@@ -22,13 +22,13 @@ use chat_service::outbound::resolver;
 use chat_service::outbound::scylla as chat_scylla;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
-use sqlx::postgres::PgConnectOptions;
-use sqlx::postgres::PgPoolOptions;
 use sqlx::AssertSqlSafe;
 use sqlx::Connection;
 use sqlx::Executor;
 use sqlx::PgConnection;
 use sqlx::PgPool;
+use sqlx::postgres::PgConnectOptions;
+use sqlx::postgres::PgPoolOptions;
 
 /// Test application that spawns a real server
 pub struct TestApp {
@@ -112,15 +112,18 @@ impl TestApp {
                 .expect("Failed to create message repository"),
         );
 
-        let kafka_producer = Arc::new(
-            kafka::EventProducer::new(&config).expect("Failed to create Kafka producer"),
-        );
-        let channel_event_publisher =
-            Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(&kafka_producer)));
+        let kafka_producer =
+            Arc::new(kafka::EventProducer::new(&config).expect("Failed to create Kafka producer"));
+        let channel_event_publisher = Arc::new(kafka::ChannelEventPublisher::new(Arc::clone(
+            &kafka_producer,
+        )));
         let event_publisher = Arc::new(kafka::MessageEventPublisher::new(kafka_producer));
 
         // Create services
-        let channel_service = Arc::new(ChannelService::new(channel_repo.clone(), channel_event_publisher));
+        let channel_service = Arc::new(ChannelService::new(
+            channel_repo.clone(),
+            channel_event_publisher,
+        ));
 
         let user_replica_repo = Arc::new(postgres::UserReplicaRepository::new(db.pg_pool.clone()));
         let user_service_grpc_url = std::env::var("USER_SERVICE_GRPC_URL")

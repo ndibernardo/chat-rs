@@ -104,7 +104,7 @@ pub trait UserService: Send + Sync + 'static {
     /// * `EmailAlreadyExists` - New email is already registered
     /// * `DatabaseError` - Database operation failed
     async fn update_user(&self, id: &UserId, command: UpdateUserCommand)
-        -> Result<User, UserError>;
+    -> Result<User, UserError>;
 
     /// Delete existing user.
     ///

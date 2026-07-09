@@ -479,7 +479,11 @@ mod tests {
 
     #[test]
     fn channel_type_round_trips_through_as_str_and_from_str() {
-        for channel_type in [ChannelType::Public, ChannelType::Private, ChannelType::Direct] {
+        for channel_type in [
+            ChannelType::Public,
+            ChannelType::Private,
+            ChannelType::Direct,
+        ] {
             assert_eq!(
                 ChannelType::from_str(channel_type.as_str()).unwrap(),
                 channel_type

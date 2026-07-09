@@ -27,7 +27,12 @@ impl From<UserReplicaRow> for User {
     fn from(row: UserReplicaRow) -> Self {
         let username = Username::new(row.username)
             .expect("Invalid username in database - should never happen");
-        User::new(UserId::from_uuid(row.id), username, row.created_at, row.updated_at)
+        User::new(
+            UserId::from_uuid(row.id),
+            username,
+            row.created_at,
+            row.updated_at,
+        )
     }
 }
 
@@ -80,7 +85,9 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| UserError::DatabaseError(format!("Failed to delete user from replica: {}", e)))?;
+        .map_err(|e| {
+            UserError::DatabaseError(format!("Failed to delete user from replica: {}", e))
+        })?;
 
         if result.rows_affected() == 0 {
             tracing::warn!("User {} not found in replica for deletion", user_id);
@@ -122,7 +129,9 @@ impl ports::UserReplicaRepository for UserReplicaRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| UserError::DatabaseError(format!("Failed to get users from replica: {}", e)))?;
+        .map_err(|e| {
+            UserError::DatabaseError(format!("Failed to get users from replica: {}", e))
+        })?;
 
         Ok(records.into_iter().map(User::from).collect())
     }

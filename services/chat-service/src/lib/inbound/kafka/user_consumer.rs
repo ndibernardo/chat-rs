@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use futures::StreamExt;
+use rdkafka::ClientConfig;
+use rdkafka::Message;
 use rdkafka::consumer::CommitMode;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
-use rdkafka::ClientConfig;
-use rdkafka::Message;
 use thiserror::Error;
 
 use crate::config::Config;

@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use tonic::Status;
 
+use super::super::proto::GetUserRequest;
+use super::super::proto::GetUserResponse;
 use crate::domain::user::errors::UserError;
 use crate::domain::user::models::UserId;
 use crate::domain::user::ports::UserService;
@@ -9,8 +11,6 @@ use crate::domain::user::service::Service;
 use crate::outbound::argon2::PasswordHasher;
 use crate::outbound::kafka::EventProducer;
 use crate::outbound::postgres::UserRepository;
-use super::super::proto::GetUserRequest;
-use super::super::proto::GetUserResponse;
 
 pub async fn get_user(
     service: Arc<Service<UserRepository, EventProducer, PasswordHasher>>,

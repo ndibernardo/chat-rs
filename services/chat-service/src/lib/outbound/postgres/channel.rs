@@ -40,7 +40,10 @@ impl ChannelRepository {
         .await
         .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| UserId::from_uuid(r.user_id)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| UserId::from_uuid(r.user_id))
+            .collect())
     }
 
     /// Load every member of every given channel in a single query, grouped by
@@ -153,7 +156,8 @@ impl ports::ChannelRepository for ChannelRepository {
 
         // Direct participants become channel_members rows too, exactly like
         // private members: membership for every channel type lives in one place.
-        let mut member_ids: Vec<uuid::Uuid> = channel.members().iter().map(|&m| m.into_uuid()).collect();
+        let mut member_ids: Vec<uuid::Uuid> =
+            channel.members().iter().map(|&m| m.into_uuid()).collect();
         if let Some(participants) = channel.participants() {
             member_ids.extend(participants.iter().map(|&p| p.into_uuid()));
         }

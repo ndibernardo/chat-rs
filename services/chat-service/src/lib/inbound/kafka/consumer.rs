@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
+use rdkafka::ClientConfig;
+use rdkafka::Message as _;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
-use rdkafka::ClientConfig;
-use rdkafka::Message as _;
 use thiserror::Error;
 
 use crate::config::Config;
@@ -216,7 +216,8 @@ impl EventConsumer {
             }
         };
 
-        let message = Message::from_parts(message_id, channel_id, user_id, content, event.timestamp);
+        let message =
+            Message::from_parts(message_id, channel_id, user_id, content, event.timestamp);
 
         self.broadcaster.broadcast(&message).await;
     }

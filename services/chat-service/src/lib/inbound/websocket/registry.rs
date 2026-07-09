@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use axum::extract::ws::Message as WsMessage;
-use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::messages::ServerMessage;

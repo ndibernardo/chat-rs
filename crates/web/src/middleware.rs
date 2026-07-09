@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::Request;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -7,7 +8,6 @@ use axum::http::{self};
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::response::Response;
-use axum::Json;
 use serde_json::json;
 
 /// Authenticated caller's identity, attached to request extensions by [`authenticate`].

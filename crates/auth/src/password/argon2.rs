@@ -1,9 +1,9 @@
-use argon2::password_hash::rand_core::OsRng;
+use argon2::Argon2;
 use argon2::password_hash::PasswordHash;
 use argon2::password_hash::PasswordHasher as Argon2PasswordHasher;
 use argon2::password_hash::PasswordVerifier;
 use argon2::password_hash::SaltString;
-use argon2::Argon2;
+use argon2::password_hash::rand_core::OsRng;
 
 use super::errors::PasswordError;
 
@@ -86,14 +86,18 @@ mod tests {
         let hash = hasher.hash(password).expect("Failed to hash password");
 
         // Verify correct password
-        assert!(hasher
-            .verify(password, &hash)
-            .expect("Failed to verify password"));
+        assert!(
+            hasher
+                .verify(password, &hash)
+                .expect("Failed to verify password")
+        );
 
         // Verify incorrect password
-        assert!(!hasher
-            .verify("wrong_password", &hash)
-            .expect("Failed to verify password"));
+        assert!(
+            !hasher
+                .verify("wrong_password", &hash)
+                .expect("Failed to verify password")
+        );
     }
 
     #[test]

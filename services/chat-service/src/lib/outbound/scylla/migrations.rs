@@ -30,9 +30,7 @@ pub async fn run(cassandra: &CassandraConfig) -> Result<(), anyhow::Error> {
         )
         .await?;
 
-    session
-        .use_keyspace(&cassandra.keyspace, false)
-        .await?;
+    session.use_keyspace(&cassandra.keyspace, false).await?;
 
     session
         .query_unpaged(

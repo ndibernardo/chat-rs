@@ -1,7 +1,7 @@
+use axum::Extension;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Extension;
 
 use crate::domain::user::models::UserId;
 use crate::inbound::http::handlers::ApiError;

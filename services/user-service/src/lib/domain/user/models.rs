@@ -31,7 +31,13 @@ impl User {
         password_hash: String,
         created_at: DateTime<Utc>,
     ) -> Self {
-        Self { id, username, email, password_hash, created_at }
+        Self {
+            id,
+            username,
+            email,
+            password_hash,
+            created_at,
+        }
     }
 
     pub fn id(&self) -> UserId {
@@ -133,16 +139,25 @@ impl Username {
     fn with_valid_length(username: String) -> Result<String, UsernameError> {
         let length = username.len();
         if length < Self::MIN_LENGTH {
-            Err(UsernameError::TooShort { min: Self::MIN_LENGTH, actual: length })
+            Err(UsernameError::TooShort {
+                min: Self::MIN_LENGTH,
+                actual: length,
+            })
         } else if length > Self::MAX_LENGTH {
-            Err(UsernameError::TooLong { max: Self::MAX_LENGTH, actual: length })
+            Err(UsernameError::TooLong {
+                max: Self::MAX_LENGTH,
+                actual: length,
+            })
         } else {
             Ok(username)
         }
     }
 
     fn with_valid_chars(username: String) -> Result<String, UsernameError> {
-        if username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        if username
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             Ok(username)
         } else {
             Err(UsernameError::InvalidCharacters)
@@ -215,7 +230,11 @@ pub struct CreateUserCommand {
 
 impl CreateUserCommand {
     pub fn new(username: Username, email: EmailAddress, password: Password) -> Self {
-        Self { username, email, password }
+        Self {
+            username,
+            email,
+            password,
+        }
     }
 }
 

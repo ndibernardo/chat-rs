@@ -283,7 +283,9 @@ mod tests {
         let mut event_publisher = MockTestEventPublisher::new();
 
         repository.expect_create().times(1).returning(|user| {
-            Err(UserError::UsernameAlreadyExists(user.username().as_str().to_string()))
+            Err(UserError::UsernameAlreadyExists(
+                user.username().as_str().to_string(),
+            ))
         });
 
         event_publisher.expect_publish_user_created().times(0);
@@ -302,7 +304,10 @@ mod tests {
 
         let result = service.create_user(command).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), UserError::UsernameAlreadyExists(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            UserError::UsernameAlreadyExists(_)
+        ));
     }
 
     #[tokio::test]
@@ -311,7 +316,9 @@ mod tests {
         let mut event_publisher = MockTestEventPublisher::new();
 
         repository.expect_create().times(1).returning(|user| {
-            Err(UserError::EmailAlreadyExists(user.email().as_str().to_string()))
+            Err(UserError::EmailAlreadyExists(
+                user.email().as_str().to_string(),
+            ))
         });
 
         event_publisher.expect_publish_user_created().times(0);
@@ -330,7 +337,10 @@ mod tests {
 
         let result = service.create_user(command).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), UserError::EmailAlreadyExists(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            UserError::EmailAlreadyExists(_)
+        ));
     }
 
     #[tokio::test]
@@ -367,7 +377,10 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository.expect_find_by_id().times(1).returning(|_| Ok(None));
+        repository
+            .expect_find_by_id()
+            .times(1)
+            .returning(|_| Ok(None));
 
         let service = Service::new(
             Arc::new(repository),
@@ -413,7 +426,10 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository.expect_find_by_username().times(1).returning(|_| Ok(None));
+        repository
+            .expect_find_by_username()
+            .times(1)
+            .returning(|_| Ok(None));
 
         let service = Service::new(
             Arc::new(repository),
@@ -424,7 +440,10 @@ mod tests {
         let username = Username::new("ravi-shankar").unwrap();
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), UserError::NotFoundByUsername(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            UserError::NotFoundByUsername(_)
+        ));
     }
 
     #[tokio::test]
@@ -444,7 +463,9 @@ mod tests {
 
         password_hasher
             .expect_verify()
-            .withf(|password, hash| password == "K1nd-0f-Blue_1959!" && hash == "$argon2id$test_hash")
+            .withf(|password, hash| {
+                password == "K1nd-0f-Blue_1959!" && hash == "$argon2id$test_hash"
+            })
             .times(1)
             .returning(|_, _| Ok(true));
 
@@ -454,7 +475,9 @@ mod tests {
             Arc::new(password_hasher),
         );
 
-        let result = service.verify_credentials(&username, "K1nd-0f-Blue_1959!").await;
+        let result = service
+            .verify_credentials(&username, "K1nd-0f-Blue_1959!")
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().username().as_str(), "miles-davis");
     }
@@ -473,7 +496,10 @@ mod tests {
             .times(1)
             .returning(move |_| Ok(Some(user.clone())));
 
-        password_hasher.expect_verify().times(1).returning(|_, _| Ok(false));
+        password_hasher
+            .expect_verify()
+            .times(1)
+            .returning(|_, _| Ok(false));
 
         let service = Service::new(
             Arc::new(repository),
@@ -481,7 +507,9 @@ mod tests {
             Arc::new(password_hasher),
         );
 
-        let result = service.verify_credentials(&username, "wrong-password").await;
+        let result = service
+            .verify_credentials(&username, "wrong-password")
+            .await;
         assert!(matches!(result, Err(UserError::InvalidCredentials)));
     }
 
@@ -491,7 +519,10 @@ mod tests {
         let event_publisher = MockTestEventPublisher::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
-        repository.expect_find_by_username().times(1).returning(|_| Ok(None));
+        repository
+            .expect_find_by_username()
+            .times(1)
+            .returning(|_| Ok(None));
         password_hasher.expect_verify().times(0);
 
         let service = Service::new(
@@ -573,7 +604,9 @@ mod tests {
             Arc::new(event_publisher),
             Arc::new(MockTestPasswordHasher::new()),
         );
-        let result = service.get_users_by_ids(&[existing_id, UserId::new()]).await;
+        let result = service
+            .get_users_by_ids(&[existing_id, UserId::new()])
+            .await;
 
         assert!(result.is_ok());
         let users = result.unwrap();
@@ -642,7 +675,10 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let event_publisher = MockTestEventPublisher::new();
 
-        repository.expect_find_by_id().times(1).returning(|_| Ok(None));
+        repository
+            .expect_find_by_id()
+            .times(1)
+            .returning(|_| Ok(None));
 
         let service = Service::new(
             Arc::new(repository),
@@ -725,7 +761,11 @@ mod tests {
         event_publisher
             .expect_publish_user_created()
             .times(1)
-            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+            .returning(|_| {
+                Err(EventPublisherError::PublishFailed(
+                    "kafka unavailable".to_string(),
+                ))
+            });
 
         let service = Service::new(
             Arc::new(repository),
@@ -740,7 +780,10 @@ mod tests {
         };
 
         let result = service.create_user(command).await;
-        assert!(result.is_ok(), "create_user must succeed even when event publish fails");
+        assert!(
+            result.is_ok(),
+            "create_user must succeed even when event publish fails"
+        );
     }
 
     #[tokio::test]
@@ -765,7 +808,11 @@ mod tests {
         event_publisher
             .expect_publish_user_updated()
             .times(1)
-            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+            .returning(|_| {
+                Err(EventPublisherError::PublishFailed(
+                    "kafka unavailable".to_string(),
+                ))
+            });
 
         let service = Service::new(
             Arc::new(repository),
@@ -780,7 +827,10 @@ mod tests {
         };
 
         let result = service.update_user(&user_id, command).await;
-        assert!(result.is_ok(), "update_user must succeed even when event publish fails");
+        assert!(
+            result.is_ok(),
+            "update_user must succeed even when event publish fails"
+        );
     }
 
     #[tokio::test]
@@ -790,15 +840,16 @@ mod tests {
 
         let user_id = UserId::new();
 
-        repository
-            .expect_delete()
-            .times(1)
-            .returning(|_| Ok(()));
+        repository.expect_delete().times(1).returning(|_| Ok(()));
 
         event_publisher
             .expect_publish_user_deleted()
             .times(1)
-            .returning(|_| Err(EventPublisherError::PublishFailed("kafka unavailable".to_string())));
+            .returning(|_| {
+                Err(EventPublisherError::PublishFailed(
+                    "kafka unavailable".to_string(),
+                ))
+            });
 
         let service = Service::new(
             Arc::new(repository),
@@ -807,6 +858,9 @@ mod tests {
         );
 
         let result = service.delete_user(&user_id).await;
-        assert!(result.is_ok(), "delete_user must succeed even when event publish fails");
+        assert!(
+            result.is_ok(),
+            "delete_user must succeed even when event publish fails"
+        );
     }
 }

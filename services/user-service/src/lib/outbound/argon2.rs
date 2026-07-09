@@ -45,6 +45,8 @@ impl ports::PasswordHasher for PasswordHasher {
                 .map_err(|e| PasswordError::VerificationFailed(e.to_string()))
         })
         .await
-        .map_err(|e| PasswordError::VerificationFailed(format!("verification task panicked: {e}")))?
+        .map_err(|e| {
+            PasswordError::VerificationFailed(format!("verification task panicked: {e}"))
+        })?
     }
 }

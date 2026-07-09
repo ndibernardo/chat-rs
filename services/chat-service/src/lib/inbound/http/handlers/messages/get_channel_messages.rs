@@ -1,8 +1,8 @@
+use axum::Extension;
 use axum::extract::Path;
 use axum::extract::Query;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Extension;
 use serde::Deserialize;
 
 use crate::domain::channel::models::ChannelId;

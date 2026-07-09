@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 
 use chrono::DateTime;
 use chrono::Utc;
-use uuid::timestamp::context::Context;
 use uuid::Timestamp;
 use uuid::Uuid;
+use uuid::timestamp::context::Context;
 
 use crate::domain::channel::models::ChannelId;
 use crate::domain::message::errors::MessageContentError;
@@ -56,19 +56,29 @@ impl Message {
     }
 
     /// Get the message ID.
-    pub fn id(&self) -> MessageId { self.id }
+    pub fn id(&self) -> MessageId {
+        self.id
+    }
 
     /// Get the channel this message belongs to.
-    pub fn channel_id(&self) -> ChannelId { self.channel_id }
+    pub fn channel_id(&self) -> ChannelId {
+        self.channel_id
+    }
 
     /// Get the author user ID.
-    pub fn user_id(&self) -> UserId { self.user_id }
+    pub fn user_id(&self) -> UserId {
+        self.user_id
+    }
 
     /// Get the message content.
-    pub fn content(&self) -> &MessageContent { &self.content }
+    pub fn content(&self) -> &MessageContent {
+        &self.content
+    }
 
     /// Get the message send timestamp.
-    pub fn timestamp(&self) -> DateTime<Utc> { self.timestamp }
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        self.timestamp
+    }
 }
 
 /// Message unique identifier value object.

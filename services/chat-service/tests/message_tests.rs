@@ -91,7 +91,10 @@ async fn test_get_channel_messages_returns_forbidden_for_non_member_of_private_c
     let channel_id = create_body["id"].as_str().unwrap();
 
     let response = app
-        .get_authenticated(&format!("/api/channels/{}/messages", channel_id), &outsider_token)
+        .get_authenticated(
+            &format!("/api/channels/{}/messages", channel_id),
+            &outsider_token,
+        )
         .send()
         .await
         .expect("Failed to execute request");
@@ -214,7 +217,10 @@ async fn test_get_messages_with_malformed_before_returns_bad_request() {
 
     let response = app
         .get_authenticated(
-            &format!("/api/channels/{}/messages?before=not-a-timestamp", channel_id),
+            &format!(
+                "/api/channels/{}/messages?before=not-a-timestamp",
+                channel_id
+            ),
             &token,
         )
         .send()

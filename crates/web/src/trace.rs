@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use axum::Router;
 use axum::body::Body;
 use axum::http::Request;
 use axum::http::Response;
-use axum::Router;
 use tower_http::trace::TraceLayer;
 use tracing::Span;
 
