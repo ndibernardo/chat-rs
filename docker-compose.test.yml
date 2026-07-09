@@ -1,4 +1,18 @@
 services:
+  user-service-test-migrate:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    container_name: user-service-test-migrate
+    command: [ "/app/user-service", "--migrate-only" ]
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      RUN_MODE: test
+    networks:
+      - test-network
+
   user-service-test:
     build:
       context: .
@@ -9,6 +23,8 @@ services:
         condition: service_healthy
       kafka-test:
         condition: service_started
+      user-service-test-migrate:
+        condition: service_completed_successfully
     environment:
       RUN_MODE: test
     ports:

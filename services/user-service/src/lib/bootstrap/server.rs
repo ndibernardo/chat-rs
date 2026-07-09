@@ -4,6 +4,7 @@ use auth::Authenticator;
 use tonic::transport::Server;
 use web::HealthState;
 use web::PgReadyCheck;
+use web::PgSchemaReadyCheck;
 use web::ReadyCheck;
 use web::health_router;
 
@@ -30,7 +31,6 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
 
     let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
     let user_repository = Arc::new(UserRepository::new(pg_pool.clone()));
@@ -43,7 +43,13 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         password_hasher,
     ));
 
-    let checks: Vec<Arc<dyn ReadyCheck>> = vec![Arc::new(PgReadyCheck::new(pg_pool))];
+    let checks: Vec<Arc<dyn ReadyCheck>> = vec![
+        Arc::new(PgReadyCheck::new(pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            pg_pool,
+            sqlx::migrate!("./migrations"),
+        )),
+    ];
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let http_listener = tokio::net::TcpListener::bind(&http_address).await?;

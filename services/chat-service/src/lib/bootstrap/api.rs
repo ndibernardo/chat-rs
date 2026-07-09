@@ -2,32 +2,36 @@ use std::sync::Arc;
 
 use web::HealthState;
 use web::PgReadyCheck;
+use web::PgSchemaReadyCheck;
 use web::ReadyCheck;
 use web::health_router;
 
 use super::common;
 use super::health_checks::ScyllaReadyCheck;
+use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
 use crate::inbound::http::api_routes;
 use crate::inbound::http::build_router;
 use crate::inbound::http::router::AppState;
 
-/// `chat-api`: channel CRUD + message history over HTTP. No Kafka consumers,
+/// `chat-api`: channel API and message history over HTTP. No Kafka consumers,
 /// no WebSocket route.
 pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
     log_config(&config);
 
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
-    common::run_scylla_migrations(&config).await?;
-
     let adapters = common::build_adapters(&config, pg_pool).await?;
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            adapters.pg_pool.clone(),
+            sqlx::migrate!("./migrations"),
+        )),
         Arc::new(ScyllaReadyCheck::new(Arc::clone(
             &adapters.message_repository,
         ))),
+        Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
     ];
 
     let state = AppState {
@@ -44,15 +48,12 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
     serve_http(&config, application).await
 }
 
-/// `all`: today's single-binary dev default — API + WS gateway + both
+/// `all`: today's single-binary dev default — API, WS gateway and both
 /// consumers in one process.
 pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
     log_config(&config);
 
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
-    common::run_scylla_migrations(&config).await?;
-
     let adapters = common::build_adapters(&config, pg_pool).await?;
 
     let message_event_consumer = crate::inbound::kafka::consumer::EventConsumer::new(
@@ -67,9 +68,14 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            adapters.pg_pool.clone(),
+            sqlx::migrate!("./migrations"),
+        )),
         Arc::new(ScyllaReadyCheck::new(Arc::clone(
             &adapters.message_repository,
         ))),
+        Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
         Arc::new(super::health_checks::ProducerReadyCheck::new(Arc::clone(
             &adapters.event_producer,
         ))),

@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use web::HealthState;
 use web::PgReadyCheck;
+use web::PgSchemaReadyCheck;
 use web::ReadyCheck;
 use web::health_router;
 
 use super::common;
+use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
 use crate::inbound::kafka::user_consumer::UserEventsConsumer;
 
@@ -20,8 +22,6 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     let pg_pool = common::connect_pg_pool(&config).await?;
-    common::run_pg_migrations(&pg_pool).await?;
-    common::run_scylla_migrations(&config).await?;
 
     let user_repository = Arc::new(crate::outbound::postgres::UserReplicaRepository::new(
         pg_pool.clone(),
@@ -30,7 +30,12 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let user_events_consumer = UserEventsConsumer::new(&config, user_repository)?;
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
-        Arc::new(PgReadyCheck::new(pg_pool)),
+        Arc::new(PgReadyCheck::new(pg_pool.clone())),
+        Arc::new(PgSchemaReadyCheck::new(
+            pg_pool,
+            sqlx::migrate!("./migrations"),
+        )),
+        Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
         Arc::new(user_events_consumer.assignment_tracker()),
     ];
 

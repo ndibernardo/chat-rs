@@ -61,6 +61,23 @@ fn default_send_queue_capacity() -> usize {
 pub struct CassandraConfig {
     pub nodes: Vec<String>,
     pub keyspace: String,
+    /// `"SimpleStrategy"` or `"NetworkTopologyStrategy"`.
+    #[serde(default = "default_replication_strategy")]
+    pub replication_strategy: String,
+    #[serde(default = "default_replication_factor")]
+    pub replication_factor: u32,
+    /// Required when `replication_strategy = "NetworkTopologyStrategy"`: the
+    /// datacenter name that factor applies to.
+    #[serde(default)]
+    pub datacenter: Option<String>,
+}
+
+fn default_replication_strategy() -> String {
+    "SimpleStrategy".to_string()
+}
+
+fn default_replication_factor() -> u32 {
+    1
 }
 
 /// HTTP server configuration.

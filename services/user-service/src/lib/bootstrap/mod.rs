@@ -29,11 +29,21 @@ pub struct Args {
     /// Which runtime role this process plays (see `Role`).
     #[arg(long, env = "SERVICE_ROLE", value_enum, default_value_t = Role::Server)]
     pub role: Role,
+
+    /// Apply pending Postgres schema changes, then exit — the Kubernetes
+    /// Job entrypoint. Ignores `--role`. Normal server boot never applies
+    /// schema changes itself; it only checks they're already there.
+    #[arg(long)]
+    pub migrate_only: bool,
 }
 
 /// Parse CLI/env arguments and run the selected role to completion.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let args = Args::parse();
+
+    if args.migrate_only {
+        return common::migrate_only(config).await;
+    }
 
     tracing::info!(role = ?args.role, "Selected service role");
 

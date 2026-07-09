@@ -4,6 +4,7 @@ pub mod trace;
 
 pub use health::HealthState;
 pub use health::PgReadyCheck;
+pub use health::PgSchemaReadyCheck;
 pub use health::ReadyCheck;
 pub use health::health_router;
 pub use middleware::AuthenticatedUser;

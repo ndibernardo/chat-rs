@@ -88,6 +88,9 @@ impl TestApp {
             cassandra: CassandraConfig {
                 nodes: cassandra_nodes.clone(),
                 keyspace: db.cassandra_keyspace.clone(),
+                replication_strategy: "SimpleStrategy".to_string(),
+                replication_factor: 1,
+                datacenter: None,
             },
             server: ServerConfig { http_port: port },
             user_service: UserServiceConfig {
@@ -273,6 +276,9 @@ impl TestDb {
         chat_scylla::migrations::run(&CassandraConfig {
             nodes: cassandra_nodes.clone(),
             keyspace: cassandra_keyspace.clone(),
+            replication_strategy: "SimpleStrategy".to_string(),
+            replication_factor: 1,
+            datacenter: None,
         })
         .await
         .expect("Failed to run Cassandra migrations");

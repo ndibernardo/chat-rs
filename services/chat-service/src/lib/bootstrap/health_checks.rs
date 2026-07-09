@@ -6,7 +6,9 @@ use std::time::Instant;
 use async_trait::async_trait;
 use web::ReadyCheck;
 
+use crate::config::CassandraConfig;
 use crate::outbound::kafka::EventProducer;
+use crate::outbound::scylla;
 use crate::outbound::scylla::MessageRepository;
 
 /// Readiness check for the Scylla message store: a trivial round trip
@@ -29,6 +31,32 @@ impl ReadyCheck for ScyllaReadyCheck {
 
     async fn check(&self) -> Result<(), String> {
         self.repository.ping().await.map_err(|e| e.to_string())
+    }
+}
+
+/// Readiness check that the keyspace and every expected table already
+/// exist — the schema-version assertion boot uses in place of running
+/// `scylla::migrations::run` itself.
+pub struct ScyllaSchemaReadyCheck {
+    cassandra: CassandraConfig,
+}
+
+impl ScyllaSchemaReadyCheck {
+    pub fn new(cassandra: CassandraConfig) -> Self {
+        Self { cassandra }
+    }
+}
+
+#[async_trait]
+impl ReadyCheck for ScyllaSchemaReadyCheck {
+    fn name(&self) -> &str {
+        "scylla_schema"
+    }
+
+    async fn check(&self) -> Result<(), String> {
+        scylla::migrations::check_schema(&self.cassandra)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
