@@ -13,6 +13,30 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub kafka: KafkaConfig,
     pub cors: CorsConfig,
+    #[serde(default)]
+    pub shutdown: ShutdownConfig,
+}
+
+/// Graceful-shutdown timing.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ShutdownConfig {
+    /// How long `/readyz` reports not-ready before this process actually
+    /// stops accepting connections, giving the load balancer/endpoint
+    /// controller time to notice and stop routing new traffic here.
+    #[serde(default = "default_readiness_delay_seconds")]
+    pub readiness_delay_seconds: u64,
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            readiness_delay_seconds: default_readiness_delay_seconds(),
+        }
+    }
+}
+
+fn default_readiness_delay_seconds() -> u64 {
+    5
 }
 
 /// Cross-origin resource sharing configuration.

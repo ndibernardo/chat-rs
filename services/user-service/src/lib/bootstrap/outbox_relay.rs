@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use web::health::HealthState;
 use web::health::PgReadyCheck;
@@ -25,7 +26,9 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
             sqlx::migrate!("./migrations"),
         )),
     ];
-    let application = health_router(HealthState::new(checks));
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
+    let application = health_router(health_state);
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -37,7 +40,10 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     axum::serve(listener, application)
-        .with_graceful_shutdown(common::shutdown_signal())
+        .with_graceful_shutdown(common::graceful_shutdown(
+            draining,
+            Duration::from_secs(config.shutdown.readiness_delay_seconds),
+        ))
         .await?;
 
     Ok(())

@@ -75,3 +75,6 @@ clap = { version = "4", features = ["derive", "env"] }
 # Metrics
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
+
+# Cooperative task cancellation (graceful shutdown)
+tokio-util = { version = "0.7", features = ["rt"] }

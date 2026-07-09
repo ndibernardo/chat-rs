@@ -15,6 +15,7 @@ use user_service::config::DatabaseConfig;
 use user_service::config::JwtConfig;
 use user_service::config::KafkaConfig;
 use user_service::config::ServerConfig;
+use user_service::config::ShutdownConfig;
 use user_service::domain::user::service::Service as UserService;
 use user_service::inbound::http::router::create_router;
 use user_service::outbound::argon2::PasswordHasher;
@@ -87,6 +88,7 @@ impl TestApp {
                 brokers: kafka_brokers,
                 topic: kafka_topic,
             },
+            shutdown: ShutdownConfig::default(),
         };
 
         let event_publisher = Arc::new(

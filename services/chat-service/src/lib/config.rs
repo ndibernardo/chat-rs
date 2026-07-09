@@ -20,6 +20,39 @@ pub struct Config {
     pub cors: CorsConfig,
     #[serde(default)]
     pub websocket: WebsocketConfig,
+    #[serde(default)]
+    pub shutdown: ShutdownConfig,
+}
+
+/// Graceful-shutdown timing.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ShutdownConfig {
+    /// How long `/readyz` reports not-ready before this process actually
+    /// stops accepting connections, giving the load balancer/endpoint
+    /// controller time to notice and stop routing new traffic here.
+    #[serde(default = "default_readiness_delay_seconds")]
+    pub readiness_delay_seconds: u64,
+    /// How long to wait for WebSocket clients to disconnect after being
+    /// sent a close frame, before giving up and exiting anyway.
+    #[serde(default = "default_drain_grace_seconds")]
+    pub drain_grace_seconds: u64,
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            readiness_delay_seconds: default_readiness_delay_seconds(),
+            drain_grace_seconds: default_drain_grace_seconds(),
+        }
+    }
+}
+
+fn default_readiness_delay_seconds() -> u64 {
+    5
+}
+
+fn default_drain_grace_seconds() -> u64 {
+    30
 }
 
 /// Cross-origin resource sharing configuration.

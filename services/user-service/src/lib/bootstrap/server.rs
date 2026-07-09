@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use auth::Authenticator;
 use tonic::transport::Server;
@@ -76,16 +77,24 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         "Http server listening"
     );
 
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
+    let readiness_delay = Duration::from_secs(config.shutdown.readiness_delay_seconds);
+
     let http_application = create_router(
         Arc::clone(&user_service),
         Arc::clone(&authenticator),
         config.jwt.expiration_hours,
         &config.cors.allowed_origins,
     )?
-    .merge(health_router(HealthState::new(checks)));
+    .merge(health_router(health_state));
+    let http_shutdown_draining = Arc::clone(&draining);
     let http_server = tokio::spawn(async move {
         axum::serve(http_listener, http_application)
-            .with_graceful_shutdown(common::shutdown_signal())
+            .with_graceful_shutdown(common::graceful_shutdown(
+                http_shutdown_draining,
+                readiness_delay,
+            ))
             .await
     });
 
@@ -101,7 +110,10 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let grpc_server = tokio::spawn(async move {
         Server::builder()
             .add_service(UserServiceServer::new(grpc_service))
-            .serve_with_shutdown(grpc_address, common::shutdown_signal())
+            .serve_with_shutdown(
+                grpc_address,
+                common::graceful_shutdown(draining, readiness_delay),
+            )
             .await
     });
 

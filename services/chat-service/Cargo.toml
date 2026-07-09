@@ -22,6 +22,7 @@ prost = { workspace = true }
 axum = { workspace = true }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 futures = { workspace = true }

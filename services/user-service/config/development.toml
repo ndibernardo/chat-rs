@@ -20,3 +20,6 @@ allowed_origins = ["http://localhost:5173"]
 [kafka]
 brokers = "localhost:9092"
 topic = "user-events"
+
+[shutdown]
+readiness_delay_seconds = 5
