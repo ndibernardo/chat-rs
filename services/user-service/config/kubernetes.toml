@@ -1,0 +1,28 @@
+# Kubernetes environment configuration
+#
+# No secrets, no hostnames: every environment-specific value (connection
+# strings, key paths, allowed origins) is intentionally absent below so it
+# must come from env vars. A missing required var fails `Config::load()`
+# loudly at boot instead of silently falling back to a value meant for
+# local dev.
+#
+# Required (no default in this file, must be set via env):
+#   DATABASE__URL, KAFKA__BROKERS, JWT__PRIVATE_KEY_PATH,
+#   JWT__PUBLIC_KEY_PATH, CORS__ALLOWED_ORIGINS (comma-separated)
+
+[database]
+max_connections = 5
+
+[server]
+http_port = 3001
+grpc_port = 50051
+metrics_port = 9090
+
+[jwt]
+expiration_hours = 24
+
+[kafka]
+topic = "user-events"
+
+[shutdown]
+readiness_delay_seconds = 5

@@ -212,9 +212,23 @@ impl Config {
             .add_source(File::with_name("config/default").required(false))
             // Layer on environment-specific configuration
             .add_source(File::with_name(&format!("config/{}", run_mode)).required(false))
-            // Layer on environment variables (with __ as separator)
+            // Layer on environment variables (with __ as separator).
             // Example: DATABASE__URL=postgres://... overrides database.url
-            .add_source(Environment::with_prefix("").separator("__"))
+            //
+            // No `.with_prefix(...)`: an empty prefix still requires every
+            // key to start with the prefix separator, which silently
+            // discards every env var. `try_parsing` + `list_separator` +
+            // `with_list_parse_key` are needed for `cassandra.nodes` and
+            // `cors.allowed_origins` (comma-separated) to deserialize as
+            // `Vec<String>` instead of erroring as a single `String`.
+            .add_source(
+                Environment::default()
+                    .separator("__")
+                    .try_parsing(true)
+                    .list_separator(",")
+                    .with_list_parse_key("cassandra.nodes")
+                    .with_list_parse_key("cors.allowed_origins"),
+            )
             .build()?;
 
         configuration.try_deserialize()

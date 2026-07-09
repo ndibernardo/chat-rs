@@ -1,0 +1,43 @@
+# Kubernetes environment configuration
+#
+# No secrets, no hostnames: every environment-specific value (connection
+# strings, cluster topology, key paths, allowed origins) is intentionally
+# absent below so it must come from env vars. A missing required var fails
+# `Config::load()` loudly at boot instead of silently falling back to a
+# value meant for local dev.
+#
+# Required (no default in this file, must be set via env):
+#   DATABASE__URL, CASSANDRA__NODES, CASSANDRA__DATACENTER,
+#   USER_SERVICE__GRPC_URL, KAFKA__BROKERS, JWT__PUBLIC_KEY_PATH,
+#   CORS__ALLOWED_ORIGINS (comma-separated)
+
+[database]
+max_connections = 5
+
+[cassandra]
+keyspace = "chat"
+# Multi-node production topology; CASSANDRA__DATACENTER must be set to the
+# datacenter name replication_factor applies to (see
+# outbound/scylla/migrations.rs::replication_clause).
+replication_strategy = "NetworkTopologyStrategy"
+replication_factor = 3
+
+[server]
+http_port = 3002
+metrics_port = 9090
+
+[kafka]
+group_id = "chat-service-group"
+messages_topic = "chat.messages"
+delivery_timeout_ms = 10000
+
+[kafka.user_events]
+topic = "user-events"
+group_id = "chat-service-user-events"
+
+[websocket]
+send_queue_capacity = 256
+
+[shutdown]
+readiness_delay_seconds = 5
+drain_grace_seconds = 30
