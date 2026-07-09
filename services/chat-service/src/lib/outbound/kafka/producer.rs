@@ -8,6 +8,7 @@ use rdkafka::util::Timeout;
 use serde::Serialize;
 use thiserror::Error;
 
+use super::envelope::Envelope;
 use crate::config::Config;
 use crate::domain::channel::models::ChannelId;
 
@@ -73,13 +74,17 @@ impl EventProducer {
     }
 
     /// Publish a domain event to Kafka, keyed by `channel_id` so Kafka's own
-    /// partitioning guarantees per-channel ordering.
+    /// partitioning guarantees per-channel ordering. Wrapped in an envelope
+    /// tagged with `schema` so consumers can reject event families they
+    /// don't understand before attempting to deserialize the payload.
     pub async fn publish_event<T: Serialize>(
         &self,
         channel_id: ChannelId,
-        event: &T,
+        schema: &str,
+        event: T,
     ) -> Result<(), ProducerError> {
-        let payload = serde_json::to_string(event)
+        let envelope = Envelope::wrap(schema, event);
+        let payload = serde_json::to_string(&envelope)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
         let key = channel_id.to_string();

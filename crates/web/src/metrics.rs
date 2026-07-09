@@ -10,8 +10,7 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 
 // Reserved for pattern work landing later, so nothing else claims these
 // names in the meantime: the outbox relay's `outbox_pending` /
-// `outbox_oldest_pending_seconds` gauges, and the DLQ's `kafka_dlq_total`
-// counter.
+// `outbox_oldest_pending_seconds` gauges.
 
 /// Outcome of a fallible operation, used to label metrics instead of raw
 /// string literals at each call site (which invite typos that split a
@@ -71,6 +70,11 @@ pub fn record_kafka_consumed(consumer: ConsumerKind, outcome: Outcome) {
         "outcome" => outcome.label(),
     )
     .increment(1);
+}
+
+/// Records a message sent to a dead-letter topic (`kafka_dlq_total`).
+pub fn record_kafka_dlq(consumer: ConsumerKind) {
+    metrics::counter!("kafka_dlq_total", "consumer" => consumer.label()).increment(1);
 }
 
 /// Records a WebSocket connection being added to a registry (`ws_connections`).

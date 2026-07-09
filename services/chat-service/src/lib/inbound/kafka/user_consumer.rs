@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Utc;
 use futures::StreamExt;
@@ -7,10 +8,12 @@ use rdkafka::consumer::CommitMode;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
+use rdkafka::message::BorrowedMessage;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
 use super::context::AssignmentTracker;
+use super::dlq::DeadLetterQueue;
 use super::instance::base_consumer_config;
 use super::instance::resolve_instance_id;
 use crate::config::Config;
@@ -23,24 +26,14 @@ use crate::domain::user::models::User;
 use crate::domain::user::models::UserId;
 use crate::domain::user::models::Username;
 use crate::domain::user::ports::UserReplicaRepository;
+use crate::outbound::kafka::envelope::SCHEMA_USER_V1;
+use crate::outbound::kafka::envelope::decode_envelope;
 use crate::outbound::kafka::messages::UserEventMessage;
 
 #[derive(Debug, Error)]
 enum MessageProcessingError {
     #[error("Kafka consumer error: {0}")]
     KafkaError(#[from] KafkaError),
-
-    #[error("Message has no payload")]
-    NoPayload,
-
-    #[error("Failed to decode message payload as UTF-8: {0}")]
-    Utf8Error(#[from] std::str::Utf8Error),
-
-    #[error("Failed to deserialize event: {0}")]
-    DeserializationError(#[from] serde_json::Error),
-
-    #[error("Failed to handle event: {0}")]
-    HandlingError(String),
 }
 
 /// Kafka consumer for user events from user-service
@@ -51,6 +44,8 @@ pub struct UserEventsConsumer<R: UserReplicaRepository> {
     consumer: StreamConsumer<AssignmentTracker>,
     user_replica_repository: Arc<R>,
     assignment_tracker: AssignmentTracker,
+    dlq: DeadLetterQueue,
+    max_attempts: u32,
 }
 
 impl<R: UserReplicaRepository> UserEventsConsumer<R> {
@@ -95,10 +90,14 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
             &config.kafka.user_events.topic
         );
 
+        let dlq = DeadLetterQueue::new(config, &config.kafka.user_events.topic)?;
+
         Ok(Self {
             consumer,
             user_replica_repository,
             assignment_tracker,
+            dlq,
+            max_attempts: config.kafka.dlq.max_attempts,
         })
     }
 
@@ -154,19 +153,45 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         tracing::info!("User events consumer loop ended");
     }
 
-    /// Process a single Kafka message
+    /// Process a single Kafka message.
+    ///
+    /// A message that doesn't decode as a well-formed `user.v1` envelope is
+    /// deterministic poison — retrying the same bytes would fail
+    /// identically — so it goes straight to the DLQ. A well-formed message
+    /// that fails during `handle_event` (e.g. a transient database error)
+    /// is retried with backoff up to `max_attempts` before also going to
+    /// the DLQ. Either way this always commits before returning, which is
+    /// what keeps a poison message from being redelivered forever: without
+    /// that commit, a restart would resume from before it and fail on it
+    /// again indefinitely.
     async fn process_message(
         &self,
-        result: Result<rdkafka::message::BorrowedMessage<'_>, KafkaError>,
+        result: Result<BorrowedMessage<'_>, KafkaError>,
     ) -> Result<(), MessageProcessingError> {
         let message = result?;
-        let payload = message.payload().ok_or(MessageProcessingError::NoPayload)?;
-        let json_string = std::str::from_utf8(payload)?;
-        let event_message = serde_json::from_str::<UserEventMessage>(json_string)?;
 
-        // Convert infrastructure message to domain event
-        let event = UserEvent::try_from(event_message)
-            .map_err(|e| MessageProcessingError::HandlingError(e.to_string()))?;
+        let Some(payload) = message.payload() else {
+            self.send_to_dlq(&message, &[], "Message has no payload")
+                .await;
+            return self.commit(&message);
+        };
+
+        let event_message = match decode_envelope::<UserEventMessage>(payload, SCHEMA_USER_V1) {
+            Ok(event_message) => event_message,
+            Err(decode_error) => {
+                self.send_to_dlq(&message, payload, &decode_error.to_string())
+                    .await;
+                return self.commit(&message);
+            }
+        };
+
+        let event = match UserEvent::try_from(event_message) {
+            Ok(event) => event,
+            Err(conversion_error) => {
+                self.send_to_dlq(&message, payload, &conversion_error).await;
+                return self.commit(&message);
+            }
+        };
 
         tracing::debug!(
             "Received user event: {} ({})",
@@ -174,18 +199,48 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
             event.event_type()
         );
 
-        self.handle_event(event)
-            .await
-            .map_err(|e| MessageProcessingError::HandlingError(e.to_string()))?;
+        let mut attempt = 0u32;
+        loop {
+            match self.handle_event(event.clone()).await {
+                Ok(()) => break,
+                Err(err) => {
+                    attempt += 1;
+                    if attempt >= self.max_attempts {
+                        tracing::error!(
+                            attempts = attempt,
+                            error = %err,
+                            "Exhausted retries handling user event, sending to DLQ"
+                        );
+                        self.send_to_dlq(
+                            &message,
+                            payload,
+                            &format!("Exhausted {attempt} attempts: {err}"),
+                        )
+                        .await;
+                        break;
+                    }
+                    tracing::warn!(attempt, error = %err, "Transient error handling user event, retrying");
+                    tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
+                }
+            }
+        }
 
-        // Commit only now that the replica has actually been updated, so a crash
-        // or handling error before this point causes the event to be redelivered
-        // instead of silently skipped.
+        self.commit(&message)
+    }
+
+    /// Commits the offset for `message`. Called unconditionally once a
+    /// message has been either handled or terminally dead-lettered, so the
+    /// consumer never gets stuck redelivering the same message.
+    fn commit(&self, message: &BorrowedMessage<'_>) -> Result<(), MessageProcessingError> {
         self.consumer
-            .commit_message(&message, CommitMode::Async)
-            .map_err(MessageProcessingError::KafkaError)?;
+            .commit_message(message, CommitMode::Async)
+            .map_err(MessageProcessingError::KafkaError)
+    }
 
-        Ok(())
+    async fn send_to_dlq(&self, message: &BorrowedMessage<'_>, payload: &[u8], reason: &str) {
+        tracing::warn!(reason, "Sending user event message to dead-letter queue");
+        self.dlq.publish(message.key(), payload, reason).await;
+        web::metrics::record_kafka_dlq(web::metrics::ConsumerKind::UserEvents);
     }
 
     /// Handle a user event by updating the local replica

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use super::envelope::SCHEMA_CHAT_V1;
 use super::messages::ChatEventMessage;
 use super::messages::MessageDeletedMessage;
 use super::messages::MessageSentMessage;
@@ -40,10 +41,10 @@ impl ports::MessageEventPublisher for MessageEventPublisher {
         &self,
         event: &MessageSentEvent,
     ) -> Result<(), EventPublisherError> {
-        let envelope = ChatEventMessage::MessageSent(MessageSentMessage::from(event));
+        let message = ChatEventMessage::MessageSent(MessageSentMessage::from(event));
 
         self.producer
-            .publish_event(event.channel_id, &envelope)
+            .publish_event(event.channel_id, SCHEMA_CHAT_V1, message)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }
@@ -52,10 +53,10 @@ impl ports::MessageEventPublisher for MessageEventPublisher {
         &self,
         event: &MessageDeletedEvent,
     ) -> Result<(), EventPublisherError> {
-        let envelope = ChatEventMessage::MessageDeleted(MessageDeletedMessage::from(event));
+        let message = ChatEventMessage::MessageDeleted(MessageDeletedMessage::from(event));
 
         self.producer
-            .publish_event(event.channel_id, &envelope)
+            .publish_event(event.channel_id, SCHEMA_CHAT_V1, message)
             .await
             .map_err(|e| EventPublisherError::PublishFailed(e.to_string()))
     }

@@ -9,6 +9,7 @@ use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
 use super::context::AssignmentTracker;
+use super::dlq::DeadLetterQueue;
 use super::instance::base_consumer_config;
 use super::instance::resolve_instance_id;
 use crate::config::Config;
@@ -18,6 +19,8 @@ use crate::domain::message::models::MessageContent;
 use crate::domain::message::models::MessageId;
 use crate::domain::message::ports::MessageBroadcaster;
 use crate::domain::user::models::UserId;
+use crate::outbound::kafka::envelope::SCHEMA_CHAT_V1;
+use crate::outbound::kafka::envelope::decode_envelope;
 use crate::outbound::kafka::messages::ChatEventMessage;
 use crate::outbound::kafka::messages::MessageSentMessage;
 
@@ -28,15 +31,6 @@ enum MessageProcessingError {
 
     #[error("Message has no payload")]
     NoPayload,
-
-    #[error("Failed to decode message payload as UTF-8: {0}")]
-    Utf8Error(#[from] std::str::Utf8Error),
-
-    #[error("Failed to deserialize event: {0}")]
-    DeserializationError(#[from] serde_json::Error),
-
-    #[error("Failed to handle event: {0}")]
-    HandlingError(String),
 }
 
 /// Kafka event consumer for handling chat events.
@@ -49,6 +43,7 @@ pub struct EventConsumer {
     consumer: StreamConsumer<AssignmentTracker>,
     broadcaster: Arc<dyn MessageBroadcaster>,
     assignment_tracker: AssignmentTracker,
+    dlq: DeadLetterQueue,
 }
 
 impl EventConsumer {
@@ -96,10 +91,13 @@ impl EventConsumer {
             &config.kafka.messages_topic
         );
 
+        let dlq = DeadLetterQueue::new(config, &config.kafka.messages_topic)?;
+
         Ok(Self {
             consumer,
             broadcaster,
             assignment_tracker,
+            dlq,
         })
     }
 
@@ -155,15 +153,31 @@ impl EventConsumer {
         tracing::info!("Kafka event consumer loop ended");
     }
 
-    /// Process a single Kafka message
+    /// Process a single Kafka message. A message that doesn't decode as a
+    /// well-formed `chat.v1` envelope is deterministic poison — retrying the
+    /// same bytes would fail identically — so it goes straight to the DLQ
+    /// instead of being logged and dropped.
     async fn process_message(
         &self,
         result: Result<rdkafka::message::BorrowedMessage<'_>, KafkaError>,
     ) -> Result<(), MessageProcessingError> {
         let message = result?;
         let payload = message.payload().ok_or(MessageProcessingError::NoPayload)?;
-        let json_str = std::str::from_utf8(payload)?;
-        let event = serde_json::from_str::<ChatEventMessage>(json_str)?;
+
+        let event = match decode_envelope::<ChatEventMessage>(payload, SCHEMA_CHAT_V1) {
+            Ok(event) => event,
+            Err(decode_error) => {
+                tracing::warn!(
+                    error = %decode_error,
+                    "Poison message on chat messages topic, sending to DLQ"
+                );
+                self.dlq
+                    .publish(message.key(), payload, &decode_error.to_string())
+                    .await;
+                web::metrics::record_kafka_dlq(web::metrics::ConsumerKind::Broadcast);
+                return Ok(());
+            }
+        };
 
         tracing::trace!(
             "Received event: {} ({})",
@@ -171,17 +185,17 @@ impl EventConsumer {
             event.event_type()
         );
 
-        self.handle_event(event)
-            .await
-            .map_err(MessageProcessingError::HandlingError)
+        self.handle_event(event).await;
+        Ok(())
     }
 
-    /// Handle a chat event
-    async fn handle_event(&self, event: ChatEventMessage) -> Result<(), String> {
+    /// Handle a chat event. Every variant besides `MessageSent` is
+    /// currently log-only: chat-service is both producer and sole consumer
+    /// of these, so there's nothing further to react to on this side yet.
+    async fn handle_event(&self, event: ChatEventMessage) {
         match event {
             ChatEventMessage::MessageSent(msg_event) => {
                 self.broadcast_message(msg_event).await;
-                Ok(())
             }
             ChatEventMessage::MessageDeleted(deleted_event) => {
                 tracing::debug!(
@@ -189,11 +203,9 @@ impl EventConsumer {
                     deleted_event.message_id,
                     deleted_event.channel_id
                 );
-                Ok(())
             }
             ChatEventMessage::ChannelCreated(channel_event) => {
                 tracing::debug!("Channel created: {}", channel_event.channel_id);
-                Ok(())
             }
             ChatEventMessage::UserJoinedChannel(join_event) => {
                 tracing::debug!(
@@ -201,7 +213,6 @@ impl EventConsumer {
                     join_event.user_id,
                     join_event.channel_id
                 );
-                Ok(())
             }
             ChatEventMessage::UserLeftChannel(leave_event) => {
                 tracing::debug!(
@@ -209,11 +220,9 @@ impl EventConsumer {
                     leave_event.user_id,
                     leave_event.channel_id
                 );
-                Ok(())
             }
             ChatEventMessage::ChannelDeleted(channel_event) => {
                 tracing::debug!("Channel deleted: {}", channel_event.channel_id);
-                Ok(())
             }
         }
     }

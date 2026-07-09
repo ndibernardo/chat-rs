@@ -165,6 +165,8 @@ pub struct KafkaConfig {
     #[serde(default)]
     pub instance_id: Option<String>,
     pub user_events: UserEventsConfig,
+    #[serde(default)]
+    pub dlq: DlqConfig,
 }
 
 fn default_messages_topic() -> String {
@@ -180,6 +182,27 @@ fn default_delivery_timeout_ms() -> u64 {
 pub struct UserEventsConfig {
     pub topic: String,
     pub group_id: String,
+}
+
+/// Dead-letter-queue policy shared by every Kafka consumer.
+#[derive(Debug, Deserialize, Clone)]
+pub struct DlqConfig {
+    /// How many times a transient processing failure is retried (with
+    /// backoff) before the message is sent to `<topic>.dlq` instead.
+    #[serde(default = "default_dlq_max_attempts")]
+    pub max_attempts: u32,
+}
+
+impl Default for DlqConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: default_dlq_max_attempts(),
+        }
+    }
+}
+
+fn default_dlq_max_attempts() -> u32 {
+    5
 }
 
 /// JWT authentication configuration.

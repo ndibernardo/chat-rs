@@ -6,6 +6,7 @@ use chat_service::config::CassandraConfig;
 use chat_service::config::Config;
 use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
+use chat_service::config::DlqConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
 use chat_service::config::ServerConfig;
@@ -21,6 +22,8 @@ use chat_service::domain::message::events::MessageSentEvent;
 use chat_service::domain::message::models::Message;
 use chat_service::domain::message::models::MessageContent;
 use chat_service::domain::user::models::UserId;
+use chat_service::outbound::kafka::envelope::SCHEMA_CHAT_V1;
+use chat_service::outbound::kafka::envelope::decode_envelope;
 use chat_service::outbound::kafka::messages::ChannelCreatedMessage;
 use chat_service::outbound::kafka::messages::ChatEventMessage;
 use chat_service::outbound::kafka::messages::MessageSentMessage;
@@ -71,6 +74,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
                 topic: "user-events-test".to_string(),
                 group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),
             },
+            dlq: DlqConfig::default(),
         },
         websocket: WebsocketConfig::default(),
         shutdown: ShutdownConfig::default(),
@@ -102,7 +106,9 @@ async fn test_kafka_publish_message_event() {
     let message_envelope = MessageSentMessage::from(&event);
     let envelope = ChatEventMessage::MessageSent(message_envelope);
 
-    let result = kafka_producer.publish_event(channel_id, &envelope).await;
+    let result = kafka_producer
+        .publish_event(channel_id, SCHEMA_CHAT_V1, envelope)
+        .await;
 
     assert!(
         result.is_ok(),
@@ -134,7 +140,9 @@ async fn test_kafka_publish_channel_event() {
     let message_envelope = ChannelCreatedMessage::from(&event);
     let envelope = ChatEventMessage::ChannelCreated(message_envelope);
 
-    let result = kafka_producer.publish_event(channel_id, &envelope).await;
+    let result = kafka_producer
+        .publish_event(channel_id, SCHEMA_CHAT_V1, envelope)
+        .await;
 
     assert!(
         result.is_ok(),
@@ -168,7 +176,7 @@ async fn test_kafka_publish_and_consume() {
     let envelope = ChatEventMessage::MessageSent(message_envelope);
 
     kafka_producer
-        .publish_event(channel_id, &envelope)
+        .publish_event(channel_id, SCHEMA_CHAT_V1, envelope)
         .await
         .expect("Failed to publish event");
 
@@ -196,12 +204,10 @@ async fn test_kafka_publish_and_consume() {
             match message_result {
                 Ok(msg) => {
                     let payload = msg.payload().expect("Message has no payload");
-                    let payload_str = std::str::from_utf8(payload).expect("Invalid UTF-8");
 
-                    // Try to deserialize as ChatEventMessage
-                    if let Ok(received_envelope) =
-                        serde_json::from_str::<ChatEventMessage>(payload_str)
-                        && let ChatEventMessage::MessageSent(received_msg) = received_envelope
+                    if let Ok(received_event) =
+                        decode_envelope::<ChatEventMessage>(payload, SCHEMA_CHAT_V1)
+                        && let ChatEventMessage::MessageSent(received_msg) = received_event
                         && received_msg.message_id == message_id.to_string()
                     {
                         return Some(received_msg);
@@ -251,7 +257,9 @@ async fn test_kafka_publish_multiple_events() {
         let message_envelope = MessageSentMessage::from(&event);
         let envelope = ChatEventMessage::MessageSent(message_envelope);
 
-        let result = kafka_producer.publish_event(channel_id, &envelope).await;
+        let result = kafka_producer
+            .publish_event(channel_id, SCHEMA_CHAT_V1, envelope)
+            .await;
 
         assert!(
             result.is_ok(),
@@ -288,7 +296,7 @@ async fn test_kafka_error_handling() {
     // This should fail with timeout or connection error
     let result = timeout(
         Duration::from_secs(7),
-        kafka_producer.publish_event(channel_id, &envelope),
+        kafka_producer.publish_event(channel_id, SCHEMA_CHAT_V1, envelope),
     )
     .await;
 
