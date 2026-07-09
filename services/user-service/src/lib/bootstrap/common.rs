@@ -1,3 +1,8 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
@@ -26,21 +31,20 @@ pub async fn migrate_only(config: Config) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Resolves on SIGINT or SIGTERM, so servers can stop accepting new
-/// connections and drain in-flight requests instead of the process being
-/// killed mid-request. Each server task calls this independently; tokio's
-/// signal listeners broadcast to every registered receiver of the same kind.
-pub async fn shutdown_signal() {
+/// Resolves on SIGINT or SIGTERM. Each server task calls this independently;
+/// tokio's signal listeners broadcast to every registered receiver of the
+/// same kind.
+async fn wait_for_shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
-            .expect("failed to install Ctrl+C handler");
+            .expect("Failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler")
+            .expect("Failed to install SIGTERM handler")
             .recv()
             .await;
     };
@@ -52,8 +56,20 @@ pub async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
 
-    tracing::info!("shutdown signal received, starting graceful shutdown");
+/// On SIGINT/SIGTERM, marks `/readyz` as draining and waits `readiness_delay`
+/// before returning, giving the load balancer/endpoint controller time to
+/// notice and stop routing new traffic here before this process actually
+/// stops accepting connections.
+pub async fn graceful_shutdown(draining: Arc<AtomicBool>, readiness_delay: Duration) {
+    wait_for_shutdown_signal().await;
+
+    tracing::info!("Shutdown signal received, marking not ready");
+    draining.store(true, Ordering::Relaxed);
+    tokio::time::sleep(readiness_delay).await;
+
+    tracing::info!("Starting graceful shutdown");
 }
 
 /// Strip `user:password@` credentials from a connection URL before logging it.

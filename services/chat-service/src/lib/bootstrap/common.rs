@@ -1,8 +1,13 @@
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use auth::Authenticator;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
 use crate::domain::channel::service::Service as ChannelService;
@@ -130,21 +135,20 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
     })
 }
 
-/// Resolves on SIGINT or SIGTERM, so servers can stop accepting new
-/// connections and drain in-flight requests instead of the process being
-/// killed mid-request. Each server task calls this independently; tokio's
-/// signal listeners broadcast to every registered receiver of the same kind.
-pub async fn shutdown_signal() {
+/// Resolves on SIGINT or SIGTERM. Each server task calls this independently;
+/// tokio's signal listeners broadcast to every registered receiver of the
+/// same kind.
+async fn wait_for_shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
-            .expect("failed to install Ctrl+C handler");
+            .expect("Failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler")
+            .expect("Failed to install SIGTERM handler")
             .recv()
             .await;
     };
@@ -156,8 +160,82 @@ pub async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
 
-    tracing::info!("shutdown signal received, starting graceful shutdown");
+/// Graceful shutdown for roles with no WebSocket connections to drain: on
+/// SIGINT/SIGTERM, marks `/readyz` as draining and waits `readiness_delay`
+/// before returning, giving the load balancer/endpoint controller time to
+/// notice and stop routing new traffic here before this process actually
+/// stops accepting connections.
+pub async fn graceful_shutdown(draining: Arc<AtomicBool>, readiness_delay: Duration) {
+    wait_for_shutdown_signal().await;
+
+    tracing::info!("Shutdown signal received, marking not ready");
+    draining.store(true, Ordering::Relaxed);
+    tokio::time::sleep(readiness_delay).await;
+
+    tracing::info!("Starting graceful shutdown");
+}
+
+/// Graceful shutdown for roles serving WebSocket connections: same sequence
+/// as [`graceful_shutdown`], then sends every connection a close frame and
+/// waits up to `drain_grace` for clients to disconnect.
+///
+/// Bounded by `drain_grace` — a client that never closes doesn't block this
+/// function forever, though axum's own connection drain (`axum::serve`'s
+/// graceful shutdown) may still wait briefly afterward for the underlying
+/// socket to finish closing.
+pub async fn graceful_ws_shutdown(
+    draining: Arc<AtomicBool>,
+    connection_registry: Arc<ConnectionRegistry>,
+    readiness_delay: Duration,
+    drain_grace: Duration,
+) {
+    wait_for_shutdown_signal().await;
+
+    tracing::info!("Shutdown signal received, marking not ready");
+    draining.store(true, Ordering::Relaxed);
+    tokio::time::sleep(readiness_delay).await;
+
+    tracing::info!("Closing active WebSocket connections");
+    connection_registry.close_all().await;
+
+    let deadline = tokio::time::Instant::now() + drain_grace;
+    loop {
+        let remaining = connection_registry.get_total_connections().await;
+        if remaining == 0 {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            tracing::warn!(
+                remaining,
+                "Drain grace period elapsed with connections still open"
+            );
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    tracing::info!("Starting graceful shutdown");
+}
+
+/// Upper bound on how long a cancelled consumer task gets to actually stop,
+/// so a stuck consumer can't block process exit indefinitely.
+const CONSUMER_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Cancels a consumer's cooperative-shutdown token and waits for its task to
+/// finish, bounded by [`CONSUMER_JOIN_TIMEOUT`].
+pub async fn stop_consumer(name: &'static str, token: &CancellationToken, handle: JoinHandle<()>) {
+    token.cancel();
+    if tokio::time::timeout(CONSUMER_JOIN_TIMEOUT, handle)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            consumer = name,
+            "Consumer task did not stop within the shutdown timeout"
+        );
+    }
 }
 
 /// Strip `user:password@` credentials from a connection URL before logging it.

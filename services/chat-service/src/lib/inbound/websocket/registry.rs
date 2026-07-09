@@ -176,6 +176,23 @@ impl ConnectionRegistry {
         }
     }
 
+    /// Sends a `Close(1001 Going Away)` frame to every connection, best
+    /// effort. Used during graceful shutdown so clients see a clean close
+    /// instead of the connection just vanishing; actual removal from the
+    /// registry still happens through the normal `remove_connection` path
+    /// once each socket's tasks observe the close.
+    pub async fn close_all(&self) {
+        let close_frame = WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+            code: axum::extract::ws::close_code::AWAY,
+            reason: axum::extract::ws::Utf8Bytes::from_static("server is shutting down"),
+        }));
+
+        let connections = self.connections.read().await;
+        for conn in connections.values() {
+            let _ = conn.sender.try_send(close_frame.clone());
+        }
+    }
+
     /// Get the number of active connections in a channel
     pub async fn get_channel_connection_count(&self, channel_id: ChannelId) -> usize {
         self.channel_connections

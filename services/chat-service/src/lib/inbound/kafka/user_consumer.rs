@@ -8,6 +8,7 @@ use rdkafka::consumer::Consumer;
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::error::KafkaError;
 use thiserror::Error;
+use tokio_util::sync::CancellationToken;
 
 use super::context::AssignmentTracker;
 use super::instance::base_consumer_config;
@@ -107,15 +108,30 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
         self.assignment_tracker.clone()
     }
 
-    /// Start consuming user events from Kafka
+    /// Start consuming user events from Kafka. Runs until
+    /// `cancellation_token` is cancelled, so a graceful shutdown can stop
+    /// this loop cooperatively instead of aborting the task mid-poll.
     ///
     /// This is a long-running task that should be spawned in a separate tokio task
-    pub async fn start_consuming(self) {
+    pub async fn start_consuming(self, cancellation_token: CancellationToken) {
         tracing::info!("Starting user events consumer loop");
 
         let mut message_stream = self.consumer.stream();
 
-        while let Some(result) = message_stream.next().await {
+        loop {
+            let result = tokio::select! {
+                _ = cancellation_token.cancelled() => {
+                    tracing::info!("Cancellation requested, stopping user events consumer loop");
+                    break;
+                }
+                result = message_stream.next() => result,
+            };
+
+            let Some(result) = result else {
+                tracing::warn!("User events stream ended");
+                break;
+            };
+
             if let Err(error) = self.process_message(result).await {
                 web::metrics::record_kafka_consumed(
                     web::metrics::ConsumerKind::UserEvents,
@@ -135,7 +151,7 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
             }
         }
 
-        tracing::warn!("User events consumer loop ended");
+        tracing::info!("User events consumer loop ended");
     }
 
     /// Process a single Kafka message

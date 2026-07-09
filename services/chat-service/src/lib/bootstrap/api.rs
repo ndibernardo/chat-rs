@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
 use web::health::HealthState;
 use web::health::PgReadyCheck;
 use web::health::PgSchemaReadyCheck;
@@ -43,11 +45,18 @@ pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
         ws_send_queue_capacity: config.websocket.send_queue_capacity,
     };
 
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
+
     let routes = api_routes(adapters.authenticator);
     let application = build_router(routes, state, &config.cors.allowed_origins)?
-        .merge(health_router(HealthState::new(checks)));
+        .merge(health_router(health_state));
 
-    serve_http(&config, application).await
+    let shutdown = common::graceful_shutdown(
+        draining,
+        Duration::from_secs(config.shutdown.readiness_delay_seconds),
+    );
+    serve_http(&config, application, shutdown).await
 }
 
 /// `all`: today's single-binary dev default — API, WS gateway and both
@@ -86,14 +95,22 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         Arc::new(user_events_consumer.assignment_tracker()),
     ];
 
+    let message_consumer_cancellation = CancellationToken::new();
+    let message_consumer_token = message_consumer_cancellation.clone();
+
     tracing::info!(
         consumer = "message_events",
         topics = "chat.messages.*",
         "Starting Kafka message event consumer"
     );
     let message_consumer_handle = tokio::spawn(async move {
-        message_event_consumer.start_consuming().await;
+        message_event_consumer
+            .start_consuming(message_consumer_token)
+            .await;
     });
+
+    let user_consumer_cancellation = CancellationToken::new();
+    let user_consumer_token = user_consumer_cancellation.clone();
 
     tracing::info!(
         consumer = "user_events",
@@ -101,8 +118,14 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         "Starting Kafka user event consumer"
     );
     let user_consumer_handle = tokio::spawn(async move {
-        user_events_consumer.start_consuming().await;
+        user_events_consumer
+            .start_consuming(user_consumer_token)
+            .await;
     });
+
+    let connection_registry = Arc::clone(&adapters.connection_registry);
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
 
     let application = crate::inbound::http::create_router(
         adapters.channel_service,
@@ -112,18 +135,41 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         config.websocket.send_queue_capacity,
         &config.cors.allowed_origins,
     )?
-    .merge(health_router(HealthState::new(checks)));
+    .merge(health_router(health_state));
 
-    serve_http(&config, application).await?;
+    let shutdown = common::graceful_ws_shutdown(
+        draining,
+        connection_registry,
+        Duration::from_secs(config.shutdown.readiness_delay_seconds),
+        Duration::from_secs(config.shutdown.drain_grace_seconds),
+    );
+    serve_http(&config, application, shutdown).await?;
 
     tracing::info!("HTTP server stopped, shutting down Kafka consumers");
-    message_consumer_handle.abort();
-    user_consumer_handle.abort();
+    common::stop_consumer(
+        "message_events",
+        &message_consumer_cancellation,
+        message_consumer_handle,
+    )
+    .await;
+    common::stop_consumer(
+        "user_events",
+        &user_consumer_cancellation,
+        user_consumer_handle,
+    )
+    .await;
 
     Ok(())
 }
 
-async fn serve_http(config: &Config, application: axum::Router) -> Result<(), anyhow::Error> {
+async fn serve_http<F>(
+    config: &Config,
+    application: axum::Router,
+    shutdown: F,
+) -> Result<(), anyhow::Error>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
     tracing::info!(
@@ -134,7 +180,7 @@ async fn serve_http(config: &Config, application: axum::Router) -> Result<(), an
     );
 
     axum::serve(listener, application)
-        .with_graceful_shutdown(common::shutdown_signal())
+        .with_graceful_shutdown(shutdown)
         .await?;
 
     Ok(())

@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
 use web::health::HealthState;
 use web::health::PgReadyCheck;
 use web::health::PgSchemaReadyCheck;
@@ -53,14 +55,23 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Arc::new(message_event_consumer.assignment_tracker()),
     ];
 
+    let consumer_cancellation = CancellationToken::new();
+    let message_consumer_token = consumer_cancellation.clone();
+
     tracing::info!(
         consumer = "message_events",
         topics = "chat.messages.*",
         "Starting Kafka message event consumer"
     );
     let message_consumer_handle = tokio::spawn(async move {
-        message_event_consumer.start_consuming().await;
+        message_event_consumer
+            .start_consuming(message_consumer_token)
+            .await;
     });
+
+    let connection_registry = Arc::clone(&adapters.connection_registry);
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
 
     let state = AppState {
         channel_service: adapters.channel_service,
@@ -71,7 +82,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     };
 
     let application = build_router(ws_routes(), state, &config.cors.allowed_origins)?
-        .merge(health_router(HealthState::new(checks)));
+        .merge(health_router(health_state));
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -84,11 +95,21 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     axum::serve(listener, application)
-        .with_graceful_shutdown(common::shutdown_signal())
+        .with_graceful_shutdown(common::graceful_ws_shutdown(
+            draining,
+            connection_registry,
+            Duration::from_secs(config.shutdown.readiness_delay_seconds),
+            Duration::from_secs(config.shutdown.drain_grace_seconds),
+        ))
         .await?;
 
     tracing::info!("HTTP server stopped, shutting down Kafka consumer");
-    message_consumer_handle.abort();
+    common::stop_consumer(
+        "message_events",
+        &consumer_cancellation,
+        message_consumer_handle,
+    )
+    .await;
 
     Ok(())
 }

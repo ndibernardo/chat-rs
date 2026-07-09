@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
 use web::health::HealthState;
 use web::health::PgReadyCheck;
 use web::health::PgSchemaReadyCheck;
@@ -40,16 +42,23 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Arc::new(user_events_consumer.assignment_tracker()),
     ];
 
+    let consumer_cancellation = CancellationToken::new();
+    let user_consumer_token = consumer_cancellation.clone();
+
     tracing::info!(
         consumer = "user_events",
         topic = %config.kafka.user_events.topic,
         "Starting Kafka user event consumer"
     );
     let user_consumer_handle = tokio::spawn(async move {
-        user_events_consumer.start_consuming().await;
+        user_events_consumer
+            .start_consuming(user_consumer_token)
+            .await;
     });
 
-    let application = health_router(HealthState::new(checks));
+    let health_state = HealthState::new(checks);
+    let draining = health_state.draining_flag();
+    let application = health_router(health_state);
 
     let http_address = format!("0.0.0.0:{}", config.server.http_port);
     let listener = tokio::net::TcpListener::bind(&http_address).await?;
@@ -61,11 +70,14 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
 
     axum::serve(listener, application)
-        .with_graceful_shutdown(common::shutdown_signal())
+        .with_graceful_shutdown(common::graceful_shutdown(
+            draining,
+            Duration::from_secs(config.shutdown.readiness_delay_seconds),
+        ))
         .await?;
 
     tracing::info!("HTTP server stopped, shutting down Kafka consumer");
-    user_consumer_handle.abort();
+    common::stop_consumer("user_events", &consumer_cancellation, user_consumer_handle).await;
 
     Ok(())
 }

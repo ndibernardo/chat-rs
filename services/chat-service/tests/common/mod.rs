@@ -10,6 +10,7 @@ use chat_service::config::DatabaseConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
 use chat_service::config::ServerConfig;
+use chat_service::config::ShutdownConfig;
 use chat_service::config::UserEventsConfig;
 use chat_service::config::UserServiceConfig;
 use chat_service::config::WebsocketConfig;
@@ -124,6 +125,7 @@ impl TestApp {
                 },
             },
             websocket: WebsocketConfig::default(),
+            shutdown: ShutdownConfig::default(),
         };
 
         // Create adapters

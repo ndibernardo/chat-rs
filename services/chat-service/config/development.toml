@@ -33,3 +33,7 @@ group_id = "chat-service-user-events"
 
 [websocket]
 send_queue_capacity = 256
+
+[shutdown]
+readiness_delay_seconds = 5
+drain_grace_seconds = 30
