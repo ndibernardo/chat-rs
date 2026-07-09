@@ -54,6 +54,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
             group_id: format!("test-group-{}", uuid::Uuid::new_v4()),
             messages_topic: TEST_MESSAGES_TOPIC.to_string(),
             delivery_timeout_ms: 10_000,
+            instance_id: Some(format!("test-instance-{}", uuid::Uuid::new_v4())),
             user_events: UserEventsConfig {
                 topic: "user-events-test".to_string(),
                 group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),

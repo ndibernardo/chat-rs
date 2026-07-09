@@ -59,6 +59,12 @@ pub struct KafkaConfig {
     /// message before giving up (`message.timeout.ms`).
     #[serde(default = "default_delivery_timeout_ms")]
     pub delivery_timeout_ms: u64,
+    /// Stable per-process identity used for Kafka static group membership
+    /// (`group.instance.id`), so a restarted pod rejoins its group instead
+    /// of triggering a rebalance. Explicit override; absent in most
+    /// deployments, where it is instead resolved from `POD_NAME`/hostname.
+    #[serde(default)]
+    pub instance_id: Option<String>,
     pub user_events: UserEventsConfig,
 }
 
