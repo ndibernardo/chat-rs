@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use chat_service::config::CassandraConfig;
 use chat_service::config::Config;
+use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
@@ -54,8 +55,10 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
             grpc_url: "http://unused".to_string(),
         },
         jwt: JwtConfig {
-            secret: "unused".to_string(),
-            expiration_hours: 24,
+            public_key_path: "../../keys/dev/jwt_ed25519.pub.pem".to_string(),
+        },
+        cors: CorsConfig {
+            allowed_origins: vec!["http://localhost:5173".to_string()],
         },
         kafka: KafkaConfig {
             brokers: kafka_brokers.to_string(),

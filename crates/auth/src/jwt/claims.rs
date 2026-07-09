@@ -9,7 +9,7 @@ use serde::Serialize;
 ///
 /// Supports standard RFC 7519 claims plus custom fields via `extra` map.
 /// All standard fields are optional for maximum flexibility.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Claims {
     /// Subject (user/entity identifier)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -126,22 +126,7 @@ impl Claims {
 
     /// Check if token is expired.
     pub fn is_expired(&self, current_timestamp: i64) -> bool {
-        self.exp.map_or(false, |exp| exp < current_timestamp)
-    }
-}
-
-impl Default for Claims {
-    fn default() -> Self {
-        Self {
-            sub: None,
-            exp: None,
-            iat: None,
-            nbf: None,
-            iss: None,
-            aud: None,
-            jti: None,
-            extra: HashMap::new(),
-        }
+        self.exp.is_some_and(|exp| exp < current_timestamp)
     }
 }
 

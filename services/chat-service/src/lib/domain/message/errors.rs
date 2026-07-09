@@ -2,7 +2,6 @@ use thiserror::Error;
 
 use super::models::MessageId;
 use crate::domain::channel::errors::ChannelIdError;
-use crate::domain::channel::models::ChannelId;
 use crate::domain::user::errors::UserIdError;
 use crate::domain::user::models::UserId;
 
@@ -48,9 +47,6 @@ pub enum MessageError {
     // Domain-level errors
     #[error("Message not found: {0}")]
     NotFound(MessageId),
-
-    #[error("Channel not found: {0}")]
-    ChannelNotFound(ChannelId),
 
     #[error("User not found: {0}")]
     UserNotFound(UserId),

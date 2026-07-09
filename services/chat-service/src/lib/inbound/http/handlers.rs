@@ -184,9 +184,6 @@ impl From<MessageError> for ApiError {
     fn from(err: MessageError) -> Self {
         match err {
             MessageError::NotFound(id) => ApiError::NotFound(format!("Message not found: {}", id)),
-            MessageError::ChannelNotFound(id) => {
-                ApiError::NotFound(format!("Channel not found: {}", id))
-            }
             MessageError::UserNotFound(id) => ApiError::NotFound(format!("User not found: {}", id)),
             MessageError::InvalidMessageId(_)
             | MessageError::InvalidContent(_)

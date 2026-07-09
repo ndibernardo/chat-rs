@@ -7,7 +7,6 @@ use axum::routing::delete;
 use axum::routing::get;
 use axum::routing::patch;
 use axum::routing::post;
-use tower_http::cors::CorsLayer;
 use web::with_request_trace;
 
 use super::handlers::authenticate::authenticate;
@@ -27,11 +26,15 @@ pub struct AppState {
     pub jwt_expiration_hours: i64,
 }
 
+/// # Errors
+/// Returns an error if any entry in `allowed_origins` is not a valid HTTP
+/// header value.
 pub fn create_router(
     user_service: Arc<UserService<UserRepository, EventProducer, PasswordHasher>>,
     authenticator: Arc<Authenticator>,
     jwt_expiration_hours: i64,
-) -> Router {
+    allowed_origins: &[String],
+) -> Result<Router, anyhow::Error> {
     let state = AppState {
         user_service,
         authenticator,
@@ -58,7 +61,7 @@ pub fn create_router(
         // `track_http_metrics` sees the `MatchedPath` extension.
         .route_layer(middleware::from_fn(web::metrics::track_http_metrics));
 
-    with_request_trace(router)
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+    let cors = web::cors::cors_layer(allowed_origins)?;
+
+    Ok(with_request_trace(router).layer(cors).with_state(state))
 }

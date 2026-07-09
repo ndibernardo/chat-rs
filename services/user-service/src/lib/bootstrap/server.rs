@@ -33,7 +33,22 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
 
     let pg_pool = common::connect_pg_pool(&config).await?;
 
-    let authenticator = Arc::new(Authenticator::new(config.jwt.secret.as_bytes()));
+    let private_key_pem = std::fs::read(&config.jwt.private_key_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read JWT private key at {}: {e}",
+            config.jwt.private_key_path
+        )
+    })?;
+    let public_key_pem = std::fs::read(&config.jwt.public_key_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read JWT public key at {}: {e}",
+            config.jwt.public_key_path
+        )
+    })?;
+    let authenticator = Arc::new(
+        Authenticator::signer(&private_key_pem, &public_key_pem)
+            .map_err(|e| anyhow::anyhow!("Failed to build JWT signer: {e}"))?,
+    );
     let user_repository = Arc::new(UserRepository::new(pg_pool.clone()));
     let event_producer = Arc::new(EventProducer::new(&config)?);
     let password_hasher = Arc::new(PasswordHasher::new());
@@ -65,7 +80,8 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Arc::clone(&user_service),
         Arc::clone(&authenticator),
         config.jwt.expiration_hours,
-    )
+        &config.cors.allowed_origins,
+    )?
     .merge(health_router(HealthState::new(checks)));
     let http_server = tokio::spawn(async move {
         axum::serve(http_listener, http_application)

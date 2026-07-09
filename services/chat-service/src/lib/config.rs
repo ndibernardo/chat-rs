@@ -17,8 +17,17 @@ pub struct Config {
     pub user_service: UserServiceConfig,
     pub kafka: KafkaConfig,
     pub jwt: JwtConfig,
+    pub cors: CorsConfig,
     #[serde(default)]
     pub websocket: WebsocketConfig,
+}
+
+/// Cross-origin resource sharing configuration.
+#[derive(Debug, Deserialize, Clone)]
+pub struct CorsConfig {
+    /// Origins allowed to call this service's HTTP API. No wildcard
+    /// support: every origin must be listed explicitly.
+    pub allowed_origins: Vec<String>,
 }
 
 /// PostgreSQL database configuration.
@@ -141,10 +150,12 @@ pub struct UserEventsConfig {
 }
 
 /// JWT authentication configuration.
+///
+/// chat-service only verifies tokens issued by user-service, so it needs
+/// the Ed25519 public key alone — no private key, no `expiration_hours`.
 #[derive(Debug, Deserialize, Clone)]
 pub struct JwtConfig {
-    pub secret: String,
-    pub expiration_hours: i64,
+    pub public_key_path: String,
 }
 
 impl Config {

@@ -49,9 +49,11 @@ WORKDIR /app
 # Copy the binary from builder
 COPY --from=builder /app/target/release/user-service /app/user-service
 
-# Copy migrations and config
+# Copy migrations, config and the dev JWT keypair (dev/test only — real
+# deployments mount the keypair from a secret store, not the image)
 COPY services/user-service/migrations /app/migrations
 COPY services/user-service/config /app/config
+COPY keys/dev /app/keys/dev
 
 # Expose ports
 EXPOSE 3001 50051

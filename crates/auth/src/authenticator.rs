@@ -34,18 +34,30 @@ pub enum AuthenticationError {
 }
 
 impl Authenticator {
-    /// Create a new authenticator.
+    /// Builds an authenticator that can both issue and verify JWTs.
     ///
-    /// # Arguments
-    /// * `jwt_secret` - Secret key for JWT signing
+    /// For the service that owns the JWT keypair (issues tokens on login).
     ///
-    /// # Returns
-    /// Configured Authenticator instance
-    pub fn new(jwt_secret: &[u8]) -> Self {
-        Self {
+    /// # Errors
+    /// `JwtError::InvalidKey` — either PEM fails to parse as an Ed25519 key.
+    pub fn signer(private_key_pem: &[u8], public_key_pem: &[u8]) -> Result<Self, JwtError> {
+        Ok(Self {
             password_hasher: PasswordHasher::new(),
-            jwt_handler: JwtHandler::new(jwt_secret),
-        }
+            jwt_handler: JwtHandler::signer(private_key_pem, public_key_pem)?,
+        })
+    }
+
+    /// Builds an authenticator that can only verify JWTs issued elsewhere.
+    ///
+    /// For services that trust tokens signed by another service's keypair.
+    ///
+    /// # Errors
+    /// `JwtError::InvalidKey` — the PEM fails to parse as an Ed25519 public key.
+    pub fn verifier(public_key_pem: &[u8]) -> Result<Self, JwtError> {
+        Ok(Self {
+            password_hasher: PasswordHasher::new(),
+            jwt_handler: JwtHandler::verifier(public_key_pem)?,
+        })
     }
 
     /// Hash a password for storage.
@@ -135,9 +147,22 @@ mod tests {
     use super::*;
     use crate::jwt::Claims;
 
+    // Ed25519 test keypair (PKCS8 private / SPKI public PEM). Not used
+    // anywhere outside this test module.
+    const PRIVATE_KEY_PEM: &[u8] = b"-----BEGIN PRIVATE KEY-----\n\
+        MC4CAQAwBQYDK2VwBCIEIP6JnME9bwmwbdD47xCxd3Sopbc/1L8s0jLUq4ecKox8\n\
+        -----END PRIVATE KEY-----\n";
+    const PUBLIC_KEY_PEM: &[u8] = b"-----BEGIN PUBLIC KEY-----\n\
+        MCowBQYDK2VwAyEAo2X2xe1SK4wTKPqRQk+27d5mkWyyxkcZAyRVbplPCmM=\n\
+        -----END PUBLIC KEY-----\n";
+
+    fn signing_authenticator() -> Authenticator {
+        Authenticator::signer(PRIVATE_KEY_PEM, PUBLIC_KEY_PEM).expect("Valid Ed25519 keypair")
+    }
+
     #[test]
     fn test_authenticate_success() {
-        let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
+        let authenticator = signing_authenticator();
 
         // Hash a password
         let password = "K1nd-0f-Blue_1959!";
@@ -164,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_authenticate_invalid_password() {
-        let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
+        let authenticator = signing_authenticator();
 
         let password = "K1nd-0f-Blue_1959!";
         let hash = authenticator
@@ -183,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_generate_and_validate_token() {
-        let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
+        let authenticator = signing_authenticator();
 
         let claims = Claims::new()
             .with_subject("miles-davis")
@@ -206,9 +231,19 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_token() {
-        let authenticator = Authenticator::new(b"test_secret_key_at_least_32_bytes!");
+        let authenticator = signing_authenticator();
 
         let result = authenticator.validate_token::<Claims>("invalid.token.here");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn verifier_only_authenticator_cannot_generate_tokens() {
+        let authenticator =
+            Authenticator::verifier(PUBLIC_KEY_PEM).expect("Valid Ed25519 public key");
+
+        let result = authenticator.generate_token(&Claims::new().with_subject("miles-davis"));
+
+        assert!(matches!(result, Err(JwtError::SigningKeyUnavailable)));
     }
 }

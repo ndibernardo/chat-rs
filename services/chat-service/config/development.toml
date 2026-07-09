@@ -5,8 +5,10 @@ url = "postgresql://postgres:postgres@localhost:5432/chat"
 max_connections = 5
 
 [jwt]
-secret = "dev-secret-key-not-for-production"
-expiration_hours = 24
+public_key_path = "../../keys/dev/jwt_ed25519.pub.pem"
+
+[cors]
+allowed_origins = ["http://localhost:5173"]
 
 [cassandra]
 nodes = ["localhost:9042"]

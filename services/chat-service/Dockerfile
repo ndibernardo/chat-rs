@@ -48,9 +48,11 @@ WORKDIR /app
 # Copy the binary from builder
 COPY --from=builder /app/target/release/chat-service /app/chat-service
 
-# Copy migrations and config
+# Copy migrations, config and the dev JWT keypair (dev/test only — real
+# deployments mount the keypair from a secret store, not the image)
 COPY services/chat-service/migrations /app/migrations
 COPY services/chat-service/config /app/config
+COPY keys/dev /app/keys/dev
 
 # Expose HTTP port
 EXPOSE 3002
