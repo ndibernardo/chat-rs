@@ -7,6 +7,7 @@ use chat_service::config::CassandraConfig;
 use chat_service::config::Config;
 use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
+use chat_service::config::DlqConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
 use chat_service::config::ServerConfig;
@@ -123,6 +124,7 @@ impl TestApp {
                     topic: "user-events-test".to_string(),
                     group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),
                 },
+                dlq: DlqConfig::default(),
             },
             websocket: WebsocketConfig::default(),
             shutdown: ShutdownConfig::default(),

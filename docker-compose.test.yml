@@ -178,6 +178,23 @@ services:
           --replication-factor 1
         echo "Created topic: chat.messages"
 
+        # Dead-letter topics: poison/exhausted-retry messages land here
+        # instead of being silently dropped or looping the consumer forever.
+        echo "Creating dead-letter topics..."
+        kafka-topics --bootstrap-server localhost:9092 \
+          --create \
+          --if-not-exists \
+          --topic user-events-test.dlq \
+          --partitions 3 \
+          --replication-factor 1
+        kafka-topics --bootstrap-server localhost:9092 \
+          --create \
+          --if-not-exists \
+          --topic chat.messages.dlq \
+          --partitions 8 \
+          --replication-factor 1
+        echo "Created topics: user-events-test.dlq, chat.messages.dlq"
+
         echo "All topics created successfully!"
 
         # Keep container running

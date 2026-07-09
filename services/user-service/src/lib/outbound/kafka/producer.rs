@@ -12,6 +12,8 @@ use crate::config::Config;
 use crate::domain::user::events::UserCreatedEvent;
 use crate::domain::user::events::UserDeletedEvent;
 use crate::domain::user::events::UserUpdatedEvent;
+use crate::outbound::kafka::envelope::Envelope;
+use crate::outbound::kafka::envelope::SCHEMA_USER_V1;
 use crate::outbound::kafka::messages::UserEventMessage;
 use crate::user::errors::EventPublisherError;
 use crate::user::ports::EventPublisher;
@@ -85,8 +87,12 @@ impl EventProducer {
     ///
     /// The event will be partitioned by user_id to ensure ordering for the same user.
     /// Kafka producer handles retries automatically based on configuration.
-    async fn publish<T: Serialize>(&self, user_id: &str, event: &T) -> Result<(), ProducerError> {
-        let payload = serde_json::to_string(event)
+    /// Wrapped in an envelope tagged `user.v1` so consumers can reject event
+    /// families they don't understand before attempting to deserialize the
+    /// payload.
+    async fn publish<T: Serialize>(&self, user_id: &str, event: T) -> Result<(), ProducerError> {
+        let envelope = Envelope::wrap(SCHEMA_USER_V1, event);
+        let payload = serde_json::to_string(&envelope)
             .map_err(|e| ProducerError::SerializationError(e.to_string()))?;
 
         tracing::debug!(
@@ -134,7 +140,7 @@ impl EventPublisher for EventProducer {
         // Convert domain event to serializable message
         let message: UserEventMessage = event.clone().into();
 
-        self.publish(&event.user_id, &message).await.map_err(|e| {
+        self.publish(&event.user_id, message).await.map_err(|e| {
             // Log error but don't propagate - eventual consistency
             tracing::error!(
                 "Failed to publish UserCreated event for user {}: {}",
@@ -152,7 +158,7 @@ impl EventPublisher for EventProducer {
         // Convert domain event to serializable message
         let message: UserEventMessage = event.clone().into();
 
-        self.publish(&event.user_id, &message).await.map_err(|e| {
+        self.publish(&event.user_id, message).await.map_err(|e| {
             tracing::error!(
                 "Failed to publish UserUpdated event for user {}: {}",
                 event.user_id,
@@ -169,7 +175,7 @@ impl EventPublisher for EventProducer {
         // Convert domain event to serializable message
         let message: UserEventMessage = event.clone().into();
 
-        self.publish(&event.user_id, &message).await.map_err(|e| {
+        self.publish(&event.user_id, message).await.map_err(|e| {
             tracing::error!(
                 "Failed to publish UserDeleted event for user {}: {}",
                 event.user_id,
