@@ -35,6 +35,9 @@ sqlx = { workspace = true }
 # Kafka
 rdkafka = { workspace = true }
 
+# CLI (role selection)
+clap = { workspace = true }
+
 # Types
 uuid = { workspace = true }
 chrono = { workspace = true }

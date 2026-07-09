@@ -51,6 +51,60 @@ where
     }
 }
 
+/// `/health` liveness route. Shared by every role.
+pub fn health_routes<CS, MS>() -> Router<AppState<CS, MS>>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    Router::new().route("/health", get(health))
+}
+
+/// Channel CRUD + message history routes. Mounted by the `api` role (and by
+/// `all` for today's single-binary dev default).
+pub fn api_routes<CS, MS>(authenticator: Arc<Authenticator>) -> Router<AppState<CS, MS>>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    Router::new()
+        .route("/api/channels", post(create_channel))
+        .route("/api/channels/public", get(list_public_channels))
+        .route("/api/channels/{channel_id}", get(get_channel))
+        .route(
+            "/api/channels/{channel_id}/messages",
+            get(get_channel_messages),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            authenticator,
+            web::authenticate,
+        ))
+}
+
+/// WebSocket route. Mounted by the `gateway` role (and by `all`).
+pub fn ws_routes<CS, MS>() -> Router<AppState<CS, MS>>
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    Router::new().route("/ws/channels/{channel_id}", get(websocket_handler))
+}
+
+/// Assemble a router from the given route groups plus common middleware
+/// (request tracing, CORS) and application state. Each role composes only
+/// the route groups it needs.
+pub fn build_router<CS, MS>(routes: Router<AppState<CS, MS>>, state: AppState<CS, MS>) -> Router
+where
+    CS: ChannelService,
+    MS: MessageService,
+{
+    with_request_trace(routes)
+        .layer(CorsLayer::permissive())
+        .with_state(state)
+}
+
+/// Full router with every route group mounted. Used by the `all` role,
+/// which preserves today's single-binary behavior for local development.
 pub fn create_router<CS, MS>(
     channel_service: Arc<CS>,
     message_service: Arc<MS>,
@@ -65,32 +119,13 @@ where
         channel_service,
         message_service,
         connection_registry,
-        authenticator,
+        authenticator: authenticator.clone(),
     };
 
-    let health_route = Router::new().route("/health", get(health));
-
-    let api_routes = Router::new()
-        .route("/api/channels", post(create_channel))
-        .route("/api/channels/public", get(list_public_channels))
-        .route("/api/channels/{channel_id}", get(get_channel))
-        .route(
-            "/api/channels/{channel_id}/messages",
-            get(get_channel_messages),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.authenticator.clone(),
-            web::authenticate,
-        ));
-
-    let ws_routes = Router::new().route("/ws/channels/{channel_id}", get(websocket_handler));
-
     let router = Router::new()
-        .merge(health_route)
-        .merge(api_routes)
-        .merge(ws_routes);
+        .merge(health_routes())
+        .merge(api_routes(authenticator))
+        .merge(ws_routes());
 
-    with_request_trace(router)
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+    build_router(router, state)
 }

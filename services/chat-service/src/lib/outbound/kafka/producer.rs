@@ -28,10 +28,18 @@ pub struct EventProducer {
 }
 
 impl EventProducer {
-    /// Create a new Kafka event producer with topic sharding
+    /// Create a new Kafka event producer with topic sharding and
+    /// at-least-once delivery semantics.
     ///
     /// # Arguments
     /// * `config` - Application configuration
+    ///
+    /// # Notes:
+    /// - `acks=all`: wait for all in-sync replicas to acknowledge.
+    /// - `enable.idempotence=true`: prevents duplicate messages on retry.
+    /// - `max.in.flight.requests.per.connection=5`: pipelining with ordering
+    ///   preserved (idempotence caps the safe value at 5).
+    /// - `message.timeout.ms` comes from `kafka.delivery_timeout_ms`.
     pub fn new(config: &Config) -> Result<Self, anyhow::Error> {
         tracing::info!(
             "Initializing Kafka producer with brokers: {}, shards: {}",
@@ -41,11 +49,19 @@ impl EventProducer {
 
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", &config.kafka.brokers)
-            .set("message.timeout.ms", "5000")
+            .set(
+                "message.timeout.ms",
+                config.kafka.delivery_timeout_ms.to_string(),
+            )
             .set("queue.buffering.max.messages", "10000")
             .set("queue.buffering.max.kbytes", "1048576")
             .set("batch.num.messages", "100")
             .set("compression.type", "gzip")
+            .set("enable.idempotence", "true")
+            .set("acks", "all")
+            .set("retries", "10")
+            .set("max.in.flight.requests.per.connection", "5")
+            .set("retry.backoff.ms", "100")
             .create()?;
 
         let sharder = Arc::new(TopicSharder::new(config.kafka.num_shards, "chat.messages")?);
@@ -57,7 +73,7 @@ impl EventProducer {
 
         Ok(Self {
             producer,
-            timeout: Duration::from_secs(5),
+            timeout: Duration::from_millis(config.kafka.delivery_timeout_ms),
             sharder,
         })
     }
