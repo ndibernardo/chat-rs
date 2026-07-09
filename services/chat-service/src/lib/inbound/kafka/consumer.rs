@@ -118,12 +118,21 @@ impl EventConsumer {
 
         while let Some(result) = message_stream.next().await {
             if let Err(e) = self.process_message(result).await {
+                web::metrics::record_kafka_consumed(
+                    web::metrics::ConsumerKind::Broadcast,
+                    web::metrics::Outcome::Error,
+                );
                 tracing::error!("Error processing message: {}", e);
 
                 // Add exponential backoff on Kafka errors to avoid tight error loops
                 if matches!(e, MessageProcessingError::KafkaError(_)) {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 }
+            } else {
+                web::metrics::record_kafka_consumed(
+                    web::metrics::ConsumerKind::Broadcast,
+                    web::metrics::Outcome::Success,
+                );
             }
         }
 

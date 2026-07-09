@@ -120,7 +120,10 @@ pub async fn check_schema(cassandra: &CassandraConfig) -> Result<(), anyhow::Err
     }
 }
 
-async fn tables_in_keyspace(session: &Session, keyspace: &str) -> Result<Vec<String>, anyhow::Error> {
+async fn tables_in_keyspace(
+    session: &Session,
+    keyspace: &str,
+) -> Result<Vec<String>, anyhow::Error> {
     let rows = session
         .query_unpaged(
             "SELECT table_name FROM system_schema.tables WHERE keyspace_name = ?",

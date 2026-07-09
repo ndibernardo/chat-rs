@@ -84,13 +84,17 @@ where
 }
 
 /// Assemble a router from the given route groups plus common middleware
-/// (request tracing, CORS) and application state. Each role composes only
-/// the route groups it needs.
+/// (request tracing, metrics, CORS) and application state. Each role
+/// composes only the route groups it needs.
 pub fn build_router<CS, MS>(routes: Router<AppState<CS, MS>>, state: AppState<CS, MS>) -> Router
 where
     CS: ChannelService,
     MS: MessageService,
 {
+    // route_layer, not layer: it must wrap already-matched routes so
+    // `track_http_metrics` sees the `MatchedPath` extension.
+    let routes = routes.route_layer(middleware::from_fn(web::metrics::track_http_metrics));
+
     with_request_trace(routes)
         .layer(CorsLayer::permissive())
         .with_state(state)

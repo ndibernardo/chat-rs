@@ -117,12 +117,21 @@ impl<R: UserReplicaRepository> UserEventsConsumer<R> {
 
         while let Some(result) = message_stream.next().await {
             if let Err(error) = self.process_message(result).await {
+                web::metrics::record_kafka_consumed(
+                    web::metrics::ConsumerKind::UserEvents,
+                    web::metrics::Outcome::Error,
+                );
                 tracing::error!("Error processing user event: {}", error);
 
                 // Add backoff on Kafka errors to avoid tight error loops
                 if matches!(error, MessageProcessingError::KafkaError(_)) {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 }
+            } else {
+                web::metrics::record_kafka_consumed(
+                    web::metrics::ConsumerKind::UserEvents,
+                    web::metrics::Outcome::Success,
+                );
             }
         }
 

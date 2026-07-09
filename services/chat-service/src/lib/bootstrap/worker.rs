@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use web::HealthState;
-use web::PgReadyCheck;
-use web::PgSchemaReadyCheck;
-use web::ReadyCheck;
-use web::health_router;
+use web::health::HealthState;
+use web::health::PgReadyCheck;
+use web::health::PgSchemaReadyCheck;
+use web::health::ReadyCheck;
+use web::health::health_router;
 
 use super::common;
 use super::health_checks::ScyllaSchemaReadyCheck;
@@ -20,6 +20,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         kafka_brokers = %config.kafka.brokers,
         "Configuration loaded"
     );
+    web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
     let pg_pool = common::connect_pg_pool(&config).await?;
 

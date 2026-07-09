@@ -5,9 +5,12 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 auth = { path = "../auth" }
 async-trait = { workspace = true }
 axum = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }

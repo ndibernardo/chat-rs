@@ -46,7 +46,10 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
             replication_factor: 1,
             datacenter: None,
         },
-        server: ServerConfig { http_port: 0 },
+        server: ServerConfig {
+            http_port: 0,
+            metrics_port: 0,
+        },
         user_service: UserServiceConfig {
             grpc_url: "http://unused".to_string(),
         },

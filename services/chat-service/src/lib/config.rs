@@ -84,6 +84,15 @@ fn default_replication_factor() -> u32 {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ServerConfig {
     pub http_port: u16,
+    /// Port for the Prometheus exporter (`/metrics`), separate from
+    /// `http_port` — every role runs one regardless of what other HTTP
+    /// routes it serves.
+    #[serde(default = "default_metrics_port")]
+    pub metrics_port: u16,
+}
+
+fn default_metrics_port() -> u16 {
+    9090
 }
 
 /// User-service gRPC client configuration.

@@ -7,7 +7,7 @@ use rdkafka::ClientContext;
 use rdkafka::consumer::BaseConsumer;
 use rdkafka::consumer::ConsumerContext;
 use rdkafka::consumer::Rebalance;
-use web::ReadyCheck;
+use web::health::ReadyCheck;
 
 /// Tracks whether a consumer currently holds a partition assignment.
 ///
