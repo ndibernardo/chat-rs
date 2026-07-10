@@ -5,8 +5,8 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use super::outbox;
-use super::outbox::OutboxEvent;
+use outbox::OutboxEvent;
+
 use crate::domain::channel::errors::ChannelError;
 use crate::domain::channel::events::ChannelCreatedEvent;
 use crate::domain::channel::models::Channel;

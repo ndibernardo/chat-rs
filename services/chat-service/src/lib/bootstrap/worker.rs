@@ -14,7 +14,7 @@ use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
 use crate::inbound::kafka::user_consumer::UserEventsConsumer;
 use crate::outbound::kafka::EventProducer;
-use crate::outbound::relay::OutboxRelay;
+use outbox::OutboxRelay;
 
 /// `chat-worker`: background consumers and the outbox relay (persister and
 /// deleted-user cleanup join later). Serves a health-only HTTP listener —

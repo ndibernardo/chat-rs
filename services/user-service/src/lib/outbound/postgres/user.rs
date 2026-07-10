@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::outbox;
-use super::outbox::OutboxEvent;
+use outbox::OutboxEvent;
+
 use crate::domain::user::events::UserCreatedEvent;
 use crate::domain::user::events::UserDeletedEvent;
 use crate::domain::user::events::UserUpdatedEvent;

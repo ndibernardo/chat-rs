@@ -6,6 +6,8 @@ use config::Environment;
 use config::File;
 use serde::Deserialize;
 
+pub use outbox::OutboxConfig;
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -17,42 +19,6 @@ pub struct Config {
     pub shutdown: ShutdownConfig,
     #[serde(default)]
     pub outbox: OutboxConfig,
-}
-
-/// Transactional outbox relay timing.
-#[derive(Debug, Deserialize, Clone)]
-pub struct OutboxConfig {
-    /// How often the relay polls for unpublished rows.
-    #[serde(default = "default_outbox_poll_interval_ms")]
-    pub poll_interval_ms: u64,
-    /// Maximum rows claimed (`FOR UPDATE SKIP LOCKED`) per poll.
-    #[serde(default = "default_outbox_batch_size")]
-    pub batch_size: i64,
-    /// How long published rows are kept before the retention sweep deletes them.
-    #[serde(default = "default_outbox_retention_days")]
-    pub retention_days: i64,
-}
-
-impl Default for OutboxConfig {
-    fn default() -> Self {
-        Self {
-            poll_interval_ms: default_outbox_poll_interval_ms(),
-            batch_size: default_outbox_batch_size(),
-            retention_days: default_outbox_retention_days(),
-        }
-    }
-}
-
-fn default_outbox_poll_interval_ms() -> u64 {
-    500
-}
-
-fn default_outbox_batch_size() -> i64 {
-    100
-}
-
-fn default_outbox_retention_days() -> i64 {
-    7
 }
 
 /// Graceful-shutdown timing.

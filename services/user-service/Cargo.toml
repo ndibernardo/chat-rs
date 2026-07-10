@@ -61,6 +61,9 @@ auth = { path = "../../crates/auth" }
 # Shared web layer
 web = { path = "../../crates/web" }
 
+# Shared transactional outbox + relay
+outbox = { path = "../../crates/outbox" }
+
 # JWT
 jsonwebtoken = { workspace = true }
 
