@@ -86,6 +86,11 @@ pub enum ServerMessage {
         content: String,
         timestamp: DateTime<Utc>,
     },
+    /// Acknowledges a message the broker has durably accepted (`acks=all`).
+    /// Cassandra persistence happens afterward, asynchronously, via the
+    /// message persister — this ack confirms delivery ordering, not history
+    /// availability.
+    MessageAck { message_id: WsMessageId },
     /// Error message.
     Error { message: String },
     /// Pong response to ping.

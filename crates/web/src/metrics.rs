@@ -42,6 +42,7 @@ impl From<bool> for Outcome {
 pub enum ConsumerKind {
     Broadcast,
     UserEvents,
+    Persister,
 }
 
 impl ConsumerKind {
@@ -49,6 +50,7 @@ impl ConsumerKind {
         match self {
             ConsumerKind::Broadcast => "broadcast",
             ConsumerKind::UserEvents => "user_events",
+            ConsumerKind::Persister => "persister",
         }
     }
 }
