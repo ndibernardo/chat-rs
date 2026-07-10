@@ -35,6 +35,9 @@ delivery_timeout_ms = 10000
 topic = "user-events"
 group_id = "chat-service-user-events"
 
+[kafka.cleanup]
+group_id = "chat-cleanup"
+
 [websocket]
 send_queue_capacity = 256
 

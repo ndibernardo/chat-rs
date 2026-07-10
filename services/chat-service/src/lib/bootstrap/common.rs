@@ -34,6 +34,10 @@ pub struct Adapters {
         >,
     >,
     pub user_repository: Arc<postgres::UserReplicaRepository>,
+    /// Kept alongside `channel_service` (which owns its own handle) so the
+    /// deleted-user cleanup consumer can erase memberships and deactivate
+    /// direct channels without going through the domain service API.
+    pub channel_repository: Arc<postgres::ChannelRepository>,
     /// Kept alongside `message_service` (which owns its own handle) so
     /// readiness checks can ping Scylla without reaching through the
     /// message service's domain-level API.
@@ -101,7 +105,7 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
         &event_producer,
     )));
 
-    let channel_service = Arc::new(ChannelService::new(channel_repository));
+    let channel_service = Arc::new(ChannelService::new(Arc::clone(&channel_repository)));
 
     let grpc_user_client = Arc::new(
         grpc::UserServiceClient::new(&config.user_service.grpc_url)
@@ -125,6 +129,7 @@ pub async fn build_adapters(config: &Config, pg_pool: PgPool) -> Result<Adapters
         channel_service,
         message_service,
         user_repository,
+        channel_repository,
         message_repository,
         event_producer,
         pg_pool,

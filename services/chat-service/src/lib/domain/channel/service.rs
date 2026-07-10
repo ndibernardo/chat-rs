@@ -91,6 +91,12 @@ mod tests {
             async fn find_public_channels(&self) -> Result<Vec<Channel>, ChannelError>;
             async fn find_by_user(&self, user_id: UserId) -> Result<Vec<Channel>, ChannelError>;
             async fn delete(&self, id: ChannelId) -> Result<(), ChannelError>;
+            async fn remove_user_memberships(&self, user_id: UserId) -> Result<(), ChannelError>;
+            async fn deactivate_direct_channels_of(
+                &self,
+                user_id: UserId,
+                deactivated_at: chrono::DateTime<chrono::Utc>,
+            ) -> Result<(), ChannelError>;
         }
     }
 

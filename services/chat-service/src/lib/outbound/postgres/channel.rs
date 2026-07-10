@@ -370,4 +370,45 @@ impl ports::ChannelRepository for ChannelRepository {
 
         Ok(())
     }
+
+    async fn remove_user_memberships(&self, user_id: UserId) -> Result<(), ChannelError> {
+        sqlx::query!(
+            "DELETE FROM channel_members WHERE user_id = $1",
+            user_id.as_uuid(),
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn deactivate_direct_channels_of(
+        &self,
+        user_id: UserId,
+        deactivated_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), ChannelError> {
+        // Located via direct_channel_keys, not channel_members: cleanup
+        // removes this user's membership rows before this step, but the
+        // participant pair is immutable and survives that deletion.
+        // `deactivated_at IS NULL` keeps the first deactivation timestamp
+        // when the triggering event is redelivered.
+        sqlx::query!(
+            r#"
+            UPDATE channels SET deactivated_at = $2
+            WHERE deactivated_at IS NULL
+              AND id IN (
+                  SELECT channel_id FROM direct_channel_keys
+                  WHERE user_id_low = $1 OR user_id_high = $1
+              )
+            "#,
+            user_id.as_uuid(),
+            deactivated_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ChannelError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
 }

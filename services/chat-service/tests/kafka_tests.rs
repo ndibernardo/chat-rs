@@ -3,6 +3,7 @@ mod common;
 use std::time::Duration;
 
 use chat_service::config::CassandraConfig;
+use chat_service::config::CleanupConfig;
 use chat_service::config::Config;
 use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
@@ -78,6 +79,7 @@ fn create_kafka_producer(kafka_brokers: &str) -> EventProducer {
             },
             dlq: DlqConfig::default(),
             persister: PersisterConfig::default(),
+            cleanup: CleanupConfig::default(),
         },
         websocket: WebsocketConfig::default(),
         shutdown: ShutdownConfig::default(),

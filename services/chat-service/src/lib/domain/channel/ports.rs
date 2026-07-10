@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use chrono::DateTime;
+use chrono::Utc;
 
 use super::events::ChannelCreatedEvent;
 use super::models::Channel;
@@ -136,4 +138,23 @@ pub trait ChannelRepository: Send + Sync + 'static {
     /// * `NotFound` - Channel does not exist
     /// * `DatabaseError` - Database operation failed
     async fn delete(&self, id: ChannelId) -> Result<(), ChannelError>;
+
+    /// Remove every channel membership held by the user. Idempotent: a user
+    /// with no remaining memberships is a success, not an error.
+    ///
+    /// # Errors
+    /// * `DatabaseError` - Database operation failed
+    async fn remove_user_memberships(&self, user_id: UserId) -> Result<(), ChannelError>;
+
+    /// Mark every direct channel the user participates in as deactivated at
+    /// the given instant. Idempotent: already-deactivated channels keep
+    /// their original timestamp and re-running succeeds.
+    ///
+    /// # Errors
+    /// * `DatabaseError` - Database operation failed
+    async fn deactivate_direct_channels_of(
+        &self,
+        user_id: UserId,
+        deactivated_at: DateTime<Utc>,
+    ) -> Result<(), ChannelError>;
 }

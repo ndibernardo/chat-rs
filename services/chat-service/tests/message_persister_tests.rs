@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chat_service::config::CassandraConfig;
+use chat_service::config::CleanupConfig;
 use chat_service::config::Config;
 use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
@@ -79,6 +80,7 @@ fn persister_test_config(test_db: &TestDb, messages_topic: String) -> Config {
             persister: PersisterConfig {
                 group_id: format!("test-persister-{}", uuid::Uuid::new_v4()),
             },
+            cleanup: CleanupConfig::default(),
         },
         websocket: WebsocketConfig::default(),
         shutdown: ShutdownConfig::default(),

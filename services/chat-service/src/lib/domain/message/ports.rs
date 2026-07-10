@@ -115,6 +115,14 @@ pub trait MessageRepository: Send + Sync + 'static {
         user_id: UserId,
         limit: Limit,
     ) -> Result<Vec<Message>, MessageError>;
+
+    /// Permanently delete every message the user ever sent, from both the
+    /// per-channel and per-user views. Idempotent: re-running after a
+    /// partial failure deletes whatever remains and succeeds on nothing.
+    ///
+    /// # Errors
+    /// * `DatabaseError` - Database operation failed
+    async fn delete_all_by_user(&self, user_id: UserId) -> Result<(), MessageError>;
 }
 
 /// Event publishing for message domain events.

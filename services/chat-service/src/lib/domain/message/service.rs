@@ -132,6 +132,7 @@ mod tests {
                 user_id: UserId,
                 limit: Limit,
             ) -> Result<Vec<Message>, MessageError>;
+            async fn delete_all_by_user(&self, user_id: UserId) -> Result<(), MessageError>;
         }
     }
 

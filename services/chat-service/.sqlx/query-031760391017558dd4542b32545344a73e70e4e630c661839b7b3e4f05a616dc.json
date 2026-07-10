@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE channels SET deactivated_at = $2\n            WHERE deactivated_at IS NULL\n              AND id IN (\n                  SELECT channel_id FROM direct_channel_keys\n                  WHERE user_id_low = $1 OR user_id_high = $1\n              )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "031760391017558dd4542b32545344a73e70e4e630c661839b7b3e4f05a616dc"
+}
