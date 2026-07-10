@@ -1,0 +1,54 @@
+{{- if .Values.networkPolicies.enabled }}
+# CNPG's instance manager and the Scylla sidecar/agent both call the
+# Kubernetes API server directly (leader election, status updates). In
+# kind the apiserver is a node IP with no stable pod selector to target,
+# so this is scoped by destination port against any peer rather than by
+# ipBlock/CIDR — the pragmatic shape for a single dev cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress-postgres
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-apiserver") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: In
+        values:
+          - user-db
+          - chat-db
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apiserver-egress-scylla
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-apiserver") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      scylla/cluster: chat-scylla
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+{{- end }}

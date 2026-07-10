@@ -1,0 +1,40 @@
+# Prod-ish defaults. Dev overrides live in values-dev.yaml.
+
+kafka:
+  clusterName: chat-kafka
+  replicas: 3
+  storage: 100Gi
+  deleteClaim: false
+  replicationFactor: 3
+  minInsyncReplicas: 2
+
+topics:
+  userEvents:
+    name: user-events
+    partitions: 12
+  chatMessages:
+    name: chat.messages
+    partitions: 48
+    retentionMs: "604800000"
+  dlq:
+    partitions: 1
+
+postgres:
+  userDb:
+    instances: 3
+    storage: 100Gi
+  chatDb:
+    instances: 3
+    storage: 100Gi
+  podMonitor: true
+
+scylla:
+  version: 2026.1.3
+  agentVersion: 3.10.1
+  developerMode: false
+  datacenter: dc1
+  rack: rack1
+  members: 3
+  storage: 100Gi
+  cpu: "1"
+  memory: 1Gi

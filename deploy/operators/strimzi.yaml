@@ -1,0 +1,5 @@
+# strimzi/strimzi-kafka-operator 1.1.0 (https://strimzi.io/charts/)
+# Empty watchNamespaces is a silent no-op: the operator runs but ignores every
+# Kafka/KafkaTopic CR outside the listed namespaces, with no error surfaced.
+watchNamespaces:
+  - chat-rs

@@ -57,6 +57,11 @@
               openapi-generator-cli
               jq
               websocat
+              kind
+              kubectl
+              kubernetes-helm
+              kubeconform
+              k9s
             ]
             ++ lib.optionals stdenv.isDarwin [
               apple-sdk_12

@@ -1,0 +1,50 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ .Values.topics.userEvents.name }}
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.clusterName }}
+spec:
+  partitions: {{ .Values.topics.userEvents.partitions }}
+  replicas: {{ .Values.kafka.replicationFactor }}
+  config:
+    min.insync.replicas: {{ .Values.kafka.minInsyncReplicas }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ .Values.topics.chatMessages.name }}
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.clusterName }}
+spec:
+  partitions: {{ .Values.topics.chatMessages.partitions }}
+  replicas: {{ .Values.kafka.replicationFactor }}
+  config:
+    min.insync.replicas: {{ .Values.kafka.minInsyncReplicas }}
+    # Scylla is the durable archive; Kafka only needs to bridge gateway to
+    # persister, so a week of retention bounds disk without risking history.
+    retention.ms: {{ .Values.topics.chatMessages.retentionMs | quote }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ .Values.topics.userEvents.name }}.dlq
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.clusterName }}
+spec:
+  partitions: {{ .Values.topics.dlq.partitions }}
+  replicas: {{ .Values.kafka.replicationFactor }}
+  config:
+    min.insync.replicas: {{ .Values.kafka.minInsyncReplicas }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: {{ .Values.topics.chatMessages.name }}.dlq
+  labels:
+    strimzi.io/cluster: {{ .Values.kafka.clusterName }}
+spec:
+  partitions: {{ .Values.topics.dlq.partitions }}
+  replicas: {{ .Values.kafka.replicationFactor }}
+  config:
+    min.insync.replicas: {{ .Values.kafka.minInsyncReplicas }}

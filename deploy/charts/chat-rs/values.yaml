@@ -1,0 +1,98 @@
+# Prod-ish defaults. Dev overrides live in values-dev.yaml.
+
+# Not a prod/dev toggle — stays true everywhere. Exists so a lockdown
+# regression can be ruled in or out fast with --set networkPolicies.enabled=false.
+networkPolicies:
+  enabled: true
+
+# ServiceMonitors/PodMonitors require the prometheus-operator CRDs — the flag
+# lets the chart render on a cluster without them.
+monitoring:
+  enabled: true
+
+images:
+  user:
+    repository: chat-rs/user-service
+    tag: dev
+    pullPolicy: IfNotPresent
+  chat:
+    repository: chat-rs/chat-service
+    tag: dev
+    pullPolicy: IfNotPresent
+
+kafka:
+  brokers: chat-kafka-kafka-bootstrap.chat-rs.svc:9092
+
+cors:
+  # No wildcard support in the app — every origin must be listed explicitly.
+  allowedOrigins: ""
+
+jwt:
+  # Injected at install time via --set-file; templates fail if left empty.
+  privateKey: ""
+  publicKey: ""
+
+cassandra:
+  # Comma-separated list — CassandraConfig::nodes deserializes it as
+  # Vec<String> (see config.rs's list_separator setup).
+  nodes: chat-scylla-client.chat-rs.svc.cluster.local:9042
+  datacenter: dc1
+  # Must match the ScyllaCluster's member count in the target environment —
+  # values-dev.yaml overrides this to 1 for the single-node dev cluster.
+  replicationFactor: 3
+
+userServiceGrpcUrl: http://user-service-grpc.chat-rs.svc.cluster.local:50051
+
+userService:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 512Mi
+
+userOutboxRelay:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+chatApi:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi
+
+chatWsGateway:
+  replicas: 3
+  # Must exceed shutdown.readiness_delay_seconds + shutdown.drain_grace_seconds
+  # (config/kubernetes.toml) or Kubernetes SIGKILLs the pod before WS clients
+  # get their close frame and a chance to reconnect elsewhere.
+  terminationGracePeriodSeconds: 120
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+chatWorker:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi

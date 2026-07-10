@@ -1,0 +1,15 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: chat-ws-gateway
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 30s
+{{- end }}

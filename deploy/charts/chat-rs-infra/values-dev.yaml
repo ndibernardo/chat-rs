@@ -1,0 +1,27 @@
+# Dev overrides only — everything not listed here falls back to values.yaml.
+
+kafka:
+  replicas: 1
+  storage: 2Gi
+  deleteClaim: true
+  replicationFactor: 1
+  minInsyncReplicas: 1
+
+topics:
+  userEvents:
+    partitions: 3
+  chatMessages:
+    partitions: 8
+
+postgres:
+  userDb:
+    instances: 1
+    storage: 2Gi
+  chatDb:
+    instances: 1
+    storage: 2Gi
+
+scylla:
+  developerMode: true
+  members: 1
+  storage: 5Gi

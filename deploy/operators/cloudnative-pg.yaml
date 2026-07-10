@@ -1,0 +1,3 @@
+# cnpg/cloudnative-pg 0.29.0 (https://cloudnative-pg.github.io/charts)
+# No overrides needed: chart defaults (single operator replica, no webhook
+# cert dependency on cert-manager — CNPG manages its own) work as-is for dev.
