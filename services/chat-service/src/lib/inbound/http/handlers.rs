@@ -189,9 +189,9 @@ impl From<MessageError> for ApiError {
             | MessageError::InvalidContent(_)
             | MessageError::InvalidChannelId(_)
             | MessageError::InvalidUserId(_) => ApiError::UnprocessableEntity(err.to_string()),
-            MessageError::DatabaseError(msg) | MessageError::Unknown(msg) => {
-                ApiError::InternalServerError(msg)
-            }
+            MessageError::DatabaseError(msg)
+            | MessageError::Unknown(msg)
+            | MessageError::PublishFailed(msg) => ApiError::InternalServerError(msg),
         }
     }
 }

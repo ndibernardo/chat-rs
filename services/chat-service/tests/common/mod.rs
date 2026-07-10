@@ -11,6 +11,7 @@ use chat_service::config::DlqConfig;
 use chat_service::config::JwtConfig;
 use chat_service::config::KafkaConfig;
 use chat_service::config::OutboxConfig;
+use chat_service::config::PersisterConfig;
 use chat_service::config::ServerConfig;
 use chat_service::config::ShutdownConfig;
 use chat_service::config::UserEventsConfig;
@@ -129,6 +130,7 @@ impl TestApp {
                     group_id: format!("test-user-events-{}", uuid::Uuid::new_v4()),
                 },
                 dlq: DlqConfig::default(),
+                persister: PersisterConfig::default(),
             },
             websocket: WebsocketConfig::default(),
             shutdown: ShutdownConfig::default(),

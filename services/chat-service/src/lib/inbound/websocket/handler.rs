@@ -15,6 +15,7 @@ use uuid::Uuid;
 use super::messages::ClientMessage;
 use super::messages::ServerMessage;
 use super::messages::WsChannelId;
+use super::messages::WsMessageId;
 use crate::domain::channel::models::ChannelId;
 use crate::domain::channel::models::Membership;
 use crate::domain::channel::ports::ChannelService;
@@ -257,22 +258,30 @@ async fn process_client_message<MS: MessageService>(
                     let message_content = MessageContent::new(content)
                         .map_err(|e| format!("Invalid message content: {}", e))?;
 
-                    // Save message to database and publish to Kafka
-                    // The MessageService will:
-                    // 1. Save the message to Cassandra
-                    // 2. Publish MessageSentEvent to Kafka (sharded by channel_id)
-                    // 3. KafkaEventConsumer on ALL instances will receive the event
-                    // 4. Each instance broadcasts to its local WebSocket connections
+                    // Kafka-first send path: `send_message` returns once the
+                    // broker has ack'd (acks=all). Cassandra persistence and
+                    // broadcast to other instances both happen afterward,
+                    // asynchronously, via the persister and broadcast
+                    // consumers reading the same topic.
                     let message = message_service
                         .send_message(membership, message_content)
                         .await
                         .map_err(|e| format!("Failed to send message: {}", e))?;
 
                     tracing::debug!(
-                        "Message {} saved and published to Kafka for channel {}",
+                        "Message {} published to Kafka for channel {}",
                         message.id(),
                         membership.channel_id()
                     );
+
+                    let ack_msg = ServerMessage::MessageAck {
+                        message_id: WsMessageId::from(message.id()),
+                    };
+                    if let Ok(json) = serde_json::to_string(&ack_msg)
+                        && tx.try_send(WebSocketMessage::Text(json.into())).is_err()
+                    {
+                        tracing::warn!("Send queue full or closed, dropping message ack");
+                    }
 
                     Ok(())
                 }

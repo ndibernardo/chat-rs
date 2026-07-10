@@ -171,6 +171,8 @@ pub struct KafkaConfig {
     pub user_events: UserEventsConfig,
     #[serde(default)]
     pub dlq: DlqConfig,
+    #[serde(default)]
+    pub persister: PersisterConfig,
 }
 
 fn default_messages_topic() -> String {
@@ -186,6 +188,27 @@ fn default_delivery_timeout_ms() -> u64 {
 pub struct UserEventsConfig {
     pub topic: String,
     pub group_id: String,
+}
+
+/// Kafka-first message persister configuration: the shared consumer group
+/// that writes `MessageSent` events from `kafka.messages_topic` into
+/// Cassandra, decoupling send-path latency from Cassandra availability.
+#[derive(Debug, Deserialize, Clone)]
+pub struct PersisterConfig {
+    #[serde(default = "default_persister_group_id")]
+    pub group_id: String,
+}
+
+impl Default for PersisterConfig {
+    fn default() -> Self {
+        Self {
+            group_id: default_persister_group_id(),
+        }
+    }
+}
+
+fn default_persister_group_id() -> String {
+    "chat-persister".to_string()
 }
 
 /// Dead-letter-queue policy shared by every Kafka consumer.

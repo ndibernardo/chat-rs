@@ -75,17 +75,18 @@ where
         resolved_user.ok_or(MessageError::UserNotFound(membership.user_id()))?;
 
         let message = Message::new(membership.channel_id(), membership.user_id(), content);
+        let event = MessageSentEvent::new(&message);
 
-        let saved_message = self.message_repository.create(message).await?;
+        // Kafka's ack (acks=all) is the durability point: Cassandra
+        // persistence happens asynchronously via the persister consumer, so
+        // a publish failure must fail the send rather than accept a message
+        // that would otherwise never reach history.
+        self.event_publisher
+            .publish_message_sent(&event)
+            .await
+            .map_err(|e| MessageError::PublishFailed(e.to_string()))?;
 
-        let event = MessageSentEvent::new(&saved_message);
-
-        // fire-and-forget: broadcast failure must not block the sender
-        if let Err(e) = self.event_publisher.publish_message_sent(&event).await {
-            tracing::error!("Failed to publish message event: {}", e);
-        }
-
-        Ok(saved_message)
+        Ok(message)
     }
 
     async fn get_channel_messages(
@@ -165,8 +166,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_message_returns_persisted_message() {
-        let mut message_repository = MockTestMessageRepository::new();
+    async fn send_message_returns_message_published_to_kafka() {
+        let message_repository = MockTestMessageRepository::new();
         let mut user_resolver = MockTestUserResolver::new();
         let mut event_publisher = MockTestEventPublisher::new();
 
@@ -180,18 +181,13 @@ mod tests {
             .times(1)
             .returning(move |id| Ok(Some(known_user(id))));
 
-        message_repository
-            .expect_create()
-            .withf(move |m| {
-                m.channel_id() == channel_id
-                    && m.user_id() == user_id
-                    && m.content().as_str() == "What's the deployment status?"
-            })
-            .times(1)
-            .returning(|m| Ok(m));
-
         event_publisher
             .expect_publish_message_sent()
+            .withf(move |event| {
+                event.channel_id == channel_id
+                    && event.user_id == user_id
+                    && event.content == "What's the deployment status?"
+            })
             .times(1)
             .returning(|_| Ok(()));
 
@@ -209,6 +205,42 @@ mod tests {
         assert_eq!(message.channel_id(), channel_id);
         assert_eq!(message.user_id(), user_id);
         assert_eq!(message.content().as_str(), "What's the deployment status?");
+    }
+
+    #[tokio::test]
+    async fn send_message_returns_publish_failed_when_kafka_publish_fails() {
+        let message_repository = MockTestMessageRepository::new();
+        let mut user_resolver = MockTestUserResolver::new();
+        let mut event_publisher = MockTestEventPublisher::new();
+
+        let user_id = UserId::new();
+        let channel_id = ChannelId::new();
+        let membership = Membership::test_new(user_id, channel_id);
+
+        user_resolver
+            .expect_resolve()
+            .times(1)
+            .returning(move |id| Ok(Some(known_user(id))));
+
+        event_publisher
+            .expect_publish_message_sent()
+            .times(1)
+            .returning(|_| {
+                Err(crate::domain::errors::EventPublisherError::PublishFailed(
+                    "broker unreachable".to_string(),
+                ))
+            });
+
+        let service = Service::new(
+            Arc::new(message_repository),
+            Arc::new(user_resolver),
+            Arc::new(event_publisher),
+        );
+
+        let content = MessageContent::new("Is the broker back up yet?".to_string()).unwrap();
+        let result = service.send_message(membership, content).await;
+
+        assert!(matches!(result, Err(MessageError::PublishFailed(_))));
     }
 
     #[tokio::test]

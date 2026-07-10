@@ -56,7 +56,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
 
     match args.role {
         Role::All => api::run_all(config).await,
-        Role::Api => api::run_api_only(config).await,
+        Role::Api => api::run_api(config).await,
         Role::Gateway => gateway::run(config).await,
         Role::Worker => worker::run(config).await,
     }

@@ -55,6 +55,9 @@ pub enum MessageError {
     #[error("Database error: {0}")]
     DatabaseError(String),
 
+    #[error("Failed to publish message event: {0}")]
+    PublishFailed(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

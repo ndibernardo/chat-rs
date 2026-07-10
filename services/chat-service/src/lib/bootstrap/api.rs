@@ -18,7 +18,7 @@ use crate::inbound::http::router::AppState;
 
 /// `chat-api`: channel API and message history over HTTP. No Kafka consumers,
 /// no WebSocket route.
-pub async fn run_api_only(config: Config) -> Result<(), anyhow::Error> {
+pub async fn run_api(config: Config) -> Result<(), anyhow::Error> {
     log_config(&config);
     web::metrics::install_prometheus_recorder(config.server.metrics_port)?;
 
@@ -77,6 +77,10 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         &config,
         adapters.user_repository.clone(),
     )?;
+    let message_persister = crate::inbound::kafka::persister::MessagePersister::new(
+        &config,
+        Arc::clone(&adapters.message_repository),
+    )?;
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
@@ -93,6 +97,7 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         ))),
         Arc::new(message_event_consumer.assignment_tracker()),
         Arc::new(user_events_consumer.assignment_tracker()),
+        Arc::new(message_persister.assignment_tracker()),
     ];
 
     let message_consumer_cancellation = CancellationToken::new();
@@ -121,6 +126,18 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         user_events_consumer
             .start_consuming(user_consumer_token)
             .await;
+    });
+
+    let persister_cancellation = CancellationToken::new();
+    let persister_token = persister_cancellation.clone();
+
+    tracing::info!(
+        consumer = "message_persister",
+        topic = %config.kafka.messages_topic,
+        "Starting Kafka message persister"
+    );
+    let persister_handle = tokio::spawn(async move {
+        message_persister.start_consuming(persister_token).await;
     });
 
     let connection_registry = Arc::clone(&adapters.connection_registry);
@@ -156,6 +173,12 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         "user_events",
         &user_consumer_cancellation,
         user_consumer_handle,
+    )
+    .await;
+    common::stop_consumer(
+        "message_persister",
+        &persister_cancellation,
+        persister_handle,
     )
     .await;
 
