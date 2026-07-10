@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use futures::TryStreamExt;
 use scylla::client::caching_session::CachingSession;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::value::CqlTimeuuid;
@@ -19,7 +20,7 @@ use crate::domain::message::ports;
 use crate::domain::user::models::UserId;
 
 /// Number of distinct prepared-statement shapes this repository executes.
-const PREPARED_STATEMENT_CACHE_SIZE: usize = 8;
+const PREPARED_STATEMENT_CACHE_SIZE: usize = 12;
 
 /// Convert a decoded row, shared by `messages_by_channel` and `messages_by_user`
 /// (which store the same columns under a different clustering key), into a `Message`.
@@ -203,5 +204,49 @@ impl ports::MessageRepository for MessageRepository {
         }
 
         Ok(messages)
+    }
+
+    async fn delete_all_by_user(&self, user_id: UserId) -> Result<(), MessageError> {
+        // messages_by_user is the index that locates this user's rows in
+        // messages_by_channel (whose partition key is channel_id), so it is
+        // paged through first and dropped only after every per-channel row
+        // is gone — a crash mid-way leaves the index intact for a rerun.
+        let pager = self
+            .session
+            .execute_iter(
+                "SELECT channel_id, message_id FROM messages_by_user WHERE user_id = ?",
+                (user_id.as_uuid(),),
+            )
+            .await
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+
+        let mut rows = pager
+            .rows_stream::<(Uuid, CqlTimeuuid)>()
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+
+        while let Some(row) = rows
+            .try_next()
+            .await
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?
+        {
+            let (channel_id, message_id_timeuuid) = row;
+            self.session
+                .execute_unpaged(
+                    "DELETE FROM messages_by_channel WHERE channel_id = ? AND message_id = ?",
+                    (channel_id, message_id_timeuuid),
+                )
+                .await
+                .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+        }
+
+        self.session
+            .execute_unpaged(
+                "DELETE FROM messages_by_user WHERE user_id = ?",
+                (user_id.as_uuid(),),
+            )
+            .await
+            .map_err(|e| MessageError::DatabaseError(e.to_string()))?;
+
+        Ok(())
     }
 }

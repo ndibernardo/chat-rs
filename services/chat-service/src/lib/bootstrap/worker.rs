@@ -13,15 +13,16 @@ use super::health_checks::ProducerReadyCheck;
 use super::health_checks::ScyllaReadyCheck;
 use super::health_checks::ScyllaSchemaReadyCheck;
 use crate::config::Config;
+use crate::inbound::kafka::cleanup::CleanupConsumer;
 use crate::inbound::kafka::persister::MessagePersister;
 use crate::inbound::kafka::user_consumer::UserEventsConsumer;
 use crate::outbound::kafka::EventProducer;
 use crate::outbound::scylla;
 use outbox::OutboxRelay;
 
-/// `chat-worker`: background consumers (user-replica, message persister) and
-/// the outbox relay (deleted-user cleanup joins later). Serves a
-/// health-only HTTP listener — no API routes, no WebSocket route.
+/// `chat-worker`: background consumers (user-replica, message persister,
+/// deleted-user cleanup) and the outbox relay. Serves a health-only HTTP
+/// listener — no API routes, no WebSocket route.
 pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     tracing::info!(
         cassandra_nodes = ?config.cassandra.nodes,
@@ -35,10 +36,16 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     let user_repository = Arc::new(crate::outbound::postgres::UserReplicaRepository::new(
         pg_pool.clone(),
     ));
+    let channel_repository = Arc::new(crate::outbound::postgres::ChannelRepository::new(
+        pg_pool.clone(),
+        config.kafka.messages_topic.clone(),
+    ));
     let message_repository = Arc::new(scylla::MessageRepository::new(&config).await?);
 
     let user_events_consumer = UserEventsConsumer::new(&config, user_repository)?;
     let message_persister = MessagePersister::new(&config, Arc::clone(&message_repository))?;
+    let cleanup_consumer =
+        CleanupConsumer::new(&config, Arc::clone(&message_repository), channel_repository)?;
     let event_producer = Arc::new(EventProducer::new(&config)?);
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
@@ -51,6 +58,7 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         Arc::new(ScyllaSchemaReadyCheck::new(config.cassandra.clone())),
         Arc::new(user_events_consumer.assignment_tracker()),
         Arc::new(message_persister.assignment_tracker()),
+        Arc::new(cleanup_consumer.assignment_tracker()),
         Arc::new(ProducerReadyCheck::new(Arc::clone(&event_producer))),
     ];
 
@@ -78,6 +86,18 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
     );
     let persister_handle = tokio::spawn(async move {
         message_persister.start_consuming(persister_token).await;
+    });
+
+    let cleanup_cancellation = CancellationToken::new();
+    let cleanup_token = cleanup_cancellation.clone();
+
+    tracing::info!(
+        consumer = "deleted_user_cleanup",
+        topic = %config.kafka.user_events.topic,
+        "Starting Kafka deleted-user cleanup consumer"
+    );
+    let cleanup_handle = tokio::spawn(async move {
+        cleanup_consumer.start_consuming(cleanup_token).await;
     });
 
     let relay = OutboxRelay::new(
@@ -118,6 +138,12 @@ pub async fn run(config: Config) -> Result<(), anyhow::Error> {
         "message_persister",
         &persister_cancellation,
         persister_handle,
+    )
+    .await;
+    common::stop_consumer(
+        "deleted_user_cleanup",
+        &cleanup_cancellation,
+        cleanup_handle,
     )
     .await;
     common::stop_consumer("outbox_relay", &relay_cancellation, relay_handle).await;

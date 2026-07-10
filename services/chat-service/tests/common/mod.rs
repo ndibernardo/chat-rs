@@ -4,6 +4,7 @@ use auth::Authenticator;
 use auth::Claims;
 use auth::JwtHandler;
 use chat_service::config::CassandraConfig;
+use chat_service::config::CleanupConfig;
 use chat_service::config::Config;
 use chat_service::config::CorsConfig;
 use chat_service::config::DatabaseConfig;
@@ -131,6 +132,7 @@ impl TestApp {
                 },
                 dlq: DlqConfig::default(),
                 persister: PersisterConfig::default(),
+                cleanup: CleanupConfig::default(),
             },
             websocket: WebsocketConfig::default(),
             shutdown: ShutdownConfig::default(),

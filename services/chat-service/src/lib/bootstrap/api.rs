@@ -81,6 +81,11 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         &config,
         Arc::clone(&adapters.message_repository),
     )?;
+    let cleanup_consumer = crate::inbound::kafka::cleanup::CleanupConsumer::new(
+        &config,
+        Arc::clone(&adapters.message_repository),
+        Arc::clone(&adapters.channel_repository),
+    )?;
 
     let checks: Vec<Arc<dyn ReadyCheck>> = vec![
         Arc::new(PgReadyCheck::new(adapters.pg_pool.clone())),
@@ -98,6 +103,7 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         Arc::new(message_event_consumer.assignment_tracker()),
         Arc::new(user_events_consumer.assignment_tracker()),
         Arc::new(message_persister.assignment_tracker()),
+        Arc::new(cleanup_consumer.assignment_tracker()),
     ];
 
     let message_consumer_cancellation = CancellationToken::new();
@@ -140,6 +146,18 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         message_persister.start_consuming(persister_token).await;
     });
 
+    let cleanup_cancellation = CancellationToken::new();
+    let cleanup_token = cleanup_cancellation.clone();
+
+    tracing::info!(
+        consumer = "deleted_user_cleanup",
+        topic = %config.kafka.user_events.topic,
+        "Starting Kafka deleted-user cleanup consumer"
+    );
+    let cleanup_handle = tokio::spawn(async move {
+        cleanup_consumer.start_consuming(cleanup_token).await;
+    });
+
     let connection_registry = Arc::clone(&adapters.connection_registry);
     let health_state = HealthState::new(checks);
     let draining = health_state.draining_flag();
@@ -179,6 +197,12 @@ pub async fn run_all(config: Config) -> Result<(), anyhow::Error> {
         "message_persister",
         &persister_cancellation,
         persister_handle,
+    )
+    .await;
+    common::stop_consumer(
+        "deleted_user_cleanup",
+        &cleanup_cancellation,
+        cleanup_handle,
     )
     .await;
 

@@ -43,6 +43,7 @@ pub enum ConsumerKind {
     Broadcast,
     UserEvents,
     Persister,
+    Cleanup,
 }
 
 impl ConsumerKind {
@@ -51,6 +52,7 @@ impl ConsumerKind {
             ConsumerKind::Broadcast => "broadcast",
             ConsumerKind::UserEvents => "user_events",
             ConsumerKind::Persister => "persister",
+            ConsumerKind::Cleanup => "cleanup",
         }
     }
 }

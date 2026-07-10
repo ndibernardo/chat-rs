@@ -173,6 +173,8 @@ pub struct KafkaConfig {
     pub dlq: DlqConfig,
     #[serde(default)]
     pub persister: PersisterConfig,
+    #[serde(default)]
+    pub cleanup: CleanupConfig,
 }
 
 fn default_messages_topic() -> String {
@@ -209,6 +211,29 @@ impl Default for PersisterConfig {
 
 fn default_persister_group_id() -> String {
     "chat-persister".to_string()
+}
+
+/// Deleted-user cleanup configuration: the shared consumer group that reads
+/// `user_deleted` events from `kafka.user_events.topic` and erases the
+/// deleted user's footprint (message history, memberships, direct channels).
+/// Separate from the replica consumer group so cleanup lag never delays
+/// replica updates, and vice versa.
+#[derive(Debug, Deserialize, Clone)]
+pub struct CleanupConfig {
+    #[serde(default = "default_cleanup_group_id")]
+    pub group_id: String,
+}
+
+impl Default for CleanupConfig {
+    fn default() -> Self {
+        Self {
+            group_id: default_cleanup_group_id(),
+        }
+    }
+}
+
+fn default_cleanup_group_id() -> String {
+    "chat-cleanup".to_string()
 }
 
 /// Dead-letter-queue policy shared by every Kafka consumer.
