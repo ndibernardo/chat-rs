@@ -1,0 +1,29 @@
+# prometheus-community/kube-prometheus-stack 87.12.5
+# (https://prometheus-community.github.io/helm-charts)
+prometheus:
+  prometheusSpec:
+    # Default true means Prometheus only watches ServiceMonitors/PodMonitors
+    # carrying this release's own labels — every ServiceMonitor the app chart
+    # ships later would be silently ignored without these two set to false.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    retention: 24h
+
+alertmanager:
+  # No alert routing configured yet in dev; trims RAM.
+  enabled: false
+
+grafana:
+  enabled: true
+
+# Control-plane components aren't scrapable on kind (kubeadm/kind manages
+# them outside of static pods reachable the usual way) — leaving these on
+# just produces permanently-down targets.
+kubeControllerManager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false

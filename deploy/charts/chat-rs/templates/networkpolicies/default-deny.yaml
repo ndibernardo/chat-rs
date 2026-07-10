@@ -1,0 +1,16 @@
+{{- if .Values.networkPolicies.enabled }}
+# Deny-all baseline for every pod in this namespace, app and infra CRs
+# alike — NetworkPolicies are additive, so every path this chart needs
+# gets its own explicit allow-*.yaml alongside this one.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "default-deny") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}

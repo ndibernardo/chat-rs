@@ -1,0 +1,114 @@
+{{- if .Values.networkPolicies.enabled }}
+# Ingress: only the chat bounded context's workloads talk CQL to Scylla —
+# chat-migrate is included since it runs the keyspace/table DDL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scylla-ingress-clients
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-scylla") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      scylla/cluster: chat-scylla
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - chat-api
+                  - chat-ws-gateway
+                  - chat-worker
+                  - chat-migrate
+              - key: app.kubernetes.io/instance
+                operator: In
+                values:
+                  - {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 9042
+---
+# Inter-node gossip/streaming (7000/7001) and the local agent — every peer
+# here is already inside this selector, so a selector-scoped allow-all is
+# the sane choice over chasing Scylla's internal port list.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scylla-internal
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-scylla") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      scylla/cluster: chat-scylla
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              scylla/cluster: chat-scylla
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              scylla/cluster: chat-scylla
+---
+# The Scylla operator reconciles cluster pods from its own namespace —
+# not reachable via the app or scylla-node selectors above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scylla-ingress-operator
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-scylla") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      scylla/cluster: chat-scylla
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: scylla-operator
+---
+# Egress mirror: default-deny blocks the client side independently of the
+# node-side ingress rule above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scylla-egress-clients
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "allow-scylla") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - chat-api
+          - chat-ws-gateway
+          - chat-worker
+          - chat-migrate
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              scylla/cluster: chat-scylla
+      ports:
+        - protocol: TCP
+          port: 9042
+{{- end }}

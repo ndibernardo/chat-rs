@@ -1,0 +1,25 @@
+# requests == limits on rack resources: the Scylla operator refuses
+# anything below Guaranteed QoS, since a evicted/throttled Scylla pod
+# corrupts its own performance assumptions (CPU pinning, io scheduler).
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: chat-scylla
+spec:
+  version: {{ .Values.scylla.version | quote }}
+  agentVersion: {{ .Values.scylla.agentVersion | quote }}
+  developerMode: {{ .Values.scylla.developerMode }}
+  datacenter:
+    name: {{ .Values.scylla.datacenter }}
+    racks:
+      - name: {{ .Values.scylla.rack }}
+        members: {{ .Values.scylla.members }}
+        storage:
+          capacity: {{ .Values.scylla.storage }}
+        resources:
+          requests:
+            cpu: {{ .Values.scylla.cpu | quote }}
+            memory: {{ .Values.scylla.memory | quote }}
+          limits:
+            cpu: {{ .Values.scylla.cpu | quote }}
+            memory: {{ .Values.scylla.memory | quote }}

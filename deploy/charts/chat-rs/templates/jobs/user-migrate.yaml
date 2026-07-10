@@ -1,0 +1,41 @@
+# Helm hook: runs before the release's Deployments exist. That ordering
+# means this Job can reference infra-release secrets (CNPG's user-db-app)
+# but not this chart's own JWT Secret/ConfigMap, which haven't been created
+# yet — see the JWT env vars below.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: user-migrate
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "user-migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    # Keep the previous Job around until the new one is created, so a failed
+    # migration's logs are still there to debug (`kubectl logs job/...`).
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "user-migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: user-migrate
+          image: "{{ .Values.images.user.repository }}:{{ .Values.images.user.tag }}"
+          imagePullPolicy: {{ .Values.images.user.pullPolicy }}
+          args: ["--migrate-only"]
+          env:
+            {{- include "chat-rs.commonEnv" . | nindent 12 }}
+            {{- include "chat-rs.userCoreEnv" . | nindent 12 }}
+            # --migrate-only returns before any JWT key is opened (see
+            # bootstrap/common.rs::migrate_only), but Config::load still
+            # requires the env vars to be set. Pointing them at the
+            # image-baked dev keypair is safe here even though that file is
+            # root-owned 0600 — it is never read by this code path.
+            - name: JWT__PRIVATE_KEY_PATH
+              value: /app/keys/dev/jwt_ed25519.pem
+            - name: JWT__PUBLIC_KEY_PATH
+              value: /app/keys/dev/jwt_ed25519.pub.pem

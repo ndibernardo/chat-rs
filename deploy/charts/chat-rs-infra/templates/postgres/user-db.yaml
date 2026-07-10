@@ -1,0 +1,21 @@
+# Separate Cluster from chat-db, not a shared instance with two schemas:
+# user-service and chat-service each own their data as an independent
+# bounded context, so one service's migrations or load can't touch the
+# other's failure domain.
+#
+# CNPG generates the app credentials itself — no password in this chart.
+# Consumers read the connection string from Secret user-db-app, key "uri".
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: user-db
+spec:
+  instances: {{ .Values.postgres.userDb.instances }}
+  storage:
+    size: {{ .Values.postgres.userDb.storage }}
+  bootstrap:
+    initdb:
+      database: user
+      owner: app
+  monitoring:
+    enablePodMonitor: {{ .Values.postgres.podMonitor }}

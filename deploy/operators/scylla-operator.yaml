@@ -1,0 +1,6 @@
+# scylla/scylla-operator v1.21.0
+# (https://storage.googleapis.com/scylla-operator-charts/stable)
+# Chart defaults to 2 replicas for both the operator and its webhook server —
+# HA sizing that doesn't fit a single-node dev cluster's RAM budget.
+replicas: 1
+webhookServerReplicas: 1

@@ -1,0 +1,23 @@
+# Dev overrides only — everything not listed here falls back to values.yaml.
+
+userService:
+  replicas: 1
+
+cors:
+  allowedOrigins: "http://localhost:3000"
+
+# kubernetes.toml ships NetworkTopologyStrategy RF=3, unsatisfiable on the
+# 1-node dev ScyllaCluster — migration would still succeed, but every write
+# afterward fails.
+cassandra:
+  replicationFactor: 1
+
+chatApi:
+  replicas: 1
+
+chatWsGateway:
+  replicas: 1
+  terminationGracePeriodSeconds: 60
+
+chatWorker:
+  replicas: 1

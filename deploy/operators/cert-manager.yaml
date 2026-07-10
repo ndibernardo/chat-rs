@@ -1,0 +1,7 @@
+# jetstack/cert-manager v1.21.0 (https://charts.jetstack.io)
+# Installed first: the Scylla Operator webhooks depend on cert-manager-issued
+# certs, so its webhook must already be serving before scylla-operator installs.
+crds:
+  # v1.21 no longer bundles CRDs by default (breaking change vs older charts) —
+  # without this the Certificate/Issuer CRDs are simply absent.
+  enabled: true

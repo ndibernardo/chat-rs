@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-ws-gateway
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 4 }}
+spec:
+  replicas: {{ .Values.chatWsGateway.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # Must exceed shutdown.readiness_delay_seconds + shutdown.drain_grace_seconds
+      # (config/kubernetes.toml) or Kubernetes SIGKILLs the pod before WS
+      # clients get their close frame and a chance to reconnect elsewhere.
+      terminationGracePeriodSeconds: {{ .Values.chatWsGateway.terminationGracePeriodSeconds }}
+      containers:
+        - name: chat-ws-gateway
+          image: "{{ .Values.images.chat.repository }}:{{ .Values.images.chat.tag }}"
+          imagePullPolicy: {{ .Values.images.chat.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 3002
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: SERVICE_ROLE
+              value: gateway
+            {{- include "chat-rs.commonEnv" . | nindent 12 }}
+            {{- include "chat-rs.chatCoreEnv" . | nindent 12 }}
+            - name: JWT__PUBLIC_KEY_PATH
+              value: /etc/chat-rs/jwt/jwt_ed25519.pub.pem
+          volumeMounts:
+            - name: jwt-public-key
+              mountPath: /etc/chat-rs/jwt
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 3002
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3002
+            periodSeconds: 5
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: 3002
+            periodSeconds: 2
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              # Gives the endpoint controller time to remove this pod from
+              # the Service before the container actually stops accepting
+              # connections, avoiding a burst of connection-refused errors.
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            {{- toYaml .Values.chatWsGateway.resources | nindent 12 }}
+      volumes:
+        - name: jwt-public-key
+          configMap:
+            name: jwt-public-key
