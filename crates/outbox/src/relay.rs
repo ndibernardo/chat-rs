@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -5,15 +6,29 @@ use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::OutboxConfig;
-use crate::outbound::kafka::EventProducer;
-use crate::outbound::postgres::outbox;
+use crate::store;
 
-/// Drains the transactional outbox into Kafka. A publish failure leaves its
-/// row `published_at IS NULL` for the next tick to retry — Kafka delivery
-/// is never a one-shot fire from the relay's perspective.
-pub struct OutboxRelay {
+/// Publishes an already-serialized event to the message broker, keyed for
+/// per-aggregate ordering. Wrapping the payload in the service's wire format
+/// (envelope, headers) is the implementor's job — the relay hands over the
+/// payload exactly as it was enqueued.
+pub trait RawEventPublisher: Send + Sync {
+    type Error: std::fmt::Display;
+
+    fn publish_raw(
+        &self,
+        key: &str,
+        schema: &str,
+        payload: serde_json::Value,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+}
+
+/// Drains the transactional outbox into the broker. A publish failure leaves
+/// its row `published_at IS NULL` for the next tick to retry — delivery is
+/// never a one-shot fire from the relay's perspective.
+pub struct OutboxRelay<P> {
     pool: PgPool,
-    producer: Arc<EventProducer>,
+    producer: Arc<P>,
     config: OutboxConfig,
 }
 
@@ -21,8 +36,8 @@ pub struct OutboxRelay {
 /// deleting old published rows doesn't need finer granularity than this.
 const RETENTION_SWEEP_INTERVAL: Duration = Duration::from_secs(3600);
 
-impl OutboxRelay {
-    pub fn new(pool: PgPool, producer: Arc<EventProducer>, config: OutboxConfig) -> Self {
+impl<P: RawEventPublisher> OutboxRelay<P> {
+    pub fn new(pool: PgPool, producer: Arc<P>, config: OutboxConfig) -> Self {
         Self {
             pool,
             producer,
@@ -61,7 +76,7 @@ impl OutboxRelay {
 
     async fn relay_batch(&self) -> Result<usize, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        let rows = outbox::claim_batch(&mut tx, self.config.batch_size).await?;
+        let rows = store::claim_batch(&mut tx, self.config.batch_size).await?;
 
         let mut published_ids = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -84,7 +99,7 @@ impl OutboxRelay {
         }
 
         if !published_ids.is_empty() {
-            outbox::mark_published(&mut tx, &published_ids).await?;
+            store::mark_published(&mut tx, &published_ids).await?;
         }
 
         tx.commit().await?;
@@ -93,7 +108,7 @@ impl OutboxRelay {
 
     async fn run_retention(&self) {
         let cutoff = chrono::Utc::now() - chrono::Duration::days(self.config.retention_days);
-        match outbox::delete_published_before(&self.pool, cutoff).await {
+        match store::delete_published_before(&self.pool, cutoff).await {
             Ok(deleted) if deleted > 0 => {
                 tracing::info!(deleted, "Outbox retention deleted published rows");
             }
@@ -103,15 +118,26 @@ impl OutboxRelay {
     }
 
     async fn record_backlog_metrics(&self) {
-        match outbox::count_pending(&self.pool).await {
-            Ok(count) => web::metrics::record_outbox_pending(count),
+        match store::count_pending(&self.pool).await {
+            Ok(count) => record_outbox_pending(count),
             Err(e) => tracing::warn!(error = %e, "Failed to read outbox pending count"),
         }
 
-        match outbox::oldest_pending_seconds(&self.pool).await {
-            Ok(Some(seconds)) => web::metrics::record_outbox_oldest_pending_seconds(seconds),
-            Ok(None) => web::metrics::record_outbox_oldest_pending_seconds(0.0),
+        match store::oldest_pending_seconds(&self.pool).await {
+            Ok(Some(seconds)) => record_outbox_oldest_pending_seconds(seconds),
+            Ok(None) => record_outbox_oldest_pending_seconds(0.0),
             Err(e) => tracing::warn!(error = %e, "Failed to read outbox oldest-pending age"),
         }
     }
+}
+
+/// Records the current count of unpublished outbox rows (`outbox_pending`).
+fn record_outbox_pending(count: i64) {
+    metrics::gauge!("outbox_pending").set(count as f64);
+}
+
+/// Records the age in seconds of the oldest unpublished outbox row
+/// (`outbox_oldest_pending_seconds`); zero when the outbox is empty.
+fn record_outbox_oldest_pending_seconds(seconds: f64) {
+    metrics::gauge!("outbox_oldest_pending_seconds").set(seconds);
 }

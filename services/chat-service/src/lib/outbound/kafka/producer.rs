@@ -87,25 +87,6 @@ impl EventProducer {
             .await
     }
 
-    /// Publish an already-serialized payload to Kafka, wrapped in an
-    /// envelope tagged `schema`, keyed by `key` for partition ordering.
-    ///
-    /// Used by the outbox relay, which has no compile-time event type to
-    /// hand a generic `T` — the payload already came out of Postgres as
-    /// `serde_json::Value`.
-    ///
-    /// # Errors
-    /// `SerializationError` — the envelope could not be serialized.
-    /// `SendError` — Kafka rejected the message after all retries.
-    pub async fn publish_raw(
-        &self,
-        key: &str,
-        schema: &str,
-        payload: serde_json::Value,
-    ) -> Result<(), ProducerError> {
-        self.publish_keyed(key, schema, payload).await
-    }
-
     async fn publish_keyed<T: Serialize>(
         &self,
         key: &str,
@@ -149,5 +130,21 @@ impl EventProducer {
             .fetch_metadata(None, timeout)
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+}
+
+/// Outbox-relay entry point: the payload already came out of Postgres as
+/// `serde_json::Value`, so it is published as-is, wrapped in an envelope
+/// tagged `schema` and keyed by `key` for partition ordering.
+impl outbox::RawEventPublisher for EventProducer {
+    type Error = ProducerError;
+
+    async fn publish_raw(
+        &self,
+        key: &str,
+        schema: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), ProducerError> {
+        self.publish_keyed(key, schema, payload).await
     }
 }

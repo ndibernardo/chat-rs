@@ -73,17 +73,6 @@ pub fn record_kafka_dlq(consumer: ConsumerKind) {
     metrics::counter!("kafka_dlq_total", "consumer" => consumer.label()).increment(1);
 }
 
-/// Records the current count of unpublished outbox rows (`outbox_pending`).
-pub fn record_outbox_pending(count: i64) {
-    metrics::gauge!("outbox_pending").set(count as f64);
-}
-
-/// Records the age in seconds of the oldest unpublished outbox row
-/// (`outbox_oldest_pending_seconds`); zero when the outbox is empty.
-pub fn record_outbox_oldest_pending_seconds(seconds: f64) {
-    metrics::gauge!("outbox_oldest_pending_seconds").set(seconds);
-}
-
 /// Records a WebSocket connection being added to a registry (`ws_connections`).
 pub fn record_ws_connection_opened() {
     metrics::gauge!("ws_connections").increment(1);

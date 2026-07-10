@@ -27,6 +27,7 @@ COPY contracts/proto/ ./contracts/proto/
 # Copy all workspace members (required for workspace build)
 # NOTE: Cargo requires ALL workspace members to be present, even when building a single package
 COPY crates/auth/ ./crates/auth/
+COPY crates/outbox/ ./crates/outbox/
 COPY crates/web/ ./crates/web/
 COPY services/user-service/ ./services/user-service/
 COPY services/chat-service/ ./services/chat-service/

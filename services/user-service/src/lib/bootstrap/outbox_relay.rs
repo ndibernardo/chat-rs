@@ -11,7 +11,7 @@ use web::health::health_router;
 use super::common;
 use crate::config::Config;
 use crate::outbound::kafka::EventProducer;
-use crate::outbound::relay::OutboxRelay;
+use outbox::OutboxRelay;
 
 /// `user-service --role outbox-relay`: drains the Postgres outbox table into
 /// Kafka, alongside a health-only HTTP listener.

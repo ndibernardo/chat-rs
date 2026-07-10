@@ -66,6 +66,9 @@ auth = { path = "../../crates/auth" }
 # Shared web layer
 web = { path = "../../crates/web" }
 
+# Shared transactional outbox + relay
+outbox = { path = "../../crates/outbox" }
+
 [dev-dependencies]
 http-body-util = "0.1"
 mockall = "0.13"
