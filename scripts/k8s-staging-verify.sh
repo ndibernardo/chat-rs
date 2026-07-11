@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Rolling-restart proof for chat-rs-staging, all traffic routed through
-# Ingress (no port-forward, no real DNS — curl's --resolve and websocat's
-# -H Host override both fake chat.staging.local -> 127.0.0.1). Registers two
+# Ingress (no port-forward, no real DNS — curl's --resolve fakes
+# chat.staging.local -> 127.0.0.1; websocat has no --resolve equivalent, so
+# it uses the ws-c: overlay + --ws-c-uri instead, see ws_monitor). Registers two
 # users and a channel, starts background HTTP load plus a WebSocket
 # reconnect monitor, triggers a rolling restart on the three HTTP-facing
 # Deployments, and asserts the run stayed clean throughout. Exit 0 is the
@@ -218,8 +219,18 @@ ws_monitor() {
     # send its own WS Close frame right after connecting — every cycle would
     # self-close instantly regardless of the actual rolling restart, and the
     # reconnect-gap measurement below would be meaningless.
-    websocat -n "ws://127.0.0.1/ws/channels/${CHANNEL_ID}" \
-      -H "Host: ${HOST}" \
+    #
+    # ws-c:tcp:127.0.0.1:80 + --ws-c-uri: websocat's `-H "Host: ..."` only
+    # *adds* a header, it doesn't replace the one websocat auto-generates
+    # from the connection URL — so a plain `ws://127.0.0.1/...` request
+    # carries two Host headers, nginx's vhost match picks the wrong
+    # (auto-generated, IP-literal) one, and every request 404s on the
+    # default backend. The ws-c: low-level connector splits the raw TCP
+    # target from the logical URI used to build the request, so exactly one
+    # correct Host header goes out. Confirmed live against a real Ingress —
+    # a plain URL + -H override reliably 404s, this doesn't.
+    websocat -n -t - "ws-c:tcp:127.0.0.1:80" \
+      --ws-c-uri "ws://${HOST}/ws/channels/${CHANNEL_ID}" \
       --protocol "bearer, ${USER_B_TOKEN}" \
       </dev/null >"$frames_file" 2>>"$WORKDIR/ws-monitor.err" &
     local ws_pid=$!
@@ -232,7 +243,7 @@ ws_monitor() {
         break
       fi
       sleep 1
-      ((waited++))
+      ((++waited))
     done
 
     wait "$ws_pid" 2>/dev/null || true
@@ -257,7 +268,7 @@ start_background_load() {
   while (( waited < 15 )); do
     grep -q '^CONNECTED' "$WS_EVENTS_LOG" 2>/dev/null && break
     sleep 1
-    ((waited++))
+    ((++waited))
   done
   grep -q '^CONNECTED' "$WS_EVENTS_LOG" 2>/dev/null \
     || fail "WebSocket monitor never reached Connected state" "$WORKDIR/ws-monitor.err"
