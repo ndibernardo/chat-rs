@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ndibernardo/chat-rs.git
-    targetRevision: k8s
+    targetRevision: main
     # Plain manifest directory, not a chart — cert-manager's ClusterIssuer
     # is cluster-scoped and can't live in a chart that installs twice
     # (once per env), so it's applied as its own Application instead.

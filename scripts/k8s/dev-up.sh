@@ -27,7 +27,7 @@ readonly ARGOCD_CHART_VERSION=10.1.3
 readonly HEADLAMP_CHART_VERSION=0.43.0
 
 # GitHub remote this repo's own Applications point back at — the GitOps path
-# deploys whatever's on the pushed k8s branch there, never the working tree.
+# deploys whatever's on the pushed main branch there, never the working tree.
 readonly REPO_URL=https://github.com/ndibernardo/chat-rs.git
 
 # Stage 1: cluster must exist and be reachable before anything else runs.
@@ -277,7 +277,7 @@ main() {
 
   if [[ "$direct" == "true" ]]; then
     # Escape hatch for testing unpushed changes — Argo only ever deploys
-    # what's on the pushed k8s branch. Never mix this with the GitOps path
+    # what's on the pushed main branch. Never mix this with the GitOps path
     # on the same namespace; the two will fight over resource ownership.
     #
     # Cluster-scoped, plain manifest — can't live in a chart that installs
@@ -302,7 +302,7 @@ main() {
   echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-api 3002:3002"
   echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-ws-gateway 3003:3002"
   if [[ "$direct" != "true" ]]; then
-    echo "Deployed via Argo CD from the pushed k8s branch. Port-forward the Argo UI with:"
+    echo "Deployed via Argo CD from the pushed main branch. Port-forward the Argo UI with:"
     echo "  kubectl --context $KIND_CONTEXT -n argocd port-forward svc/argocd-server 8080:80"
   fi
   echo "Cluster dashboard (Headlamp): port-forward and grab a login token with"

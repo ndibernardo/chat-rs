@@ -122,7 +122,7 @@ See [user-service](./services/user-service/openapi/user-service.yaml) and [chat-
 A local `kind` cluster, its operators installed from pinned upstream Helm charts, and two repo-owned charts (`chat-rs-infra` for Kafka, Postgres and Scylla CRs, `chat-rs` for the app workloads) — see `deploy/operators/` for the full operator list.
 
 ```bash
-# Bring up dev end to end, deployed via Argo CD from the pushed k8s branch.
+# Bring up dev end to end, deployed via Argo CD from the pushed main branch.
 # --direct installs from the working tree instead.
 ./scripts/k8s/dev-up.sh [--direct]
 

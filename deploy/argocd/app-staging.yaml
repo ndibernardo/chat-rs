@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ndibernardo/chat-rs.git
-    targetRevision: k8s
+    targetRevision: main
     path: deploy/charts/chat-rs
     helm:
       valueFiles:
