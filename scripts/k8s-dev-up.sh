@@ -11,15 +11,16 @@ KIND_CONFIG=deploy/kind/cluster.yaml
 USER_SERVICE_IMAGE=chat-rs/user-service:dev
 CHAT_SERVICE_IMAGE=chat-rs/chat-service:dev
 
-# Pinned from a live `helm search repo` on 2026-07-10 — bump deliberately,
-# never from memory, and re-verify against Artifact Hub / the upstream repo
-# before changing any of these.
+# Pinned from a live `helm search repo` on 2026-07-10 (ingress-nginx added
+# 2026-07-11) — bump deliberately, never from memory, and re-verify against
+# Artifact Hub / the upstream repo before changing any of these.
 readonly CERT_MANAGER_CHART_VERSION=v1.21.0
 readonly KUBE_PROMETHEUS_STACK_CHART_VERSION=87.12.5
 readonly STRIMZI_CHART_VERSION=1.1.0
 readonly CLOUDNATIVE_PG_CHART_VERSION=0.29.0
 readonly SCYLLA_OPERATOR_CHART_VERSION=v1.21.0
 readonly EXTERNAL_SECRETS_CHART_VERSION=2.7.0
+readonly INGRESS_NGINX_CHART_VERSION=4.15.1
 
 # Stage 1: cluster must exist and be reachable before anything else runs.
 create_cluster() {
@@ -56,6 +57,7 @@ install_operators() {
   helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update
   helm repo add scylla https://storage.googleapis.com/scylla-operator-charts/stable --force-update
   helm repo add external-secrets https://charts.external-secrets.io --force-update
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
   helm repo update
 
   helm upgrade --install cert-manager jetstack/cert-manager \
@@ -63,6 +65,11 @@ install_operators() {
     --namespace cert-manager --create-namespace \
     -f deploy/operators/cert-manager.yaml \
     --wait --timeout 5m
+
+  # Cluster-scoped, plain manifest — can't live in a chart that installs
+  # into both chat-rs and chat-rs-staging under two Helm releases. Safe to
+  # apply right after cert-manager's own --wait confirms its webhook is up.
+  kubectl --context "$KIND_CONTEXT" apply -f deploy/cluster/self-signed-clusterissuer.yaml
 
   helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     --version "$KUBE_PROMETHEUS_STACK_CHART_VERSION" \
@@ -98,6 +105,12 @@ install_operators() {
     --namespace external-secrets --create-namespace \
     -f deploy/operators/external-secrets.yaml \
     --wait --timeout 5m
+
+  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+    --version "$INGRESS_NGINX_CHART_VERSION" \
+    --namespace ingress-nginx --create-namespace \
+    -f deploy/operators/ingress-nginx.yaml \
+    --wait --timeout 5m
 }
 
 # Stage 4: `--wait` above only waits for each release's own resources, not
@@ -116,6 +129,10 @@ wait_for_operator_crds() {
   # ScyllaCluster admission webhook must be serving before any ScyllaCluster
   # CR is applied, or the apply fails against an unready webhook endpoint.
   kubectl --context "$KIND_CONTEXT" -n scylla-operator rollout status deploy --timeout=300s
+
+  # ingress-nginx's admission webhook must be serving before any Ingress
+  # object applies, or the apply is rejected.
+  kubectl --context "$KIND_CONTEXT" -n ingress-nginx rollout status deploy --timeout=300s
 }
 
 # Stage 5: install Kafka, Postgres, and Scylla custom resources from the

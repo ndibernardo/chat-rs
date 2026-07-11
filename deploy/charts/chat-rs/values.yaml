@@ -10,6 +10,15 @@ networkPolicies:
 monitoring:
   enabled: true
 
+ingress:
+  enabled: true
+  className: nginx
+  # Set per environment in values-<env>.yaml, e.g. chat.dev.local.
+  host: ""
+  tls:
+    secretName: chat-rs-tls
+  clusterIssuer: selfsigned
+
 images:
   user:
     repository: chat-rs/user-service

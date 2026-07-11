@@ -1,5 +1,8 @@
 # Dev overrides only — everything not listed here falls back to values.yaml.
 
+ingress:
+  host: chat.dev.local
+
 userService:
   replicas: 1
 
