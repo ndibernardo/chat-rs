@@ -50,7 +50,10 @@ WORKDIR /app
 COPY --from=builder /app/target/release/chat-service /app/chat-service
 
 # Copy migrations, config and the dev JWT keypair (dev/test only — real
-# deployments mount the keypair from a secret store, not the image)
+# deployments mount the keypair from a secret store, not the image). The
+# private half stays 0600 root-owned as copied — no role in this image ever
+# opens it (chat-service only ever reads a *public* key, whichever role);
+# Config::load just needs the env var's path string non-empty.
 COPY services/chat-service/migrations /app/migrations
 COPY services/chat-service/config /app/config
 COPY keys/dev /app/keys/dev
@@ -60,6 +63,13 @@ EXPOSE 3002
 
 # Set environment variables
 ENV HTTP_PORT=3002
+
+# Numeric, not a named user — bookworm-slim ships no /etc/passwd entry to
+# name one, and Kubernetes' runAsUser needs a UID either way. Matches the
+# Deployments' own pod securityContext (now defense-in-depth, not the only
+# enforcement) and makes the chat-migrate Job non-root too, with no
+# securityContext of its own needed.
+USER 65532:65532
 
 # Run the application
 CMD ["/app/chat-service"]

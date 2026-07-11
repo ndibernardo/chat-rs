@@ -51,7 +51,11 @@ WORKDIR /app
 COPY --from=builder /app/target/release/user-service /app/user-service
 
 # Copy migrations, config and the dev JWT keypair (dev/test only — real
-# deployments mount the keypair from a secret store, not the image)
+# deployments mount the keypair from a secret store, not the image). The
+# private half stays 0600 root-owned as copied — the only roles that read
+# this baked-in path (--migrate-only, outbox-relay) never open the file,
+# they just need Config::load to see a non-empty path string; the `server`
+# role reads its real key from a Kubernetes Secret mount, never from here.
 COPY services/user-service/migrations /app/migrations
 COPY services/user-service/config /app/config
 COPY keys/dev /app/keys/dev
@@ -62,6 +66,13 @@ EXPOSE 3001 50051
 # Set environment variables
 ENV HTTP_PORT=3001
 ENV GRPC_PORT=50051
+
+# Numeric, not a named user — bookworm-slim ships no /etc/passwd entry to
+# name one, and Kubernetes' runAsUser needs a UID either way. Matches the
+# Deployments' own pod securityContext (now defense-in-depth, not the only
+# enforcement) and makes the user-migrate Job non-root too, with no
+# securityContext of its own needed.
+USER 65532:65532
 
 # Run the application
 CMD ["/app/user-service"]
