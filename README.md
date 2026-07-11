@@ -99,7 +99,7 @@ For detailed interaction flows, see the [sequence diagrams](./docs/sequence).
 
 ## API
 
-See [OpenAPI contracts](./contracts/openapi) for complete specifications.
+See [user-service](./services/user-service/openapi/user-service.yaml) and [chat-service](./services/chat-service/openapi/chat-service.yaml) OpenAPI specs for complete specifications.
 
 ## Testing
 ```bash
