@@ -1,0 +1,24 @@
+# ingress-nginx/ingress-nginx 4.15.1 (https://kubernetes.github.io/ingress-nginx)
+controller:
+  # kind has no LoadBalancer implementation — hostPort binds the controller
+  # straight to the kind node's mapped 80/443 instead.
+  hostPort:
+    enabled: true
+  service:
+    # Avoids a perpetually-Pending LoadBalancer Service on kind.
+    type: NodePort
+  nodeSelector:
+    ingress-ready: "true"
+    kubernetes.io/os: linux
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Equal
+      effect: NoSchedule
+  ingressClassResource:
+    # Default IngressClass so app Ingresses need no explicit className
+    # annotation wrangling.
+    default: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
