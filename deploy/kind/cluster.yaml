@@ -1,11 +1,32 @@
 # Single control-plane node: this cluster hosts operators (Strimzi, Scylla,
-# CNPG, kube-prometheus-stack) plus the app, not a multi-node HA scenario.
-# Access is via kubectl port-forward, so no extraPortMappings either.
+# CNPG, kube-prometheus-stack, ingress-nginx) plus the app, not a multi-node
+# HA scenario. Ingress traffic reaches the node via the hostPort mapping
+# below; every other in-cluster service is still reached via port-forward.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: chat-rs
 nodes:
   - role: control-plane
+    # ingress-ready=true lets the ingress-nginx chart's nodeSelector target
+    # this node specifically — the label kind itself documents for this use.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    # extraPortMappings are immutable on a live kind cluster — changing them
+    # means delete + recreate, not an in-place update. Rootless Docker cannot
+    # bind host ports 80/443; if cluster creation fails on this host, change
+    # both hostPort values below to 8080/8443 (and update every
+    # `--resolve host:80:127.0.0.1` in the verify scripts to match).
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
 
 # Calico fallback — uncomment only if a canary test shows kindnet (the
 # default CNI) does not enforce NetworkPolicy on this kind/Docker combo.
