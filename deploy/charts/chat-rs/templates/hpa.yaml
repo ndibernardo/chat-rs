@@ -1,0 +1,76 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-service
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "user-service") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  minReplicas: {{ .Values.userService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.userService.autoscaling.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chat-api
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-api") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chat-api
+  minReplicas: {{ .Values.chatApi.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.chatApi.autoscaling.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chat-ws-gateway
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chat-ws-gateway
+  minReplicas: {{ .Values.chatWsGateway.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.chatWsGateway.autoscaling.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    # Pods metric, not Object — averages ws_connections across every
+    # gateway pod rather than reading it off one named object.
+    - type: Pods
+      pods:
+        metric:
+          name: ws_connections
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.chatWsGateway.autoscaling.targetWsConnections | quote }}
+{{- end }}

@@ -21,6 +21,8 @@ readonly CLOUDNATIVE_PG_CHART_VERSION=0.29.0
 readonly SCYLLA_OPERATOR_CHART_VERSION=v1.21.0
 readonly EXTERNAL_SECRETS_CHART_VERSION=2.7.0
 readonly INGRESS_NGINX_CHART_VERSION=4.15.1
+readonly METRICS_SERVER_CHART_VERSION=3.13.1
+readonly PROMETHEUS_ADAPTER_CHART_VERSION=5.3.0
 
 # Stage 1: cluster must exist and be reachable before anything else runs.
 create_cluster() {
@@ -58,6 +60,7 @@ install_operators() {
   helm repo add scylla https://storage.googleapis.com/scylla-operator-charts/stable --force-update
   helm repo add external-secrets https://charts.external-secrets.io --force-update
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
+  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update
   helm repo update
 
   helm upgrade --install cert-manager jetstack/cert-manager \
@@ -75,6 +78,19 @@ install_operators() {
     --version "$KUBE_PROMETHEUS_STACK_CHART_VERSION" \
     --namespace monitoring --create-namespace \
     -f deploy/operators/kube-prometheus-stack.yaml \
+    --wait --timeout 5m
+
+  helm upgrade --install metrics-server metrics-server/metrics-server \
+    --version "$METRICS_SERVER_CHART_VERSION" \
+    --namespace kube-system \
+    -f deploy/operators/metrics-server.yaml \
+    --wait --timeout 5m
+
+  # Reads kube-prometheus-stack's Prometheus Service — must land after it.
+  helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter \
+    --version "$PROMETHEUS_ADAPTER_CHART_VERSION" \
+    --namespace monitoring \
+    -f deploy/operators/prometheus-adapter.yaml \
     --wait --timeout 5m
 
   # Strimzi's chart creates RoleBindings inside every watched namespace, so
