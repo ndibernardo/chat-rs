@@ -10,6 +10,13 @@ networkPolicies:
 monitoring:
   enabled: true
 
+# Single switch for the three HPA-managed workloads (user-service, chat-api,
+# chat-ws-gateway) — off everywhere until the HPA resources themselves land.
+# Read by the PDB guard now so that flipping this on later doesn't require
+# touching pdb.yaml.
+autoscaling:
+  enabled: false
+
 ingress:
   enabled: true
   className: nginx
@@ -54,6 +61,10 @@ userServiceGrpcUrl: http://user-service-grpc.chat-rs.svc.cluster.local:50051
 
 userService:
   replicas: 2
+  # Effective replica count when autoscaling.enabled — kept equal to the
+  # static replicas above so flipping the switch doesn't change capacity.
+  autoscaling:
+    minReplicas: 2
   resources:
     requests:
       cpu: 500m
@@ -74,6 +85,8 @@ userOutboxRelay:
 
 chatApi:
   replicas: 2
+  autoscaling:
+    minReplicas: 2
   resources:
     requests:
       cpu: 250m
@@ -84,6 +97,8 @@ chatApi:
 
 chatWsGateway:
   replicas: 3
+  autoscaling:
+    minReplicas: 3
   # Must exceed shutdown.readiness_delay_seconds + shutdown.drain_grace_seconds
   # (config/kubernetes.toml) or Kubernetes SIGKILLs the pod before WS clients
   # get their close frame and a chance to reconnect elsewhere.

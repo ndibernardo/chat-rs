@@ -20,6 +20,28 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{- end -}}
 
 {{/*
+Spread a workload's pods across zones and nodes. ScheduleAnyway, not
+DoNotSchedule — a single-node kind cluster has no second zone/host to spread
+onto, and a hard constraint would leave pods permanently Pending there. Call
+as: include "chat-rs.topologySpreadConstraints" (dict "root" $ "workload" "user-service")
+*/}}
+{{- define "chat-rs.topologySpreadConstraints" -}}
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        {{- include "chat-rs.selectorLabels" . | nindent 8 }}
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        {{- include "chat-rs.selectorLabels" . | nindent 8 }}
+{{- end -}}
+
+{{/*
 Env shared by every workload in this chart, app or Job alike. Call with the
 root context: include "chat-rs.commonEnv" .
 */}}
