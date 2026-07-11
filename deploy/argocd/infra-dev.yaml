@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat-rs-infra-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ndibernardo/chat-rs.git
+    targetRevision: k8s
+    path: deploy/charts/chat-rs-infra
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chat-rs
+  syncPolicy:
+    automated:
+      prune: true
+      # Off, not on: selfHeal would revert scripts/k8s-dev-verify.sh's
+      # `kubectl rollout restart` drill back to the last-synced state mid-run.
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

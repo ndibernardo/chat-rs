@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat-rs-infra-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ndibernardo/chat-rs.git
+    targetRevision: k8s
+    path: deploy/charts/chat-rs-infra
+    helm:
+      valueFiles:
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chat-rs-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

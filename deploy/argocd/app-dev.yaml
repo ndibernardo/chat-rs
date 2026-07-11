@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat-rs-app-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ndibernardo/chat-rs.git
+    targetRevision: k8s
+    path: deploy/charts/chat-rs
+    helm:
+      valueFiles:
+        - values-dev.yaml
+      # Repo-relative path escape out of the chart directory — unverified
+      # against a live Argo instance as of this writing. If Argo rejects or
+      # mishandles a `../` path here, fall back to a chart-local key copy
+      # read via `.Files.Get` behind a values switch instead.
+      fileParameters:
+        - name: jwt.privateKey
+          path: ../../../keys/dev/jwt_ed25519.pem
+        - name: jwt.publicKey
+          path: ../../../keys/dev/jwt_ed25519.pub.pem
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chat-rs
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

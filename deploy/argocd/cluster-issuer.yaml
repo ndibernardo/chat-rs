@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat-rs-cluster-issuer
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ndibernardo/chat-rs.git
+    targetRevision: k8s
+    # Plain manifest directory, not a chart — cert-manager's ClusterIssuer
+    # is cluster-scoped and can't live in a chart that installs twice
+    # (once per env), so it's applied as its own Application instead.
+    path: deploy/cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      # selfHeal off everywhere — see the other four Applications for why.
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

@@ -23,6 +23,11 @@ readonly EXTERNAL_SECRETS_CHART_VERSION=2.7.0
 readonly INGRESS_NGINX_CHART_VERSION=4.15.1
 readonly METRICS_SERVER_CHART_VERSION=3.13.1
 readonly PROMETHEUS_ADAPTER_CHART_VERSION=5.3.0
+readonly ARGOCD_CHART_VERSION=10.1.3
+
+# GitHub remote this repo's own Applications point back at — the GitOps path
+# deploys whatever's on the pushed k8s branch there, never the working tree.
+readonly REPO_URL=https://github.com/ndibernardo/chat-rs.git
 
 # Stage 1: cluster must exist and be reachable before anything else runs.
 create_cluster() {
@@ -61,6 +66,7 @@ install_operators() {
   helm repo add external-secrets https://charts.external-secrets.io --force-update
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update
+  helm repo add argo https://argoproj.github.io/argo-helm --force-update
   helm repo update
 
   helm upgrade --install cert-manager jetstack/cert-manager \
@@ -131,6 +137,12 @@ install_operators() {
     --namespace ingress-nginx --create-namespace \
     -f deploy/operators/ingress-nginx.yaml \
     --wait --timeout 5m
+
+  helm upgrade --install argocd argo/argo-cd \
+    --version "$ARGOCD_CHART_VERSION" \
+    --namespace argocd --create-namespace \
+    -f deploy/operators/argo-cd.yaml \
+    --wait --timeout 5m
 }
 
 # Stage 4: `--wait` above only waits for each release's own resources, not
@@ -144,7 +156,8 @@ wait_for_operator_crds() {
     crd/clusters.postgresql.cnpg.io \
     crd/scyllaclusters.scylla.scylladb.com \
     crd/servicemonitors.monitoring.coreos.com \
-    crd/podmonitors.monitoring.coreos.com
+    crd/podmonitors.monitoring.coreos.com \
+    crd/applications.argoproj.io
 
   # ScyllaCluster admission webhook must be serving before any ScyllaCluster
   # CR is applied, or the apply fails against an unready webhook endpoint.
@@ -214,14 +227,55 @@ install_app() {
     --wait --timeout 10m
 }
 
+# Stage 8: GitOps path (the default). Applies the five Applications defined
+# in deploy/argocd/ and waits for each to reconcile. A repo Secret is only
+# needed for a private repo — GITHUB_TOKEN is optional on purpose.
+install_argocd_apps() {
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    kubectl --context "$KIND_CONTEXT" -n argocd create secret generic chat-rs-repo \
+      --from-literal=type=git \
+      --from-literal=url="$REPO_URL" \
+      --from-literal=username=git \
+      --from-literal=password="$GITHUB_TOKEN" \
+      --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
+    kubectl --context "$KIND_CONTEXT" -n argocd label secret chat-rs-repo \
+      argocd.argoproj.io/secret-type=repository --overwrite
+  else
+    echo "GITHUB_TOKEN not set — skipping repo Secret (only needed for a private repo)"
+  fi
+
+  kubectl --context "$KIND_CONTEXT" apply -f deploy/argocd/
+
+  local app
+  for app in chat-rs-cluster-issuer chat-rs-infra-dev chat-rs-app-dev \
+    chat-rs-infra-staging chat-rs-app-staging; do
+    echo "waiting for Application/${app} to reach Healthy..."
+    kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
+      --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
+  done
+}
+
 main() {
+  local direct=false
+  if [[ "${1:-}" == "--direct" ]]; then
+    direct=true
+  fi
+
   create_cluster
   build_and_load_images
   install_operators
   wait_for_operator_crds
-  install_infra
-  wait_for_infra
-  install_app
+
+  if [[ "$direct" == "true" ]]; then
+    # Escape hatch for testing unpushed changes — Argo only ever deploys
+    # what's on the pushed k8s branch. Never mix this with the GitOps path
+    # on the same namespace; the two will fight over resource ownership.
+    install_infra
+    wait_for_infra
+    install_app
+  else
+    install_argocd_apps
+  fi
 
   echo
   echo "Done: kind cluster '$CLUSTER_NAME' is up, images loaded, operators installed,"
@@ -230,6 +284,10 @@ main() {
   echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/user-service 3001:3001"
   echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-api 3002:3002"
   echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-ws-gateway 3003:3002"
+  if [[ "$direct" != "true" ]]; then
+    echo "Deployed via Argo CD from the pushed k8s branch. Port-forward the Argo UI with:"
+    echo "  kubectl --context $KIND_CONTEXT -n argocd port-forward svc/argocd-server 8080:80"
+  fi
 }
 
 main "$@"
