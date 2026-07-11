@@ -11,9 +11,9 @@ async fn create_user_returns_created_user() {
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -22,8 +22,8 @@ async fn create_user_returns_created_user() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
-    assert_eq!(body["data"]["username"], "miles-davis");
-    assert_eq!(body["data"]["email"], "miles.davis@example.com");
+    assert_eq!(body["data"]["username"], "john-smith");
+    assert_eq!(body["data"]["email"], "john.smith@example.com");
     assert!(body["data"]["id"].is_string());
     assert!(body["data"]["created_at"].is_string());
 }
@@ -34,9 +34,9 @@ async fn create_user_returns_conflict_for_duplicate_username() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -45,8 +45,8 @@ async fn create_user_returns_conflict_for_duplicate_username() {
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "john.coltrane@example.com",
+            "username": "john-smith",
+            "email": "jane.doe@example.com",
             "password": "G1ant-St3ps_1960!"
         }))
         .send()
@@ -70,9 +70,9 @@ async fn create_user_returns_conflict_for_duplicate_email() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -81,8 +81,8 @@ async fn create_user_returns_conflict_for_duplicate_email() {
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "john-coltrane",
-            "email": "miles.davis@example.com",
+            "username": "jane-doe",
+            "email": "john.smith@example.com",
             "password": "G1ant-St3ps_1960!"
         }))
         .send()
@@ -108,8 +108,8 @@ async fn create_user_returns_unprocessable_for_short_username() {
         .post("/api/users")
         .json(&json!({
             "username": "mj",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -133,9 +133,9 @@ async fn create_user_returns_unprocessable_for_invalid_email() {
     let response = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
+            "username": "john-smith",
             "email": "not-an-email",
-            "password": "K1nd-0f-Blue_1959!"
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -159,9 +159,9 @@ async fn authenticate_returns_token_for_valid_credentials() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -170,8 +170,8 @@ async fn authenticate_returns_token_for_valid_credentials() {
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -182,8 +182,8 @@ async fn authenticate_returns_token_for_valid_credentials() {
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert!(body["data"]["token"].is_string());
     assert!(!body["data"]["token"].as_str().unwrap().is_empty());
-    assert_eq!(body["data"]["user"]["username"], "miles-davis");
-    assert_eq!(body["data"]["user"]["email"], "miles.davis@example.com");
+    assert_eq!(body["data"]["user"]["username"], "john-smith");
+    assert_eq!(body["data"]["user"]["email"], "john.smith@example.com");
 }
 
 #[tokio::test]
@@ -192,9 +192,9 @@ async fn authenticate_returns_unauthorized_for_wrong_password() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -203,7 +203,7 @@ async fn authenticate_returns_unauthorized_for_wrong_password() {
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
+            "username": "john-smith",
             "password": "wr0ng-p4ssw0rd!"
         }))
         .send()
@@ -223,8 +223,8 @@ async fn authenticate_returns_unauthorized_for_unknown_username() {
     let response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "chet-baker",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "michael-young",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -243,9 +243,9 @@ async fn get_user_returns_user_for_authenticated_request() {
     let create_response = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -260,8 +260,8 @@ async fn get_user_returns_user_for_authenticated_request() {
     let auth_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -283,8 +283,8 @@ async fn get_user_returns_user_for_authenticated_request() {
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse response");
     assert_eq!(body["data"]["id"], user_id);
-    assert_eq!(body["data"]["username"], "miles-davis");
-    assert_eq!(body["data"]["email"], "miles.davis@example.com");
+    assert_eq!(body["data"]["username"], "john-smith");
+    assert_eq!(body["data"]["email"], "john.smith@example.com");
 }
 
 #[tokio::test]
@@ -295,9 +295,9 @@ async fn get_user_returns_forbidden_for_other_users_id() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -306,8 +306,8 @@ async fn get_user_returns_forbidden_for_other_users_id() {
     let auth_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -340,9 +340,9 @@ async fn update_user_returns_forbidden_for_other_users_id() {
     let victim_create: serde_json::Value = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -355,9 +355,9 @@ async fn update_user_returns_forbidden_for_other_users_id() {
     // Attacker account + token
     app.post("/api/users")
         .json(&json!({
-            "username": "john-coltrane",
-            "email": "john.coltrane@example.com",
-            "password": "A-L0ve-Supreme_1965!"
+            "username": "jane-doe",
+            "email": "jane.doe@example.com",
+            "password": "Autumn-Bridge_2023!"
         }))
         .send()
         .await
@@ -366,8 +366,8 @@ async fn update_user_returns_forbidden_for_other_users_id() {
     let attacker_auth: serde_json::Value = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "john-coltrane",
-            "password": "A-L0ve-Supreme_1965!"
+            "username": "jane-doe",
+            "password": "Autumn-Bridge_2023!"
         }))
         .send()
         .await
@@ -390,8 +390,8 @@ async fn update_user_returns_forbidden_for_other_users_id() {
     let victim_auth: serde_json::Value = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -409,7 +409,7 @@ async fn update_user_returns_forbidden_for_other_users_id() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(victim_response["data"]["email"], "miles.davis@example.com");
+    assert_eq!(victim_response["data"]["email"], "john.smith@example.com");
 }
 
 #[tokio::test]
@@ -419,9 +419,9 @@ async fn delete_user_returns_forbidden_for_other_users_id() {
     let victim_create: serde_json::Value = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -433,9 +433,9 @@ async fn delete_user_returns_forbidden_for_other_users_id() {
 
     app.post("/api/users")
         .json(&json!({
-            "username": "john-coltrane",
-            "email": "john.coltrane@example.com",
-            "password": "A-L0ve-Supreme_1965!"
+            "username": "jane-doe",
+            "email": "jane.doe@example.com",
+            "password": "Autumn-Bridge_2023!"
         }))
         .send()
         .await
@@ -444,8 +444,8 @@ async fn delete_user_returns_forbidden_for_other_users_id() {
     let attacker_auth: serde_json::Value = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "john-coltrane",
-            "password": "A-L0ve-Supreme_1965!"
+            "username": "jane-doe",
+            "password": "Autumn-Bridge_2023!"
         }))
         .send()
         .await
@@ -467,8 +467,8 @@ async fn delete_user_returns_forbidden_for_other_users_id() {
     let victim_auth = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -483,9 +483,9 @@ async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
     let create_response = app
         .post("/api/users")
         .json(&json!({
-            "username": "miles-davis",
-            "email": "miles.davis@example.com",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "email": "john.smith@example.com",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -502,8 +502,8 @@ async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
     let login_response = app
         .post("/api/auth/login")
         .json(&json!({
-            "username": "miles-davis",
-            "password": "K1nd-0f-Blue_1959!"
+            "username": "john-smith",
+            "password": "Winter-Garden_2024!"
         }))
         .send()
         .await
@@ -529,12 +529,12 @@ async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
         .json()
         .await
         .expect("Failed to parse response");
-    assert_eq!(user_body["data"]["username"], "miles-davis");
+    assert_eq!(user_body["data"]["username"], "john-smith");
 
     let update_response = app
         .patch_authenticated(&format!("/api/users/{}", user_id), &token)
         .json(&json!({
-            "email": "miles.dewey.davis@example.com"
+            "email": "john.michael.smith@example.com"
         }))
         .send()
         .await
@@ -548,7 +548,7 @@ async fn full_user_workflow_creates_authenticates_updates_and_deletes() {
         .expect("Failed to parse response");
     assert_eq!(
         update_body["data"]["email"],
-        "miles.dewey.davis@example.com"
+        "john.michael.smith@example.com"
     );
 
     let invalid_response = app

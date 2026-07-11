@@ -163,7 +163,7 @@ mod tests {
     }
 
     fn known_user(user_id: UserId) -> ResolvedUser {
-        ResolvedUser::new(user_id, Username::new("nina-simone".to_string()).unwrap())
+        ResolvedUser::new(user_id, Username::new("susan-clark".to_string()).unwrap())
     }
 
     #[tokio::test]

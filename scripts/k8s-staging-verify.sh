@@ -21,12 +21,12 @@ BASE_URL="http://${HOST}"
 
 # Unique per run so reruns never collide with a previous run's users/channel.
 RUN_SUFFIX="$(date +%s)"
-USER_A_USERNAME="bill-evans-${RUN_SUFFIX}"
-USER_A_EMAIL="bill.evans+${RUN_SUFFIX}@example.com"
-USER_A_PASSWORD="Waltz-F0r-Debby_1961!"
-USER_B_USERNAME="scott-lafaro-${RUN_SUFFIX}"
-USER_B_EMAIL="scott.lafaro+${RUN_SUFFIX}@example.com"
-USER_B_PASSWORD="Sunday-At-The-V1llage_1961!"
+USER_A_USERNAME="emily-jones-${RUN_SUFFIX}"
+USER_A_EMAIL="emily.jones+${RUN_SUFFIX}@example.com"
+USER_A_PASSWORD="Summer-Meadow_2022!"
+USER_B_USERNAME="robert-brown-${RUN_SUFFIX}"
+USER_B_EMAIL="robert.brown+${RUN_SUFFIX}@example.com"
+USER_B_PASSWORD="Golden-Harbor_2021!"
 CHANNEL_NAME="incident-review-${RUN_SUFFIX}"
 
 # ~10 requests/sec per loop — deliberately not login (an argon2 loop would

@@ -174,7 +174,7 @@ services:
       context: .
       dockerfile: services/user-service/Dockerfile
     container_name: chat-user-service-migrate
-    command: [ "/app/user-service", "--migrate-only" ]
+    command: [ "--migrate-only" ]
     environment:
       - RUN_MODE=docker
       - RUST_LOG=user_service=info
@@ -213,7 +213,7 @@ services:
       context: .
       dockerfile: services/chat-service/Dockerfile
     container_name: chat-chat-service-migrate
-    command: [ "/app/chat-service", "--migrate-only" ]
+    command: [ "--migrate-only" ]
     environment:
       - RUN_MODE=docker
       - RUST_LOG=chat_service=info

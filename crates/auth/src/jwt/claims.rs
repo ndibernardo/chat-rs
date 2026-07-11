@@ -136,17 +136,17 @@ mod tests {
 
     #[test]
     fn test_new_claims() {
-        let claims = Claims::new().with_subject("miles-davis");
-        assert_eq!(claims.sub, Some("miles-davis".to_string()));
+        let claims = Claims::new().with_subject("john-smith");
+        assert_eq!(claims.sub, Some("john-smith".to_string()));
         assert!(claims.exp.is_none());
     }
 
     #[test]
     fn test_for_user() {
-        let claims = Claims::for_user("miles-davis", "kim-gordon".to_string(), 24);
+        let claims = Claims::for_user("john-smith", "alice-turner".to_string(), 24);
 
-        assert_eq!(claims.sub, Some("miles-davis".to_string()));
-        assert_eq!(claims.username(), Some("kim-gordon".to_string()));
+        assert_eq!(claims.sub, Some("john-smith".to_string()));
+        assert_eq!(claims.username(), Some("alice-turner".to_string()));
         assert!(claims.exp.is_some());
         assert!(claims.iat.is_some());
 
@@ -158,13 +158,13 @@ mod tests {
     #[test]
     fn test_builder_pattern() {
         let claims = Claims::new()
-            .with_subject("miles-davis")
+            .with_subject("john-smith")
             .with_expiration(1234567890)
             .with_issued_at(1234567800)
             .with_issuer("chat-rs".to_string())
             .with_extra("role", "platform-engineer");
 
-        assert_eq!(claims.sub, Some("miles-davis".to_string()));
+        assert_eq!(claims.sub, Some("john-smith".to_string()));
         assert_eq!(claims.exp, Some(1234567890));
         assert_eq!(claims.iat, Some(1234567800));
         assert_eq!(claims.iss, Some("chat-rs".to_string()));

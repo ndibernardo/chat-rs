@@ -50,13 +50,15 @@ WORKDIR /app
 COPY --from=builder /app/target/release/chat-service /app/chat-service
 
 # Copy migrations, config and the dev JWT keypair (dev/test only — real
-# deployments mount the keypair from a secret store, not the image). The
-# private half stays 0600 root-owned as copied — no role in this image ever
-# opens it (chat-service only ever reads a *public* key, whichever role);
-# Config::load just needs the env var's path string non-empty.
+# deployments mount the keypair from a secret store, not the image). No role
+# in this image ever opens the private half (chat-service only ever reads a
+# *public* key, whichever role) — Config::load just needs the env var's path
+# string non-empty. --chown to the runtime UID anyway, for symmetry with
+# user-service's Dockerfile, where the `server` role's docker-compose config
+# does read this path directly and needs it actually readable.
 COPY services/chat-service/migrations /app/migrations
 COPY services/chat-service/config /app/config
-COPY keys/dev /app/keys/dev
+COPY --chown=65532:65532 keys/dev /app/keys/dev
 
 # Expose HTTP port
 EXPOSE 3002
