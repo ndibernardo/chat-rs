@@ -94,8 +94,12 @@ install_operators() {
     --wait --timeout 5m
 
   # Strimzi's chart creates RoleBindings inside every watched namespace, so
-  # chat-rs must exist before the operator installs (idempotent apply).
+  # both chat-rs and chat-rs-staging must exist before the operator installs
+  # (idempotent apply) — watchNamespaces lists chat-rs-staging even though
+  # scripts/k8s-staging-up.sh, not this script, deploys anything into it.
   kubectl --context "$KIND_CONTEXT" create namespace chat-rs \
+    --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
+  kubectl --context "$KIND_CONTEXT" create namespace chat-rs-staging \
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
 
   helm upgrade --install strimzi-kafka-operator strimzi/strimzi-kafka-operator \

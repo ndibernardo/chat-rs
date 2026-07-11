@@ -1,0 +1,34 @@
+# Staging overrides only — everything not listed here falls back to values.yaml.
+#
+# Clones the dev shape (RF=1 everywhere, tiny storage) rather than getting a
+# real HA infra stack of its own. Staging exists to prove the rolling-restart
+# + Argo GitOps path, not to load-test durability, and a second RF=3 Kafka/
+# Postgres/Scylla stack alongside dev's on one kind node doesn't fit in RAM —
+# CNPG's `-app` credential Secrets are namespace-local anyway, so staging
+# needs its own Postgres clusters regardless of shape.
+
+kafka:
+  replicas: 1
+  storage: 2Gi
+  deleteClaim: true
+  replicationFactor: 1
+  minInsyncReplicas: 1
+
+topics:
+  userEvents:
+    partitions: 3
+  chatMessages:
+    partitions: 8
+
+postgres:
+  userDb:
+    instances: 1
+    storage: 2Gi
+  chatDb:
+    instances: 1
+    storage: 2Gi
+
+scylla:
+  developerMode: true
+  members: 1
+  storage: 5Gi
