@@ -214,7 +214,11 @@ ws_monitor() {
   while true; do
     local frames_file
     frames_file="$(mktemp -p "$WORKDIR" ws-frames.XXXXXX)"
-    websocat "ws://127.0.0.1/ws/channels/${CHANNEL_ID}" \
+    # -n/--no-close: without it, /dev/null's immediate EOF makes websocat
+    # send its own WS Close frame right after connecting — every cycle would
+    # self-close instantly regardless of the actual rolling restart, and the
+    # reconnect-gap measurement below would be meaningless.
+    websocat -n "ws://127.0.0.1/ws/channels/${CHANNEL_ID}" \
       -H "Host: ${HOST}" \
       --protocol "bearer, ${USER_B_TOKEN}" \
       </dev/null >"$frames_file" 2>>"$WORKDIR/ws-monitor.err" &
