@@ -71,5 +71,8 @@ ENV HTTP_PORT=3002
 # securityContext of its own needed.
 USER 65532:65532
 
-# Run the application
-CMD ["/app/chat-service"]
+# ENTRYPOINT, not CMD: the chat-migrate Job's `args: ["--migrate-only"]`
+# needs something to append to. Kubernetes only combines `args` with the
+# image's ENTRYPOINT — args with no ENTRYPOINT replaces CMD entirely, and
+# the runtime tries to exec "--migrate-only" itself.
+ENTRYPOINT ["/app/chat-service"]
