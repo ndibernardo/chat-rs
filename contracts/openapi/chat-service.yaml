@@ -31,7 +31,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateChannelRequest'
       responses:
-        '200':
+        '201':
           description: Channel created
           content:
             application/json:
@@ -170,37 +170,65 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /ws:
+  /ws/channels/{channel_id}:
     get:
       tags:
         - websocket
       summary: WebSocket connection endpoint
       description: |
-        Establishes a WebSocket connection for real-time message delivery.
+        Establishes a WebSocket connection for real-time message delivery on
+        one channel. The caller must already be a member.
 
-        **Connect:** `ws://localhost:3002/ws?token={jwt_token}`
+        **Connect:** `ws://localhost:3002/ws/channels/{channel_id}` with
+        header `Sec-WebSocket-Protocol: bearer, <jwt>`. Browsers can't set
+        custom headers on the WS handshake, so the token rides in the
+        subprotocol instead of a URL query string, which would otherwise
+        land in server access logs.
 
         **Client → Server:**
         ```json
-        { "type": "subscribe", "channel_id": "<uuid>" }
+        { "type": "send_message", "content": "..." }
+        { "type": "ping" }
         ```
 
         **Server → Client:**
         ```json
-        { "type": "new_message", "id": "<uuid>", "channel_id": "<uuid>",
-          "user_id": "<uuid>", "content": "...", "timestamp": "..." }
+        { "type": "connected", "channel_id": "<uuid>" }
+        { "type": "new_message", "id": "<uuid>", "user_id": "<uuid>",
+          "content": "...", "timestamp": "..." }
+        { "type": "message_ack", "message_id": "<uuid>" }
+        { "type": "pong" }
+        { "type": "error", "message": "..." }
         ```
       parameters:
-        - name: token
-          in: query
+        - name: channel_id
+          in: path
           required: true
           schema:
             type: string
+            format: uuid
+        - name: Sec-WebSocket-Protocol
+          in: header
+          required: true
+          description: |
+            Carries the bearer token: `bearer, <jwt>`. Not a standard OpenAPI
+            security scheme — WebSocket subprotocol auth has no first-class
+            representation in OpenAPI 3.0, so it's documented as a header
+            parameter instead.
+          schema:
+            type: string
+            example: 'bearer, eyJhbGciOiJFZERTQSJ9...'
       responses:
         '101':
           description: WebSocket connection established
+        '400':
+          description: Invalid channel_id
         '401':
-          description: Invalid or missing token
+          description: Missing, invalid, or expired token
+        '403':
+          description: Not a member of this channel
+        '404':
+          description: Channel not found
 
 components:
   securitySchemes:
