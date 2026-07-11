@@ -16,7 +16,7 @@ async fn test_upsert_new_user() {
     let user_id = UserId::new();
     let user = User::new(
         user_id,
-        Username::new("nina_simone".to_string()).expect("Invalid username"),
+        Username::new("susan_clark".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
@@ -32,7 +32,7 @@ async fn test_upsert_new_user() {
     assert!(retrieved_user.is_some());
     let retrieved_user = retrieved_user.unwrap();
     assert_eq!(retrieved_user.id(), user_id);
-    assert_eq!(retrieved_user.username().as_str(), "nina_simone");
+    assert_eq!(retrieved_user.username().as_str(), "susan_clark");
 }
 
 #[tokio::test]
@@ -83,7 +83,7 @@ async fn test_delete_user() {
 
     let user = User::new(
         user_id,
-        Username::new("charlie_parker".to_string()).expect("Invalid username"),
+        Username::new("james_walker".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
@@ -129,19 +129,19 @@ async fn test_get_many_users() {
 
     let user_1 = User::new(
         user_id_1,
-        Username::new("john_coltrane".to_string()).expect("Invalid username"),
+        Username::new("jane_doe".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
     let user_2 = User::new(
         user_id_2,
-        Username::new("kim_gordon".to_string()).expect("Invalid username"),
+        Username::new("alice_turner".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
     let user_3 = User::new(
         user_id_3,
-        Username::new("thelonious_monk".to_string()).expect("Invalid username"),
+        Username::new("daniel_scott".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
@@ -149,15 +149,15 @@ async fn test_get_many_users() {
     user_replica_repository
         .upsert(user_1)
         .await
-        .expect("Failed to insert john_coltrane");
+        .expect("Failed to insert jane_doe");
     user_replica_repository
         .upsert(user_2)
         .await
-        .expect("Failed to insert kim_gordon");
+        .expect("Failed to insert alice_turner");
     user_replica_repository
         .upsert(user_3)
         .await
-        .expect("Failed to insert thelonious_monk");
+        .expect("Failed to insert daniel_scott");
 
     let user_ids = vec![user_id_1, user_id_2, user_id_3];
     let users = user_replica_repository
@@ -169,17 +169,17 @@ async fn test_get_many_users() {
     assert!(
         users
             .iter()
-            .any(|user| user.username().as_str() == "john_coltrane")
+            .any(|user| user.username().as_str() == "jane_doe")
     );
     assert!(
         users
             .iter()
-            .any(|user| user.username().as_str() == "kim_gordon")
+            .any(|user| user.username().as_str() == "alice_turner")
     );
     assert!(
         users
             .iter()
-            .any(|user| user.username().as_str() == "thelonious_monk")
+            .any(|user| user.username().as_str() == "daniel_scott")
     );
 }
 
@@ -193,7 +193,7 @@ async fn test_get_many_partial_match() {
 
     let user_1 = User::new(
         user_id_1,
-        Username::new("ella_fitzgerald".to_string()).expect("Invalid username"),
+        Username::new("laura_adams".to_string()).expect("Invalid username"),
         Utc::now(),
         Utc::now(),
     );
@@ -201,7 +201,7 @@ async fn test_get_many_partial_match() {
     user_replica_repository
         .upsert(user_1)
         .await
-        .expect("Failed to insert ella_fitzgerald");
+        .expect("Failed to insert laura_adams");
 
     let user_ids = vec![user_id_1, user_id_2];
     let users = user_replica_repository
@@ -210,7 +210,7 @@ async fn test_get_many_partial_match() {
         .expect("Failed to get users");
 
     assert_eq!(users.len(), 1);
-    assert_eq!(users[0].username().as_str(), "ella_fitzgerald");
+    assert_eq!(users[0].username().as_str(), "laura_adams");
 }
 
 #[tokio::test]

@@ -122,9 +122,9 @@ mod tests {
         chrono::Utc::now().timestamp() + 3600
     }
 
-    fn miles_davis_claims() -> TestClaims {
+    fn john_smith_claims() -> TestClaims {
         TestClaims {
-            sub: "miles-davis".to_string(),
+            sub: "john-smith".to_string(),
             role: "platform-engineer".to_string(),
             exp: future_exp(),
         }
@@ -134,7 +134,7 @@ mod tests {
     fn signer_encodes_and_decodes_its_own_token() {
         let handler =
             JwtHandler::signer(PRIVATE_KEY_PEM, PUBLIC_KEY_PEM).expect("Valid Ed25519 keypair");
-        let claims = miles_davis_claims();
+        let claims = john_smith_claims();
 
         let token = handler.encode(&claims).expect("Failed to encode token");
         let decoded: TestClaims = handler.decode(&token).expect("Failed to decode token");
@@ -147,7 +147,7 @@ mod tests {
         let signer =
             JwtHandler::signer(PRIVATE_KEY_PEM, PUBLIC_KEY_PEM).expect("Valid Ed25519 keypair");
         let verifier = JwtHandler::verifier(PUBLIC_KEY_PEM).expect("Valid Ed25519 public key");
-        let claims = miles_davis_claims();
+        let claims = john_smith_claims();
 
         let token = signer.encode(&claims).expect("Failed to encode token");
         let decoded: TestClaims = verifier.decode(&token).expect("Failed to decode token");
@@ -159,7 +159,7 @@ mod tests {
     fn verifier_encode_returns_signing_key_unavailable() {
         let verifier = JwtHandler::verifier(PUBLIC_KEY_PEM).expect("Valid Ed25519 public key");
 
-        let result = verifier.encode(&miles_davis_claims());
+        let result = verifier.encode(&john_smith_claims());
 
         assert!(matches!(result, Err(JwtError::SigningKeyUnavailable)));
     }
@@ -172,7 +172,7 @@ mod tests {
             JwtHandler::verifier(OTHER_PUBLIC_KEY_PEM).expect("Valid Ed25519 public key");
 
         let token = signer
-            .encode(&miles_davis_claims())
+            .encode(&john_smith_claims())
             .expect("Failed to encode token");
         let result = other_verifier.decode::<TestClaims>(&token);
 

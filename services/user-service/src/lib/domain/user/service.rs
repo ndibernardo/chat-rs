@@ -182,11 +182,11 @@ mod tests {
         password_hasher
     }
 
-    fn miles_davis() -> User {
+    fn john_smith() -> User {
         User::new(
             UserId::new(),
-            Username::new("miles-davis").unwrap(),
-            EmailAddress::new("miles.davis@example.com").unwrap(),
+            Username::new("john-smith").unwrap(),
+            EmailAddress::new("john.smith@example.com").unwrap(),
             "$argon2id$test_hash".to_string(),
             Utc::now(),
         )
@@ -199,8 +199,8 @@ mod tests {
         repository
             .expect_create()
             .withf(|user, _event| {
-                user.username().as_str() == "miles-davis"
-                    && user.email().as_str() == "miles.davis@example.com"
+                user.username().as_str() == "john-smith"
+                    && user.email().as_str() == "john.smith@example.com"
                     && user.password_hash().starts_with("$argon2")
             })
             .times(1)
@@ -209,17 +209,17 @@ mod tests {
         let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
-            username: Username::new("miles-davis").unwrap(),
-            email: EmailAddress::new("miles.davis@example.com").unwrap(),
-            password: Password::new("K1nd-0f-Blue_1959!"),
+            username: Username::new("john-smith").unwrap(),
+            email: EmailAddress::new("john.smith@example.com").unwrap(),
+            password: Password::new("Winter-Garden_2024!"),
         };
 
         let result = service.create_user(command).await;
         assert!(result.is_ok());
 
         let user = result.unwrap();
-        assert_eq!(user.username().as_str(), "miles-davis");
-        assert_eq!(user.email().as_str(), "miles.davis@example.com");
+        assert_eq!(user.username().as_str(), "john-smith");
+        assert_eq!(user.email().as_str(), "john.smith@example.com");
         assert!(user.password_hash().starts_with("$argon2"));
     }
 
@@ -239,8 +239,8 @@ mod tests {
         let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
-            username: Username::new("miles-davis").unwrap(),
-            email: EmailAddress::new("john.coltrane@example.com").unwrap(),
+            username: Username::new("john-smith").unwrap(),
+            email: EmailAddress::new("jane.doe@example.com").unwrap(),
             password: Password::new("G1ant-St3ps_1960!"),
         };
 
@@ -268,8 +268,8 @@ mod tests {
         let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = CreateUserCommand {
-            username: Username::new("john-coltrane").unwrap(),
-            email: EmailAddress::new("miles.davis@example.com").unwrap(),
+            username: Username::new("jane-doe").unwrap(),
+            email: EmailAddress::new("john.smith@example.com").unwrap(),
             password: Password::new("G1ant-St3ps_1960!"),
         };
 
@@ -285,7 +285,7 @@ mod tests {
     async fn get_user_returns_user_by_id() {
         let mut repository = MockTestUserRepository::new();
 
-        let user = miles_davis();
+        let user = john_smith();
         let user_id = user.id();
 
         let returned_user = user.clone();
@@ -305,7 +305,7 @@ mod tests {
 
         let found = result.unwrap();
         assert_eq!(found.id(), user_id);
-        assert_eq!(found.username().as_str(), "miles-davis");
+        assert_eq!(found.username().as_str(), "john-smith");
     }
 
     #[tokio::test]
@@ -332,8 +332,8 @@ mod tests {
     async fn get_user_by_username_returns_user() {
         let mut repository = MockTestUserRepository::new();
 
-        let username = Username::new("miles-davis").unwrap();
-        let user = miles_davis();
+        let username = Username::new("john-smith").unwrap();
+        let user = john_smith();
 
         let returned_user = user.clone();
         let username_clone = username.clone();
@@ -350,7 +350,7 @@ mod tests {
 
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().username().as_str(), "miles-davis");
+        assert_eq!(result.unwrap().username().as_str(), "john-smith");
     }
 
     #[tokio::test]
@@ -367,7 +367,7 @@ mod tests {
             Arc::new(MockTestPasswordHasher::new()),
         );
 
-        let username = Username::new("ravi-shankar").unwrap();
+        let username = Username::new("robert-wilson").unwrap();
         let result = service.get_user_by_username(&username).await;
         assert!(result.is_err());
         assert!(matches!(
@@ -381,8 +381,8 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
-        let username = Username::new("miles-davis").unwrap();
-        let user = miles_davis();
+        let username = Username::new("john-smith").unwrap();
+        let user = john_smith();
 
         let returned_user = user.clone();
         repository
@@ -393,7 +393,7 @@ mod tests {
         password_hasher
             .expect_verify()
             .withf(|password, hash| {
-                password == "K1nd-0f-Blue_1959!" && hash == "$argon2id$test_hash"
+                password == "Winter-Garden_2024!" && hash == "$argon2id$test_hash"
             })
             .times(1)
             .returning(|_, _| Ok(true));
@@ -401,10 +401,10 @@ mod tests {
         let service = Service::new(Arc::new(repository), Arc::new(password_hasher));
 
         let result = service
-            .verify_credentials(&username, "K1nd-0f-Blue_1959!")
+            .verify_credentials(&username, "Winter-Garden_2024!")
             .await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().username().as_str(), "miles-davis");
+        assert_eq!(result.unwrap().username().as_str(), "john-smith");
     }
 
     #[tokio::test]
@@ -412,8 +412,8 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
         let mut password_hasher = MockTestPasswordHasher::new();
 
-        let username = Username::new("miles-davis").unwrap();
-        let user = miles_davis();
+        let username = Username::new("john-smith").unwrap();
+        let user = john_smith();
 
         repository
             .expect_find_by_username()
@@ -446,7 +446,7 @@ mod tests {
 
         let service = Service::new(Arc::new(repository), Arc::new(password_hasher));
 
-        let username = Username::new("ravi-shankar").unwrap();
+        let username = Username::new("robert-wilson").unwrap();
         let result = service.verify_credentials(&username, "irrelevant").await;
         assert!(matches!(result, Err(UserError::InvalidCredentials)));
     }
@@ -456,11 +456,11 @@ mod tests {
         let mut repository = MockTestUserRepository::new();
 
         let user_ids: Vec<UserId> = vec![UserId::new(), UserId::new(), UserId::new()];
-        let names = ["john-coltrane", "kim-gordon", "nina-simone"];
+        let names = ["jane-doe", "alice-turner", "susan-clark"];
         let emails = [
-            "john.coltrane@example.com",
-            "kim.gordon@example.com",
-            "nina.simone@example.com",
+            "jane.doe@example.com",
+            "alice.turner@example.com",
+            "susan.clark@example.com",
         ];
         let users: Vec<User> = user_ids
             .iter()
@@ -498,8 +498,8 @@ mod tests {
 
         let existing_user = User::new(
             UserId::new(),
-            Username::new("thelonious-monk").unwrap(),
-            EmailAddress::new("thelonious.monk@example.com").unwrap(),
+            Username::new("daniel-scott").unwrap(),
+            EmailAddress::new("daniel.scott@example.com").unwrap(),
             "$argon2id$test_hash".to_string(),
             Utc::now(),
         );
@@ -531,8 +531,8 @@ mod tests {
 
         let existing = User::new(
             UserId::new(),
-            Username::new("charlie-parker").unwrap(),
-            EmailAddress::new("charlie.parker@example.com").unwrap(),
+            Username::new("james-walker").unwrap(),
+            EmailAddress::new("james.walker@example.com").unwrap(),
             "$argon2id$old_hash".to_string(),
             Utc::now(),
         );
@@ -548,8 +548,8 @@ mod tests {
         repository
             .expect_update()
             .withf(|user, _event| {
-                user.username().as_str() == "bird-parker"
-                    && user.email().as_str() == "bird.parker@example.com"
+                user.username().as_str() == "mary-thomas"
+                    && user.email().as_str() == "mary.thomas@example.com"
                     && user.password_hash().starts_with("$argon2")
             })
             .times(1)
@@ -558,8 +558,8 @@ mod tests {
         let service = Service::new(Arc::new(repository), Arc::new(stub_password_hasher()));
 
         let command = UpdateUserCommand {
-            username: Some(Username::new("bird-parker").unwrap()),
-            email: Some(EmailAddress::new("bird.parker@example.com").unwrap()),
+            username: Some(Username::new("mary-thomas").unwrap()),
+            email: Some(EmailAddress::new("mary.thomas@example.com").unwrap()),
             password: Some(Password::new("0mnivore_Jazz_1945!")),
         };
 
@@ -567,8 +567,8 @@ mod tests {
         assert!(result.is_ok());
 
         let updated = result.unwrap();
-        assert_eq!(updated.username().as_str(), "bird-parker");
-        assert_eq!(updated.email().as_str(), "bird.parker@example.com");
+        assert_eq!(updated.username().as_str(), "mary-thomas");
+        assert_eq!(updated.email().as_str(), "mary.thomas@example.com");
     }
 
     #[tokio::test]
@@ -586,7 +586,7 @@ mod tests {
         );
 
         let command = UpdateUserCommand {
-            username: Some(Username::new("ella-fitzgerald").unwrap()),
+            username: Some(Username::new("laura-adams").unwrap()),
             email: None,
             password: None,
         };

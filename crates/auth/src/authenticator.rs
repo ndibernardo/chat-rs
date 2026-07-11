@@ -165,14 +165,14 @@ mod tests {
         let authenticator = signing_authenticator();
 
         // Hash a password
-        let password = "K1nd-0f-Blue_1959!";
+        let password = "Winter-Garden_2024!";
         let hash = authenticator
             .hash_password(password)
             .expect("Failed to hash password");
 
         // Authenticate with correct password
         let claims = Claims::new()
-            .with_subject("miles-davis")
+            .with_subject("john-smith")
             .with_expiration(chrono::Utc::now().timestamp() + 3600);
         let result = authenticator
             .authenticate(password, &hash, &claims)
@@ -184,19 +184,19 @@ mod tests {
         let decoded: Claims = authenticator
             .validate_token(&result.access_token)
             .expect("Token validation failed");
-        assert_eq!(decoded.sub, Some("miles-davis".to_string()));
+        assert_eq!(decoded.sub, Some("john-smith".to_string()));
     }
 
     #[test]
     fn test_authenticate_invalid_password() {
         let authenticator = signing_authenticator();
 
-        let password = "K1nd-0f-Blue_1959!";
+        let password = "Winter-Garden_2024!";
         let hash = authenticator
             .hash_password(password)
             .expect("Failed to hash password");
 
-        let claims = Claims::new().with_subject("miles-davis");
+        let claims = Claims::new().with_subject("john-smith");
 
         // Try with wrong password
         let result = authenticator.authenticate("Giant-Steps-Error!", &hash, &claims);
@@ -211,7 +211,7 @@ mod tests {
         let authenticator = signing_authenticator();
 
         let claims = Claims::new()
-            .with_subject("miles-davis")
+            .with_subject("john-smith")
             .with_issuer("chat-rs".to_string())
             .with_expiration(chrono::Utc::now().timestamp() + 3600);
 
@@ -225,7 +225,7 @@ mod tests {
             .validate_token(&token)
             .expect("Failed to validate token");
 
-        assert_eq!(decoded.sub, Some("miles-davis".to_string()));
+        assert_eq!(decoded.sub, Some("john-smith".to_string()));
         assert_eq!(decoded.iss, Some("chat-rs".to_string()));
     }
 
@@ -242,7 +242,7 @@ mod tests {
         let authenticator =
             Authenticator::verifier(PUBLIC_KEY_PEM).expect("Valid Ed25519 public key");
 
-        let result = authenticator.generate_token(&Claims::new().with_subject("miles-davis"));
+        let result = authenticator.generate_token(&Claims::new().with_subject("john-smith"));
 
         assert!(matches!(result, Err(JwtError::SigningKeyUnavailable)));
     }

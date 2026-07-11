@@ -51,14 +51,16 @@ WORKDIR /app
 COPY --from=builder /app/target/release/user-service /app/user-service
 
 # Copy migrations, config and the dev JWT keypair (dev/test only — real
-# deployments mount the keypair from a secret store, not the image). The
-# private half stays 0600 root-owned as copied — the only roles that read
-# this baked-in path (--migrate-only, outbox-relay) never open the file,
-# they just need Config::load to see a non-empty path string; the `server`
-# role reads its real key from a Kubernetes Secret mount, never from here.
+# deployments mount the keypair from a secret store, not the image).
+# --chown to the runtime UID: docker-compose's RUN_MODE=docker config points
+# the `server` role straight at this baked-in private key path (no Secret
+# mount exists outside Kubernetes), so it must actually be readable at
+# runtime — unlike the Kubernetes Deployment, which mounts its own key from
+# a Secret and never opens this file at all. The host file itself stays
+# 0600 root-owned; --chown only changes ownership inside this image layer.
 COPY services/user-service/migrations /app/migrations
 COPY services/user-service/config /app/config
-COPY keys/dev /app/keys/dev
+COPY --chown=65532:65532 keys/dev /app/keys/dev
 
 # Expose ports
 EXPOSE 3001 50051

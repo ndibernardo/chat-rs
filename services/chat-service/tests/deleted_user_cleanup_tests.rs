@@ -291,7 +291,10 @@ async fn cleanup_consumer_erases_deleted_user_and_tolerates_redelivery() {
         1,
         "surviving user's message must remain in channel history"
     );
-    assert_eq!(count_memberships_of(&test_db, surviving_user).await, 1);
+    // Membership in both private_channel and direct_channel — cleanup only
+    // ever touches the deleted user's own rows and soft-deactivates direct
+    // channels (see cleanup.rs), it never removes a survivor's membership.
+    assert_eq!(count_memberships_of(&test_db, surviving_user).await, 2);
     assert_eq!(
         deactivated_at_of(&test_db, &private_channel).await,
         None,

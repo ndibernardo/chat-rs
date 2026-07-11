@@ -25,12 +25,12 @@ CHAT_WS_GATEWAY_URL="ws://127.0.0.1:${CHAT_WS_GATEWAY_LOCAL_PORT}"
 
 # Unique per run so reruns never collide with a previous run's users/channel.
 RUN_SUFFIX="$(date +%s)"
-USER_A_USERNAME="miles-davis-${RUN_SUFFIX}"
-USER_A_EMAIL="miles.davis+${RUN_SUFFIX}@example.com"
-USER_A_PASSWORD="K1nd-0f-Blue_1959!"
-USER_B_USERNAME="john-coltrane-${RUN_SUFFIX}"
-USER_B_EMAIL="john.coltrane+${RUN_SUFFIX}@example.com"
-USER_B_PASSWORD="A-L0ve-Supreme_1965!"
+USER_A_USERNAME="john-smith-${RUN_SUFFIX}"
+USER_A_EMAIL="john.smith+${RUN_SUFFIX}@example.com"
+USER_A_PASSWORD="Winter-Garden_2024!"
+USER_B_USERNAME="jane-doe-${RUN_SUFFIX}"
+USER_B_EMAIL="jane.doe+${RUN_SUFFIX}@example.com"
+USER_B_PASSWORD="Autumn-Bridge_2023!"
 CHANNEL_NAME="on-call-rotation-${RUN_SUFFIX}"
 MESSAGE_CONTENT="Has the incident been resolved? (${RUN_SUFFIX})"
 

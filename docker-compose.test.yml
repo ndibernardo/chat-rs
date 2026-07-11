@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: services/user-service/Dockerfile
     container_name: user-service-test-migrate
-    command: [ "/app/user-service", "--migrate-only" ]
+    command: [ "--migrate-only" ]
     depends_on:
       postgres-test:
         condition: service_healthy
