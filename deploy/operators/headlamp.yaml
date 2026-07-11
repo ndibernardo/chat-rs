@@ -1,0 +1,10 @@
+# headlamp/headlamp 0.43.0 (https://kubernetes-sigs.github.io/headlamp/)
+#
+# General-purpose cluster dashboard — the official kubernetes-dashboard
+# project is archived (kubernetes-retired/dashboard) and its own Helm repo
+# is dead (404), so this is the community-recommended replacement instead.
+#
+# Every default is kept: `serviceAccount.create` + `clusterRoleBinding`
+# (bound to `cluster-admin`) give it full read/write over this cluster,
+# fine for a local kind cluster reached only via port-forward. Login is
+# token-based (`kubectl create token headlamp` — see the README), not OIDC.

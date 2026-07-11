@@ -24,6 +24,7 @@ readonly INGRESS_NGINX_CHART_VERSION=4.15.1
 readonly METRICS_SERVER_CHART_VERSION=3.13.1
 readonly PROMETHEUS_ADAPTER_CHART_VERSION=5.3.0
 readonly ARGOCD_CHART_VERSION=10.1.3
+readonly HEADLAMP_CHART_VERSION=0.43.0
 
 # GitHub remote this repo's own Applications point back at — the GitOps path
 # deploys whatever's on the pushed k8s branch there, never the working tree.
@@ -67,6 +68,7 @@ install_operators() {
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update
   helm repo add argo https://argoproj.github.io/argo-helm --force-update
+  helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/ --force-update
   helm repo update
 
   helm upgrade --install cert-manager jetstack/cert-manager \
@@ -142,6 +144,12 @@ install_operators() {
     --version "$ARGOCD_CHART_VERSION" \
     --namespace argocd --create-namespace \
     -f deploy/operators/argo-cd.yaml \
+    --wait --timeout 5m
+
+  helm upgrade --install headlamp headlamp/headlamp \
+    --version "$HEADLAMP_CHART_VERSION" \
+    --namespace headlamp --create-namespace \
+    -f deploy/operators/headlamp.yaml \
     --wait --timeout 5m
 }
 
@@ -288,6 +296,9 @@ main() {
     echo "Deployed via Argo CD from the pushed k8s branch. Port-forward the Argo UI with:"
     echo "  kubectl --context $KIND_CONTEXT -n argocd port-forward svc/argocd-server 8080:80"
   fi
+  echo "Cluster dashboard (Headlamp): port-forward and grab a login token with"
+  echo "  kubectl --context $KIND_CONTEXT -n headlamp port-forward svc/headlamp 4466:80"
+  echo "  kubectl --context $KIND_CONTEXT -n headlamp create token headlamp"
 }
 
 main "$@"
