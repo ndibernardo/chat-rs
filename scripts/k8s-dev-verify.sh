@@ -207,7 +207,9 @@ create_channel_with_member_b() {
 # Sec-WebSocket-Protocol, not the query string, per websocket_auth_tests.rs.
 start_b_listener() {
   B_FRAMES_FILE="$WORKDIR/b-frames.jsonl"
-  websocat "${CHAT_WS_GATEWAY_URL}/ws/channels/${CHANNEL_ID}" \
+  # -n/--no-close: without it, /dev/null's immediate EOF makes websocat send
+  # a WS Close frame right after connecting, before any broadcast can land.
+  websocat -n "${CHAT_WS_GATEWAY_URL}/ws/channels/${CHANNEL_ID}" \
     --protocol "bearer, ${USER_B_TOKEN}" \
     </dev/null >"$B_FRAMES_FILE" 2>"$WORKDIR/b-ws.err" &
   BACKGROUND_PIDS+=($!)
@@ -225,7 +227,7 @@ start_b_listener() {
 # inbound/websocket/messages.rs: {"type":"send_message","content":"..."}.
 send_message_from_a() {
   local frame
-  frame="$(jq -n --arg c "$MESSAGE_CONTENT" '{type: "send_message", content: $c}')"
+  frame="$(jq -nc --arg c "$MESSAGE_CONTENT" '{type: "send_message", content: $c}')"
   printf '%s\n' "$frame" | websocat "${CHAT_WS_GATEWAY_URL}/ws/channels/${CHANNEL_ID}" \
     --protocol "bearer, ${USER_A_TOKEN}" -1 -u -n \
     >"$WORKDIR/a-ws-send.log" 2>&1 \
