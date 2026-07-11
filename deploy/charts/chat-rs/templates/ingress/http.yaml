@@ -10,6 +10,12 @@ metadata:
     {{- include "chat-rs.labels" (dict "root" $ "workload" "ingress-http") | nindent 4 }}
   annotations:
     cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    # ingress-nginx force-redirects port 80 -> 443 by default whenever an
+    # Ingress carries a `tls:` block. The verify scripts deliberately hit
+    # port 80 directly (no real DNS, no reason to fight a self-signed cert
+    # from a curl one-liner) — without this, every plain-HTTP request here
+    # would 308 instead of reaching the backend.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:

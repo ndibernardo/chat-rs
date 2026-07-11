@@ -11,6 +11,9 @@ metadata:
     # rolling restart, or nginx cuts it before the app gets a chance to.
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # See chat-rs-http's Ingress for why: without this, port 80 redirects to
+    # 443 and the verify scripts' plain `ws://` connections never land.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   tls:
