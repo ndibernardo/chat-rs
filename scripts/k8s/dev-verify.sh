@@ -8,7 +8,7 @@ set -euo pipefail
 # chat-ws-gateway -> Kafka messages -> chat-worker persister -> Scylla,
 # surfaced back through chat-api — works in-cluster.
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd))"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
 CLUSTER_NAME=chat-rs

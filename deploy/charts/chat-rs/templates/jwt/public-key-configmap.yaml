@@ -1,5 +1,5 @@
 {{- if not .Values.jwt.publicKey -}}
-{{- fail "jwt.publicKey is required — pass via --set-file jwt.publicKey=<path-to-pub.pem> (scripts/k8s-dev-up.sh does this for the dev keypair)" -}}
+{{- fail "jwt.publicKey is required — pass via --set-file jwt.publicKey=<path-to-pub.pem> (scripts/k8s/dev-up.sh does this for the dev keypair)" -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap

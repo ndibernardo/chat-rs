@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Brings up the chat-rs-staging namespace on the same kind cluster
-# scripts/k8s-dev-up.sh brings up. Assumes that script already ran at least
+# scripts/k8s/dev-up.sh brings up. Assumes that script already ran at least
 # once — the kind cluster, Argo CD, and every cluster-wide operator (Strimzi,
 # CNPG, Scylla Operator, cert-manager, ingress-nginx, metrics-server,
 # prometheus-adapter, kube-prometheus-stack) are shared with dev and are not
@@ -15,14 +15,14 @@ set -euo pipefail
 # `helm upgrade` instead, from the working tree — never mix the two on the
 # same namespace, they'll fight over resource ownership.
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd))"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
 CLUSTER_NAME=chat-rs
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
 NAMESPACE=chat-rs-staging
 
-# Must track scripts/k8s-dev-up.sh's STRIMZI_CHART_VERSION — re-verify both
+# Must track scripts/k8s/dev-up.sh's STRIMZI_CHART_VERSION — re-verify both
 # together against Artifact Hub before bumping either.
 readonly STRIMZI_CHART_VERSION=1.1.0
 
@@ -33,7 +33,7 @@ create_namespace() {
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
 }
 
-# Stage 2: re-upgrade is a no-op if scripts/k8s-dev-up.sh already applied
+# Stage 2: re-upgrade is a no-op if scripts/k8s/dev-up.sh already applied
 # deploy/operators/strimzi.yaml's current watchNamespaces — but if this
 # script runs against a cluster that was set up before chat-rs-staging was
 # added there, this is what actually grants Strimzi the RoleBinding it needs.
@@ -59,7 +59,7 @@ install_infra() {
 }
 
 # Stage 4: block until every operator has actually reconciled its CRs —
-# mirrors scripts/k8s-dev-up.sh's wait_for_infra.
+# mirrors scripts/k8s/dev-up.sh's wait_for_infra.
 wait_for_infra() {
   kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" wait kafka/chat-kafka \
     --for=condition=Ready --timeout=600s
