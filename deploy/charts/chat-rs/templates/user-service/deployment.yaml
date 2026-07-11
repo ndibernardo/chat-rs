@@ -24,6 +24,7 @@ spec:
         runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      {{- include "chat-rs.topologySpreadConstraints" (dict "root" $ "workload" "user-service") | nindent 6 }}
       terminationGracePeriodSeconds: 30
       containers:
         - name: user-service

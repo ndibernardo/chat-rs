@@ -24,6 +24,7 @@ spec:
         runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      {{- include "chat-rs.topologySpreadConstraints" (dict "root" $ "workload" "chat-ws-gateway") | nindent 6 }}
       # Must exceed shutdown.readiness_delay_seconds + shutdown.drain_grace_seconds
       # (config/kubernetes.toml) or Kubernetes SIGKILLs the pod before WS
       # clients get their close frame and a chance to reconnect elsewhere.

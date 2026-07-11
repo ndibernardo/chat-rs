@@ -1,0 +1,78 @@
+{{/*
+One PodDisruptionBudget per workload, minAvailable: 1, rendered only when
+the workload's effective replica count is >= 2 — a minAvailable: 1 PDB on a
+single-replica workload blocks voluntary eviction (node drain, autoscaler)
+entirely instead of protecting availability.
+*/}}
+{{- $userServiceReplicas := ternary .Values.userService.autoscaling.minReplicas .Values.userService.replicas .Values.autoscaling.enabled }}
+{{- if ge (int $userServiceReplicas) 2 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "user-service") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "user-service") | nindent 6 }}
+{{- end }}
+---
+{{- if ge (int .Values.userOutboxRelay.replicas) 2 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-outbox-relay
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "user-outbox-relay") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "user-outbox-relay") | nindent 6 }}
+{{- end }}
+---
+{{- $chatApiReplicas := ternary .Values.chatApi.autoscaling.minReplicas .Values.chatApi.replicas .Values.autoscaling.enabled }}
+{{- if ge (int $chatApiReplicas) 2 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chat-api
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-api") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-api") | nindent 6 }}
+{{- end }}
+---
+{{- $chatWsGatewayReplicas := ternary .Values.chatWsGateway.autoscaling.minReplicas .Values.chatWsGateway.replicas .Values.autoscaling.enabled }}
+{{- if ge (int $chatWsGatewayReplicas) 2 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chat-ws-gateway
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 6 }}
+{{- end }}
+---
+{{- if ge (int .Values.chatWorker.replicas) 2 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chat-worker
+  labels:
+    {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-worker") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chat-rs.selectorLabels" (dict "root" $ "workload" "chat-worker") | nindent 6 }}
+{{- end }}
