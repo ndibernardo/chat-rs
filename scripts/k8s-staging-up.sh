@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Direct-helm path for the chat-rs-staging namespace on the same kind
-# cluster scripts/k8s-dev-up.sh brings up. Assumes that script already ran
-# at least once — the kind cluster and every cluster-wide operator (Strimzi,
+# Brings up the chat-rs-staging namespace on the same kind cluster
+# scripts/k8s-dev-up.sh brings up. Assumes that script already ran at least
+# once — the kind cluster, Argo CD, and every cluster-wide operator (Strimzi,
 # CNPG, Scylla Operator, cert-manager, ingress-nginx, metrics-server,
 # prometheus-adapter, kube-prometheus-stack) are shared with dev and are not
 # reinstalled here.
+#
+# Default path applies this repo's two staging Applications
+# (deploy/argocd/{infra,app}-staging.yaml) and waits for Argo to sync them —
+# dev and staging are deployed by separate scripts on purpose, so bringing up
+# one never silently deploys the other. --direct installs via plain
+# `helm upgrade` instead, from the working tree — never mix the two on the
+# same namespace, they'll fight over resource ownership.
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd))"
 cd "$REPO_ROOT"
@@ -94,12 +101,38 @@ install_app() {
     --wait --timeout 10m
 }
 
+# Stage 6 (GitOps path only): apply this repo's two staging Applications and
+# wait for Argo to sync + report Healthy. dev's script owns cluster-issuer
+# and its own two Applications — this one only ever touches staging's.
+apply_argocd_apps() {
+  kubectl --context "$KIND_CONTEXT" apply \
+    -f deploy/argocd/infra-staging.yaml \
+    -f deploy/argocd/app-staging.yaml
+
+  local app
+  for app in chat-rs-infra-staging chat-rs-app-staging; do
+    echo "waiting for Application/${app} to reach Healthy..."
+    kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
+      --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
+  done
+}
+
 main() {
+  local direct=false
+  if [[ "${1:-}" == "--direct" ]]; then
+    direct=true
+  fi
+
   create_namespace
   reupgrade_strimzi
-  install_infra
-  wait_for_infra
-  install_app
+
+  if [[ "$direct" == "true" ]]; then
+    install_infra
+    wait_for_infra
+    install_app
+  else
+    apply_argocd_apps
+  fi
 
   echo
   echo "Done: chat-rs-staging is up on cluster '$CLUSTER_NAME'."

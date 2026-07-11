@@ -77,11 +77,6 @@ install_operators() {
     -f deploy/operators/cert-manager.yaml \
     --wait --timeout 5m
 
-  # Cluster-scoped, plain manifest — can't live in a chart that installs
-  # into both chat-rs and chat-rs-staging under two Helm releases. Safe to
-  # apply right after cert-manager's own --wait confirms its webhook is up.
-  kubectl --context "$KIND_CONTEXT" apply -f deploy/cluster/self-signed-clusterissuer.yaml
-
   helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     --version "$KUBE_PROMETHEUS_STACK_CHART_VERSION" \
     --namespace monitoring --create-namespace \
@@ -252,11 +247,17 @@ install_argocd_apps() {
     echo "GITHUB_TOKEN not set — skipping repo Secret (only needed for a private repo)"
   fi
 
-  kubectl --context "$KIND_CONTEXT" apply -f deploy/argocd/
+  # Dev-owned Applications only — cluster-issuer is cluster-wide and dev is
+  # the natural first environment to own applying it, but staging's own two
+  # Applications belong to scripts/k8s-staging-up.sh, not this script. Apply
+  # both together would make "just bring up dev" silently deploy staging too.
+  kubectl --context "$KIND_CONTEXT" apply \
+    -f deploy/argocd/cluster-issuer.yaml \
+    -f deploy/argocd/infra-dev.yaml \
+    -f deploy/argocd/app-dev.yaml
 
   local app
-  for app in chat-rs-cluster-issuer chat-rs-infra-dev chat-rs-app-dev \
-    chat-rs-infra-staging chat-rs-app-staging; do
+  for app in chat-rs-cluster-issuer chat-rs-infra-dev chat-rs-app-dev; do
     echo "waiting for Application/${app} to reach Healthy..."
     kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
       --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
@@ -278,6 +279,14 @@ main() {
     # Escape hatch for testing unpushed changes — Argo only ever deploys
     # what's on the pushed k8s branch. Never mix this with the GitOps path
     # on the same namespace; the two will fight over resource ownership.
+    #
+    # Cluster-scoped, plain manifest — can't live in a chart that installs
+    # into both chat-rs and chat-rs-staging under two Helm releases. Only
+    # applied directly here: under the GitOps path below, the
+    # chat-rs-cluster-issuer Application owns this object instead — applying
+    # it both ways means Argo can never actually take ownership (it'll sit
+    # permanently OutOfSync, unable to self-heal since that's off on purpose).
+    kubectl --context "$KIND_CONTEXT" apply -f deploy/cluster/self-signed-clusterissuer.yaml
     install_infra
     wait_for_infra
     install_app
