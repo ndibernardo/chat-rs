@@ -1,0 +1,87 @@
+# Staging overrides only — everything not listed here falls back to values.yaml.
+#
+# Second namespace on the same kind cluster (chat-rs-staging), with its own
+# dev-shape infra release — see chat-rs-infra's values-staging.yaml for why.
+# Every in-cluster DNS name below is namespace-qualified because these
+# Services live in chat-rs-staging, not chat-rs.
+
+kafka:
+  brokers: chat-kafka-kafka-bootstrap.chat-rs-staging.svc:9092
+
+cassandra:
+  nodes: chat-scylla-client.chat-rs-staging.svc.cluster.local:9042
+  # Matches the staging ScyllaCluster's single-member shape (see
+  # chat-rs-infra's values-staging.yaml) — RF=3 is unsatisfiable on it.
+  replicationFactor: 1
+
+userServiceGrpcUrl: http://user-service-grpc.chat-rs-staging.svc.cluster.local:50051
+
+ingress:
+  host: chat.staging.local
+
+# On: exercises the real HPA path — a rolling restart against autoscaled
+# Deployments behaves differently than one against statically-replica'd
+# ones. min 2 / max 4 across all three HPA-managed workloads — staging
+# proves the mechanism, not real capacity planning.
+autoscaling:
+  enabled: true
+
+userService:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi
+
+userOutboxRelay:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+chatApi:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+  resources:
+    requests:
+      cpu: 125m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+
+chatWsGateway:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+    # Deliberately tiny — makes the HPA's scale-out provable under a small
+    # K6/websocat load instead of needing real traffic volume.
+    targetWsConnections: 5
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+chatWorker:
+  # No HPA for this workload (see values.yaml) — pinned low because
+  # consumer-group partition count, not CPU, is the real ceiling here.
+  replicas: 1
+  resources:
+    requests:
+      cpu: 125m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi

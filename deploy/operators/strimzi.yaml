@@ -1,5 +1,8 @@
 # strimzi/strimzi-kafka-operator 1.1.0 (https://strimzi.io/charts/)
 # Empty watchNamespaces is a silent no-op: the operator runs but ignores every
 # Kafka/KafkaTopic CR outside the listed namespaces, with no error surfaced.
+# Every watched namespace also needs to exist before this chart installs —
+# it creates a RoleBinding per entry and doesn't create the namespace itself.
 watchNamespaces:
   - chat-rs
+  - chat-rs-staging
