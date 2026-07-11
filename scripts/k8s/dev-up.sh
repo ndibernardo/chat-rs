@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Repo root, so the script works regardless of the caller's cwd.
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd))"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
 CLUSTER_NAME=chat-rs
@@ -99,7 +99,7 @@ install_operators() {
   # Strimzi's chart creates RoleBindings inside every watched namespace, so
   # both chat-rs and chat-rs-staging must exist before the operator installs
   # (idempotent apply) — watchNamespaces lists chat-rs-staging even though
-  # scripts/k8s-staging-up.sh, not this script, deploys anything into it.
+  # scripts/k8s/staging-up.sh, not this script, deploys anything into it.
   kubectl --context "$KIND_CONTEXT" create namespace chat-rs \
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
   kubectl --context "$KIND_CONTEXT" create namespace chat-rs-staging \
@@ -249,7 +249,7 @@ install_argocd_apps() {
 
   # Dev-owned Applications only — cluster-issuer is cluster-wide and dev is
   # the natural first environment to own applying it, but staging's own two
-  # Applications belong to scripts/k8s-staging-up.sh, not this script. Apply
+  # Applications belong to scripts/k8s/staging-up.sh, not this script. Apply
   # both together would make "just bring up dev" silently deploy staging too.
   kubectl --context "$KIND_CONTEXT" apply \
     -f deploy/argocd/cluster-issuer.yaml \

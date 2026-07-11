@@ -2,7 +2,7 @@
 set -e
 set -eo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 echo "Starting test infrastructure..."
 docker-compose -f docker-compose.test.yml up -d

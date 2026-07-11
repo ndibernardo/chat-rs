@@ -10,7 +10,7 @@ set -euo pipefail
 # Deployments, and asserts the run stayed clean throughout. Exit 0 is the
 # Phase 2 exit criterion.
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd))"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
 CLUSTER_NAME=chat-rs

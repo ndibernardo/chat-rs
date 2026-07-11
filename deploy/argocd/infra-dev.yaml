@@ -18,7 +18,7 @@ spec:
   syncPolicy:
     automated:
       prune: true
-      # Off, not on: selfHeal would revert scripts/k8s-dev-verify.sh's
+      # Off, not on: selfHeal would revert scripts/k8s/dev-verify.sh's
       # `kubectl rollout restart` drill back to the last-synced state mid-run.
       selfHeal: false
     syncOptions:
