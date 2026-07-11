@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "chat-rs.labels" (dict "root" $ "workload" "chat-ws-gateway") | nindent 4 }}
 spec:
+  # Omitted, not defaulted, when the HPA owns this field — reasserting a
+  # static replica count on every helm upgrade would fight the HPA's own
+  # scaling decisions.
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.chatWsGateway.replicas }}
+  {{- end }}
   strategy:
     rollingUpdate:
       maxSurge: 1

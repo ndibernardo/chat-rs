@@ -1,0 +1,5 @@
+# metrics-server/metrics-server 3.13.1 (https://kubernetes-sigs.github.io/metrics-server/)
+args:
+  # kind's kubelet serves a self-signed cert metrics-server doesn't trust by
+  # default — without this every node/pod metric request fails TLS verify.
+  - --kubelet-insecure-tls

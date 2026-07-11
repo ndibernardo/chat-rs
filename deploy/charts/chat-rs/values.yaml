@@ -65,6 +65,7 @@ userService:
   # static replicas above so flipping the switch doesn't change capacity.
   autoscaling:
     minReplicas: 2
+    maxReplicas: 4
   resources:
     requests:
       cpu: 500m
@@ -87,6 +88,7 @@ chatApi:
   replicas: 2
   autoscaling:
     minReplicas: 2
+    maxReplicas: 4
   resources:
     requests:
       cpu: 250m
@@ -99,6 +101,11 @@ chatWsGateway:
   replicas: 3
   autoscaling:
     minReplicas: 3
+    maxReplicas: 6
+    # Per-pod average target for the ws_connections Pods metric. Staging
+    # deliberately overrides this to a tiny number so the HPA scale-out is
+    # provable under a small K6/websocat load instead of needing real traffic.
+    targetWsConnections: 200
   # Must exceed shutdown.readiness_delay_seconds + shutdown.drain_grace_seconds
   # (config/kubernetes.toml) or Kubernetes SIGKILLs the pod before WS clients
   # get their close frame and a chance to reconnect elsewhere.

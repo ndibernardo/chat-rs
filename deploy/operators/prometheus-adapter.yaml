@@ -1,0 +1,24 @@
+# prometheus-community/prometheus-adapter 5.3.0 (https://prometheus-community.github.io/helm-charts)
+prometheus:
+  url: http://kube-prometheus-stack-prometheus.monitoring.svc
+  port: 9090
+
+rules:
+  # No resource-metric rules: metrics-server already serves the
+  # resource.k8s.io cpu/memory API. Letting the adapter also claim that
+  # group puts the two in a silent fight over the same endpoints.
+  default: false
+  custom:
+    - seriesQuery: 'ws_connections{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      name:
+        as: ws_connections
+      # max, not sum/avg, over a 2m window: a gauge sampled every 30s can
+      # read 0 between HPA polls right as connections churn — max_over_time
+      # smooths that out instead of feeding the HPA a false scale-down signal.
+      metricsQuery: max_over_time(<<.Series>>{<<.LabelMatchers>>}[2m])
