@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rolling-restart proof for chat-rs-staging, all traffic routed through
+# Rolling-restart proof for chat-staging, all traffic routed through
 # Ingress (no port-forward, no real DNS — curl's --resolve fakes
 # chat.staging.local -> 127.0.0.1; websocat has no --resolve equivalent, so
 # it uses the ws-c: overlay + --ws-c-uri instead, see ws_monitor). Registers two
@@ -13,9 +13,9 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
-CLUSTER_NAME=chat-rs
+CLUSTER_NAME=chat
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
-NAMESPACE=chat-rs-staging
+NAMESPACE=chat-staging
 HOST=chat.staging.local
 BASE_URL="http://${HOST}"
 

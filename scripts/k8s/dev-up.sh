@@ -5,11 +5,11 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
-CLUSTER_NAME=chat-rs
+CLUSTER_NAME=chat
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
 KIND_CONFIG=deploy/kind/cluster.yaml
-USER_SERVICE_IMAGE=chat-rs/user-service:dev
-CHAT_SERVICE_IMAGE=chat-rs/chat-service:dev
+USER_SERVICE_IMAGE=chat/user-service:dev
+CHAT_SERVICE_IMAGE=chat/chat-service:dev
 
 # Pinned from a live `helm search repo` on 2026-07-10 (ingress-nginx added
 # 2026-07-11) — bump deliberately, never from memory, and re-verify against
@@ -28,7 +28,7 @@ readonly HEADLAMP_CHART_VERSION=0.43.0
 
 # GitHub remote this repo's own Applications point back at — the GitOps path
 # deploys whatever's on the pushed main branch there, never the working tree.
-readonly REPO_URL=https://github.com/ndibernardo/chat-rs.git
+readonly REPO_URL=https://github.com/ndibernardo/chat.git
 
 # Stage 1: cluster must exist and be reachable before anything else runs.
 create_cluster() {
@@ -97,12 +97,12 @@ install_operators() {
     --wait --timeout 5m
 
   # Strimzi's chart creates RoleBindings inside every watched namespace, so
-  # both chat-rs and chat-rs-staging must exist before the operator installs
-  # (idempotent apply) — watchNamespaces lists chat-rs-staging even though
+  # both chat and chat-staging must exist before the operator installs
+  # (idempotent apply) — watchNamespaces lists chat-staging even though
   # scripts/k8s/staging-up.sh, not this script, deploys anything into it.
-  kubectl --context "$KIND_CONTEXT" create namespace chat-rs \
+  kubectl --context "$KIND_CONTEXT" create namespace chat \
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
-  kubectl --context "$KIND_CONTEXT" create namespace chat-rs-staging \
+  kubectl --context "$KIND_CONTEXT" create namespace chat-staging \
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
 
   helm upgrade --install strimzi-kafka-operator strimzi/strimzi-kafka-operator \
@@ -177,19 +177,19 @@ wait_for_operator_crds() {
 # before the operators finish reconciling Kafka/CNPG/Scylla into a Ready
 # state — that's what the next stage polls for.
 install_infra() {
-  helm upgrade --install chat-rs-infra deploy/charts/chat-rs-infra \
-    --namespace chat-rs \
-    -f deploy/charts/chat-rs-infra/values-dev.yaml \
+  helm upgrade --install chat-infra deploy/charts/chat-infra \
+    --namespace chat \
+    -f deploy/charts/chat-infra/values-dev.yaml \
     --wait --timeout 10m
 }
 
 # Stage 6: block until every operator has actually reconciled its CRs,
 # rather than trusting install_infra's `--wait`.
 wait_for_infra() {
-  kubectl --context "$KIND_CONTEXT" -n chat-rs wait kafka/chat-kafka \
+  kubectl --context "$KIND_CONTEXT" -n chat wait kafka/chat-kafka \
     --for=condition=Ready --timeout=600s
 
-  kubectl --context "$KIND_CONTEXT" -n chat-rs wait cluster/user-db cluster/chat-db \
+  kubectl --context "$KIND_CONTEXT" -n chat wait cluster/user-db cluster/chat-db \
     --for=condition=Ready --timeout=600s
 
   # ScyllaCluster has no single Ready condition that's stable across operator
@@ -197,10 +197,10 @@ wait_for_infra() {
   local attempt
   for attempt in $(seq 1 60); do
     local ready
-    ready="$(kubectl --context "$KIND_CONTEXT" -n chat-rs get scyllacluster/chat-scylla \
+    ready="$(kubectl --context "$KIND_CONTEXT" -n chat get scyllacluster/chat-scylla \
       -o jsonpath='{.status.racks.rack1.readyMembers}' 2>/dev/null || true)"
     local wanted
-    wanted="$(kubectl --context "$KIND_CONTEXT" -n chat-rs get scyllacluster/chat-scylla \
+    wanted="$(kubectl --context "$KIND_CONTEXT" -n chat get scyllacluster/chat-scylla \
       -o jsonpath='{.spec.datacenter.racks[0].members}')"
 
     if [[ -n "$ready" && "$ready" == "$wanted" ]]; then
@@ -216,15 +216,15 @@ wait_for_infra() {
   exit 1
 }
 
-# Stage 7: install the chat-rs app chart — user-service and chat-service
+# Stage 7: install the chat app chart — user-service and chat-service
 # workloads together in one release. --set-file keeps the committed dev
 # keypair as the single source of truth instead of copy-pasting PEM content
 # into a values file; --wait also blocks on the pre-install migrate hooks,
 # so this call doesn't return until both schemas are current.
 install_app() {
-  helm upgrade --install chat-rs deploy/charts/chat-rs \
-    --namespace chat-rs \
-    -f deploy/charts/chat-rs/values-dev.yaml \
+  helm upgrade --install chat deploy/charts/chat \
+    --namespace chat \
+    -f deploy/charts/chat/values-dev.yaml \
     --set-file jwt.privateKey=keys/dev/jwt_ed25519.pem \
     --set-file jwt.publicKey=keys/dev/jwt_ed25519.pub.pem \
     --wait --timeout 10m
@@ -235,13 +235,13 @@ install_app() {
 # needed for a private repo — GITHUB_TOKEN is optional on purpose.
 install_argocd_apps() {
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    kubectl --context "$KIND_CONTEXT" -n argocd create secret generic chat-rs-repo \
+    kubectl --context "$KIND_CONTEXT" -n argocd create secret generic chat-repo \
       --from-literal=type=git \
       --from-literal=url="$REPO_URL" \
       --from-literal=username=git \
       --from-literal=password="$GITHUB_TOKEN" \
       --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
-    kubectl --context "$KIND_CONTEXT" -n argocd label secret chat-rs-repo \
+    kubectl --context "$KIND_CONTEXT" -n argocd label secret chat-repo \
       argocd.argoproj.io/secret-type=repository --overwrite
   else
     echo "GITHUB_TOKEN not set — skipping repo Secret (only needed for a private repo)"
@@ -257,7 +257,7 @@ install_argocd_apps() {
     -f deploy/argocd/app-dev.yaml
 
   local app
-  for app in chat-rs-cluster-issuer chat-rs-infra-dev chat-rs-app-dev; do
+  for app in chat-cluster-issuer chat-infra-dev chat-app-dev; do
     echo "waiting for Application/${app} to reach Healthy..."
     kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
       --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
@@ -281,9 +281,9 @@ main() {
     # on the same namespace; the two will fight over resource ownership.
     #
     # Cluster-scoped, plain manifest — can't live in a chart that installs
-    # into both chat-rs and chat-rs-staging under two Helm releases. Only
+    # into both chat and chat-staging under two Helm releases. Only
     # applied directly here: under the GitOps path below, the
-    # chat-rs-cluster-issuer Application owns this object instead — applying
+    # chat-cluster-issuer Application owns this object instead — applying
     # it both ways means Argo can never actually take ownership (it'll sit
     # permanently OutOfSync, unable to self-heal since that's off on purpose).
     kubectl --context "$KIND_CONTEXT" apply -f deploy/cluster/self-signed-clusterissuer.yaml
@@ -298,9 +298,9 @@ main() {
   echo "Done: kind cluster '$CLUSTER_NAME' is up, images loaded, operators installed,"
   echo "and Kafka/Postgres/Scylla infra is Ready."
   echo "user-service and chat-service are deployed. Port-forward them with:"
-  echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/user-service 3001:3001"
-  echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-api 3002:3002"
-  echo "  kubectl --context $KIND_CONTEXT -n chat-rs port-forward svc/chat-ws-gateway 3003:3002"
+  echo "  kubectl --context $KIND_CONTEXT -n chat port-forward svc/user-service 3001:3001"
+  echo "  kubectl --context $KIND_CONTEXT -n chat port-forward svc/chat-api 3002:3002"
+  echo "  kubectl --context $KIND_CONTEXT -n chat port-forward svc/chat-ws-gateway 3003:3002"
   if [[ "$direct" != "true" ]]; then
     echo "Deployed via Argo CD from the pushed main branch. Port-forward the Argo UI with:"
     echo "  kubectl --context $KIND_CONTEXT -n argocd port-forward svc/argocd-server 8080:80"

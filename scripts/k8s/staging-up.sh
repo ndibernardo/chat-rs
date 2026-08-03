@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Brings up the chat-rs-staging namespace on the same kind cluster
+# Brings up the chat-staging namespace on the same kind cluster
 # scripts/k8s/dev-up.sh brings up. Assumes that script already ran at least
 # once — the kind cluster, Argo CD, and every cluster-wide operator (Strimzi,
 # CNPG, Scylla Operator, cert-manager, ingress-nginx, metrics-server,
@@ -18,16 +18,16 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
-CLUSTER_NAME=chat-rs
+CLUSTER_NAME=chat
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
-NAMESPACE=chat-rs-staging
+NAMESPACE=chat-staging
 
 # Must track scripts/k8s/dev-up.sh's STRIMZI_CHART_VERSION — re-verify both
 # together against Artifact Hub before bumping either.
 readonly STRIMZI_CHART_VERSION=1.1.0
 
 # Stage 1: Strimzi's chart creates a RoleBinding per watched namespace, so
-# chat-rs-staging must exist first (idempotent apply).
+# chat-staging must exist first (idempotent apply).
 create_namespace() {
   kubectl --context "$KIND_CONTEXT" create namespace "$NAMESPACE" \
     --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply -f -
@@ -35,7 +35,7 @@ create_namespace() {
 
 # Stage 2: re-upgrade is a no-op if scripts/k8s/dev-up.sh already applied
 # deploy/operators/strimzi.yaml's current watchNamespaces — but if this
-# script runs against a cluster that was set up before chat-rs-staging was
+# script runs against a cluster that was set up before chat-staging was
 # added there, this is what actually grants Strimzi the RoleBinding it needs.
 reupgrade_strimzi() {
   helm repo add strimzi https://strimzi.io/charts/ --force-update
@@ -52,9 +52,9 @@ reupgrade_strimzi() {
 # staging namespace from the same repo-authored infra chart dev uses, dev-
 # shaped values.
 install_infra() {
-  helm upgrade --install chat-rs-infra deploy/charts/chat-rs-infra \
+  helm upgrade --install chat-infra deploy/charts/chat-infra \
     --namespace "$NAMESPACE" \
-    -f deploy/charts/chat-rs-infra/values-staging.yaml \
+    -f deploy/charts/chat-infra/values-staging.yaml \
     --wait --timeout 10m
 }
 
@@ -89,13 +89,13 @@ wait_for_infra() {
   exit 1
 }
 
-# Stage 5: install the chat-rs app chart into the staging namespace with its
+# Stage 5: install the chat app chart into the staging namespace with its
 # own keypair — a distinct release name isn't needed since Helm releases are
-# themselves namespace-scoped, so "chat-rs" here never collides with dev's.
+# themselves namespace-scoped, so "chat" here never collides with dev's.
 install_app() {
-  helm upgrade --install chat-rs deploy/charts/chat-rs \
+  helm upgrade --install chat deploy/charts/chat \
     --namespace "$NAMESPACE" \
-    -f deploy/charts/chat-rs/values-staging.yaml \
+    -f deploy/charts/chat/values-staging.yaml \
     --set-file jwt.privateKey=keys/staging/jwt_ed25519.pem \
     --set-file jwt.publicKey=keys/staging/jwt_ed25519.pub.pem \
     --wait --timeout 10m
@@ -110,7 +110,7 @@ apply_argocd_apps() {
     -f deploy/argocd/app-staging.yaml
 
   local app
-  for app in chat-rs-infra-staging chat-rs-app-staging; do
+  for app in chat-infra-staging chat-app-staging; do
     echo "waiting for Application/${app} to reach Healthy..."
     kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
       --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
@@ -135,7 +135,7 @@ main() {
   fi
 
   echo
-  echo "Done: chat-rs-staging is up on cluster '$CLUSTER_NAME'."
+  echo "Done: chat-staging is up on cluster '$CLUSTER_NAME'."
   echo "Routed via Ingress at chat.staging.local, or port-forward directly:"
   echo "  kubectl --context $KIND_CONTEXT -n $NAMESPACE port-forward svc/user-service 3001:3001"
   echo "  kubectl --context $KIND_CONTEXT -n $NAMESPACE port-forward svc/chat-api 3002:3002"

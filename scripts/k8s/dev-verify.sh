@@ -11,9 +11,9 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd))"
 cd "$REPO_ROOT"
 
-CLUSTER_NAME=chat-rs
+CLUSTER_NAME=chat
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
-NAMESPACE=chat-rs
+NAMESPACE=chat
 
 USER_SERVICE_LOCAL_PORT=18080
 CHAT_API_LOCAL_PORT=18081
