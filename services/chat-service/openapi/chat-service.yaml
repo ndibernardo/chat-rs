@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Chat Service API
   description: |
-    Real-time messaging service for chat-rs.
+    Real-time messaging service for chat.
 
     Handles channel management, message persistence, and real-time message delivery.
   version: 0.1.0

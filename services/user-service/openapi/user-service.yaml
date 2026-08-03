@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: User Service API
   description: |
-    User management and authentication service for chat-rs.
+    User management and authentication service for chat.
 
     Handles user registration, authentication, and profile management.
     Issues JWT tokens for authenticated sessions.

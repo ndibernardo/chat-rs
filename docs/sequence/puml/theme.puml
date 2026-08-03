@@ -1,5 +1,5 @@
 @startuml
-' Shared theme for chat-rs sequence diagrams
+' Shared theme for chat sequence diagrams
 ' Include this in other diagrams with: !include theme.puml
 
 !theme plain
