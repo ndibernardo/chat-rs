@@ -1,5 +1,0 @@
-apiVersion: v2
-name: chat-rs
-description: chat-rs application workloads (user-service, chat-service)
-type: application
-version: 0.1.0

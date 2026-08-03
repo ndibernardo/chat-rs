@@ -1,0 +1,17 @@
+{{- if .Values.monitoring.enabled }}
+# PodMonitor, not ServiceMonitor: the worker is consumers-only and has no
+# Service — Prometheus scrapes the pod's metrics port directly.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: chat-worker
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "chat-worker") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chat.selectorLabels" (dict "root" $ "workload" "chat-worker") | nindent 6 }}
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+{{- end }}

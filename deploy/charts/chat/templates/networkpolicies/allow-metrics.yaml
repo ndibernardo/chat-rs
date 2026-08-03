@@ -1,0 +1,83 @@
+{{- if .Values.networkPolicies.enabled }}
+# Prometheus scrapes /metrics on 9090 from every app pod in this namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape-apps
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-metrics") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+---
+# Operator-managed exporters (CNPG, Kafka, Scylla sidecars) publish metrics
+# on ports this chart doesn't own or track — allow the monitoring
+# namespace in on all ports for these selectors rather than chase exporter
+# port drift across three different upstream projects.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape-postgres
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-metrics") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: In
+        values:
+          - user-db
+          - chat-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape-kafka
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-metrics") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      strimzi.io/cluster: chat-kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape-scylla
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-metrics") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      scylla/cluster: chat-scylla
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+{{- end }}

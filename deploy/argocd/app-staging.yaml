@@ -1,18 +1,18 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: chat-rs-app-staging
+  name: chat-app-staging
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/ndibernardo/chat-rs.git
+    repoURL: https://github.com/ndibernardo/chat.git
     targetRevision: main
-    path: deploy/charts/chat-rs
+    path: deploy/charts/chat
     helm:
       valueFiles:
         - values-staging.yaml
-      # Same unverified path-escape as chat-rs-app-dev — see that
+      # Same unverified path-escape as chat-app-dev — see that
       # Application for the fallback if Argo mishandles it.
       fileParameters:
         - name: jwt.privateKey
@@ -21,7 +21,7 @@ spec:
           path: ../../../keys/staging/jwt_ed25519.pub.pem
   destination:
     server: https://kubernetes.default.svc
-    namespace: chat-rs-staging
+    namespace: chat-staging
   syncPolicy:
     automated:
       prune: true

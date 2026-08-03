@@ -1,0 +1,15 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: user-service
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "user-service") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chat.selectorLabels" (dict "root" $ "workload" "user-service") | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 30s
+{{- end }}

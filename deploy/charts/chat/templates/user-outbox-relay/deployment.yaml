@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-outbox-relay
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "user-outbox-relay") | nindent 4 }}
+spec:
+  # SKIP LOCKED makes an overlapping rollout safe, and draining the outbox
+  # is deliberately I/O-trivial — one replica is the sane default, not a
+  # hard ceiling, so it's still read from values like every other workload.
+  replicas: {{ .Values.userOutboxRelay.replicas }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "chat.selectorLabels" (dict "root" $ "workload" "user-outbox-relay") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chat.selectorLabels" (dict "root" $ "workload" "user-outbox-relay") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- include "chat.topologySpreadConstraints" (dict "root" $ "workload" "user-outbox-relay") | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: user-outbox-relay
+          image: "{{ .Values.images.user.repository }}:{{ .Values.images.user.tag }}"
+          imagePullPolicy: {{ .Values.images.user.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 3001
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: SERVICE_ROLE
+              value: outbox-relay
+            {{- include "chat.commonEnv" . | nindent 12 }}
+            {{- include "chat.userCoreEnv" . | nindent 12 }}
+            # The outbox-relay role never opens the JWT keys (see
+            # bootstrap/outbox_relay.rs), but Config::load still requires
+            # the env vars to be set. Safe to point at the image-baked dev
+            # keypair for the same reason as the migrate Job above.
+            - name: JWT__PRIVATE_KEY_PATH
+              value: /app/keys/dev/jwt_ed25519.pem
+            - name: JWT__PUBLIC_KEY_PATH
+              value: /app/keys/dev/jwt_ed25519.pub.pem
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 3001
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3001
+            periodSeconds: 5
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: 3001
+            periodSeconds: 2
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            {{- toYaml .Values.userOutboxRelay.resources | nindent 12 }}

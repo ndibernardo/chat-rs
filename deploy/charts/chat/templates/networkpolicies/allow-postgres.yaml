@@ -1,0 +1,131 @@
+{{- if .Values.networkPolicies.enabled }}
+# Ingress: each CNPG Cluster only accepts 5432 from the app pods that own
+# that database — user-db from the user bounded context, chat-db from the
+# chat bounded context, never cross-context.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress-user-db
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: user-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: user-service
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: user-outbox-relay
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: user-migrate
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress-chat-db
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: chat-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chat-api
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chat-ws-gateway
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chat-worker
+              app.kubernetes.io/instance: {{ .Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chat-migrate
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Egress mirrors: default-deny blocks both directions independently, so
+# each ingress allow above needs a matching egress rule on the client side.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-egress-user-apps
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - user-service
+          - user-outbox-relay
+          - user-migrate
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: user-db
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-egress-chat-apps
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - chat-api
+          - chat-ws-gateway
+          - chat-worker
+          - chat-migrate
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: chat-db
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}

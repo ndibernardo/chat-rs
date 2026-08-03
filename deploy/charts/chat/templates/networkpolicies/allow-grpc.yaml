@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicies.enabled }}
+# Ingress: only the chat-side workloads call user-service's gRPC API
+# (auth/user lookups) — user-outbox-relay and user-migrate never do.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grpc-ingress-user-service
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-grpc") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - chat-api
+                  - chat-ws-gateway
+                  - chat-worker
+              - key: app.kubernetes.io/instance
+                operator: In
+                values:
+                  - {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 50051
+---
+# Egress mirror: default-deny blocks the client side independently of the
+# ingress rule above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grpc-egress-chat-apps
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-grpc") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - chat-api
+          - chat-ws-gateway
+          - chat-worker
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: user-service
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 50051
+{{- end }}

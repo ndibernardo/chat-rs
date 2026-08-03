@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: chat-rs-app-dev
+  name: chat-app-dev
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/ndibernardo/chat-rs.git
+    repoURL: https://github.com/ndibernardo/chat.git
     targetRevision: main
-    path: deploy/charts/chat-rs
+    path: deploy/charts/chat
     helm:
       valueFiles:
         - values-dev.yaml
@@ -23,7 +23,7 @@ spec:
           path: ../../../keys/dev/jwt_ed25519.pub.pem
   destination:
     server: https://kubernetes.default.svc
-    namespace: chat-rs
+    namespace: chat
   syncPolicy:
     automated:
       prune: true

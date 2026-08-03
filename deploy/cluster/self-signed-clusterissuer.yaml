@@ -1,5 +1,5 @@
 # Cluster-scoped — applied once via kubectl, not from a chart. A chart that
-# installs into both chat-rs and chat-rs-staging would try to own this
+# installs into both chat and chat-staging would try to own this
 # object twice under two different Helm releases.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

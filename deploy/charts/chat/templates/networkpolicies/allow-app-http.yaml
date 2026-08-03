@@ -1,0 +1,50 @@
+{{- if .Values.networkPolicies.enabled }}
+# No Ingress controller exists yet, and `kubectl port-forward`
+# traffic arrives via the kubelet, which most CNIs don't route through pod
+# NetworkPolicy at all — so these ports stay open to any source rather
+# than pretend to restrict traffic NetworkPolicy can't see. The kind
+# cluster boundary (no LoadBalancer, no public network path) is the real
+# perimeter in dev. Tighten to Ingress-controller-only once one lands.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-http-ingress-user-service
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-app-http") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 3001
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-http-ingress-chat
+  labels:
+    {{- include "chat.labels" (dict "root" $ "workload" "allow-app-http") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - chat-api
+          - chat-ws-gateway
+      - key: app.kubernetes.io/instance
+        operator: In
+        values:
+          - {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 3002
+{{- end }}

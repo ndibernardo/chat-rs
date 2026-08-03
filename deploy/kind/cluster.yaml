@@ -4,7 +4,7 @@
 # below; every other in-cluster service is still reached via port-forward.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: chat-rs
+name: chat
 nodes:
   - role: control-plane
     # ingress-ready=true lets the ingress-nginx chart's nodeSelector target
