@@ -161,13 +161,13 @@ mod tests {
             .with_subject("john-smith")
             .with_expiration(1234567890)
             .with_issued_at(1234567800)
-            .with_issuer("chat-rs".to_string())
+            .with_issuer("chat".to_string())
             .with_extra("role", "platform-engineer");
 
         assert_eq!(claims.sub, Some("john-smith".to_string()));
         assert_eq!(claims.exp, Some(1234567890));
         assert_eq!(claims.iat, Some(1234567800));
-        assert_eq!(claims.iss, Some("chat-rs".to_string()));
+        assert_eq!(claims.iss, Some("chat".to_string()));
         assert_eq!(
             claims.extra.get("role").unwrap().as_str(),
             Some("platform-engineer")

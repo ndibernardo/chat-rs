@@ -212,7 +212,7 @@ mod tests {
 
         let claims = Claims::new()
             .with_subject("john-smith")
-            .with_issuer("chat-rs".to_string())
+            .with_issuer("chat".to_string())
             .with_expiration(chrono::Utc::now().timestamp() + 3600);
 
         // Generate token
@@ -226,7 +226,7 @@ mod tests {
             .expect("Failed to validate token");
 
         assert_eq!(decoded.sub, Some("john-smith".to_string()));
-        assert_eq!(decoded.iss, Some("chat-rs".to_string()));
+        assert_eq!(decoded.iss, Some("chat".to_string()));
     }
 
     #[test]
