@@ -1,5 +1,5 @@
 {
-  description = "chat-rs";
+  description = "chat";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
