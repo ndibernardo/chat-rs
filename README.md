@@ -1,4 +1,4 @@
-# chat-rs
+# chat
 A Rust playground for exploring type-safe microservices, built as a scalable event-driven chat platform featuring real-time messaging and distributed event streaming.
 
 Currently studying and evaluating the trade-offs of Rust's memory management and type system, particularly the advantages of newtypes and sum types in domain-driven development, and the friction they introduce in projects involving multiple layers of indirection for abstraction and composability, such as services built using hexagonal architecture.
@@ -119,7 +119,7 @@ See [user-service](./services/user-service/openapi/user-service.yaml) and [chat-
 
 ## Kubernetes
 
-A local `kind` cluster, its operators installed from pinned upstream Helm charts, and two repo-owned charts (`chat-rs-infra` for Kafka, Postgres and Scylla CRs, `chat-rs` for the app workloads) — see `deploy/operators/` for the full operator list.
+A local `kind` cluster, its operators installed from pinned upstream Helm charts, and two repo-owned charts (`chat-infra` for Kafka, Postgres and Scylla CRs, `chat` for the app workloads) — see `deploy/operators/` for the full operator list.
 
 ```bash
 # Bring up dev end to end, deployed via Argo CD from the pushed main branch.
