@@ -44,7 +44,8 @@ cors:
   allowedOrigins: ""
 
 jwt:
-  # Injected at install time via --set-file; templates fail if left empty.
+  # Dev injects its test keypair; staging provisions these resources externally.
+  create: true
   privateKey: ""
   publicKey: ""
 

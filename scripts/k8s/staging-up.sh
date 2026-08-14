@@ -21,10 +21,66 @@ cd "$REPO_ROOT"
 CLUSTER_NAME=chat
 KIND_CONTEXT="kind-${CLUSTER_NAME}"
 NAMESPACE=chat-staging
+STAGING_JWT_PRIVATE_KEY_FILE="${STAGING_JWT_PRIVATE_KEY_FILE:-}"
+STAGING_JWT_PUBLIC_KEY_FILE="${STAGING_JWT_PUBLIC_KEY_FILE:-}"
 
 # Must track scripts/k8s/dev-up.sh's STRIMZI_CHART_VERSION — re-verify both
 # together against Artifact Hub before bumping either.
 readonly STRIMZI_CHART_VERSION=1.1.0
+
+prepare_staging_jwt_files() {
+  if [[ -z "$STAGING_JWT_PRIVATE_KEY_FILE" || -z "$STAGING_JWT_PUBLIC_KEY_FILE" ]]; then
+    echo "STAGING_JWT_PRIVATE_KEY_FILE and STAGING_JWT_PUBLIC_KEY_FILE are required." >&2
+    echo "Point both variables at the rotated Ed25519 keypair stored outside this repository." >&2
+    exit 1
+  fi
+
+  STAGING_JWT_PRIVATE_KEY_FILE="$(realpath --canonicalize-existing "$STAGING_JWT_PRIVATE_KEY_FILE")"
+  STAGING_JWT_PUBLIC_KEY_FILE="$(realpath --canonicalize-existing "$STAGING_JWT_PUBLIC_KEY_FILE")"
+
+  if [[ "$STAGING_JWT_PRIVATE_KEY_FILE" == "$REPO_ROOT/"* ||
+        "$STAGING_JWT_PUBLIC_KEY_FILE" == "$REPO_ROOT/"* ]]; then
+    echo "Staging JWT key files must live outside the repository: $REPO_ROOT" >&2
+    exit 1
+  fi
+
+  if ! openssl pkey -in "$STAGING_JWT_PRIVATE_KEY_FILE" -noout -check >/dev/null 2>&1; then
+    echo "STAGING_JWT_PRIVATE_KEY_FILE is not a valid private key." >&2
+    exit 1
+  fi
+
+  if ! openssl pkey -in "$STAGING_JWT_PRIVATE_KEY_FILE" -pubout 2>/dev/null |
+       cmp -s - "$STAGING_JWT_PUBLIC_KEY_FILE"; then
+    echo "The staging JWT public key does not match the private key." >&2
+    exit 1
+  fi
+}
+
+provision_staging_jwt() {
+  kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" create secret generic jwt-signing-key \
+    --from-file=jwt_ed25519.pem="$STAGING_JWT_PRIVATE_KEY_FILE" \
+    --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply \
+      --server-side --field-manager=staging-key-provisioner --force-conflicts -f -
+
+  kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" create configmap jwt-public-key \
+    --from-file=jwt_ed25519.pub.pem="$STAGING_JWT_PUBLIC_KEY_FILE" \
+    --dry-run=client -o yaml | kubectl --context "$KIND_CONTEXT" apply \
+      --server-side --field-manager=staging-key-provisioner --force-conflicts -f -
+
+  local resource
+  for resource in secret/jwt-signing-key configmap/jwt-public-key; do
+    kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" annotate "$resource" \
+      argocd.argoproj.io/tracking-id- \
+      meta.helm.sh/release-name- \
+      meta.helm.sh/release-namespace- \
+      kubectl.kubernetes.io/last-applied-configuration- \
+      --overwrite >/dev/null 2>&1 || true
+    kubectl --context "$KIND_CONTEXT" -n "$NAMESPACE" label "$resource" \
+      app.kubernetes.io/instance- \
+      app.kubernetes.io/managed-by- \
+      --overwrite >/dev/null 2>&1 || true
+  done
+}
 
 # Stage 1: Strimzi's chart creates a RoleBinding per watched namespace, so
 # chat-staging must exist first (idempotent apply).
@@ -89,15 +145,22 @@ wait_for_infra() {
   exit 1
 }
 
-# Stage 5: install the chat app chart into the staging namespace with its
-# own keypair — a distinct release name isn't needed since Helm releases are
-# themselves namespace-scoped, so "chat" here never collides with dev's.
+# Stage 5: install the chat app chart with externally provisioned JWT resources.
 install_app() {
+  if helm --namespace "$NAMESPACE" status chat >/dev/null 2>&1 &&
+     helm --namespace "$NAMESPACE" get manifest chat |
+       grep -q '# Source: chat/templates/jwt/secret.yaml'; then
+    helm upgrade chat deploy/charts/chat \
+      --namespace "$NAMESPACE" \
+      -f deploy/charts/chat/values-staging.yaml \
+      --no-hooks
+  fi
+
+  provision_staging_jwt
+
   helm upgrade --install chat deploy/charts/chat \
     --namespace "$NAMESPACE" \
     -f deploy/charts/chat/values-staging.yaml \
-    --set-file jwt.privateKey=keys/staging/jwt_ed25519.pem \
-    --set-file jwt.publicKey=keys/staging/jwt_ed25519.pub.pem \
     --wait --timeout 10m
 }
 
@@ -105,6 +168,8 @@ install_app() {
 # wait for Argo to sync + report Healthy. dev's script owns cluster-issuer
 # and its own two Applications — this one only ever touches staging's.
 apply_argocd_apps() {
+  provision_staging_jwt
+
   kubectl --context "$KIND_CONTEXT" apply \
     -f deploy/argocd/infra-staging.yaml \
     -f deploy/argocd/app-staging.yaml
@@ -115,6 +180,8 @@ apply_argocd_apps() {
     kubectl --context "$KIND_CONTEXT" -n argocd wait "application/${app}" \
       --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
   done
+
+  provision_staging_jwt
 }
 
 main() {
@@ -123,6 +190,7 @@ main() {
     direct=true
   fi
 
+  prepare_staging_jwt_files
   create_namespace
   reupgrade_strimzi
 

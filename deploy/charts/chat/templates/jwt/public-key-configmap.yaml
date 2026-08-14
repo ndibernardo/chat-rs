@@ -1,3 +1,4 @@
+{{- if .Values.jwt.create -}}
 {{- if not .Values.jwt.publicKey -}}
 {{- fail "jwt.publicKey is required — pass via --set-file jwt.publicKey=<path-to-pub.pem> (scripts/k8s/dev-up.sh does this for the dev keypair)" -}}
 {{- end -}}
@@ -10,3 +11,4 @@ metadata:
 data:
   jwt_ed25519.pub.pem: |
     {{- .Values.jwt.publicKey | nindent 4 }}
+{{- end }}

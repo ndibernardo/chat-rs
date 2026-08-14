@@ -4,3 +4,4 @@
 .env.docker
 .env.local
 .env.*.local
+/keys/staging/*.pem

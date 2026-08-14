@@ -19,6 +19,9 @@ userServiceGrpcUrl: http://user-service-grpc.chat-staging.svc.cluster.local:5005
 ingress:
   host: chat.staging.local
 
+jwt:
+  create: false
+
 # On: exercises the real HPA path — a rolling restart against autoscaled
 # Deployments behaves differently than one against statically-replica'd
 # ones. min 2 / max 4 across all three HPA-managed workloads — staging
