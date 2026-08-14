@@ -12,6 +12,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 authors = ["ndibernardo"]
+license = "MIT"
 
 [workspace.dependencies]
 # gRPC and Protocol Buffers

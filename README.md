@@ -180,4 +180,4 @@ cargo test --all       # With infrastructure running
 ```
 
 ## License
-[Apache 2.0](./LICENSE)
+[MIT License](./LICENSE)
